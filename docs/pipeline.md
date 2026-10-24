@@ -64,7 +64,9 @@ Pipeline jobs (`agent-pipeline.yml`):
 4. **publish** (deterministic) — **checkpoint first, whatever the outcome** (`ready`, `blocked`, `needs_owner`, no
    result, usage limit): posts a new plan once (`<!-- agent-plan hw=… -->`) and pushes the branch's commits
    (fast-forward only, no PR yet), so the next run reuses the plan and continues the branch instead of redoing the
-   work; the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
+   work. A branch that is not on GitHub yet is first rebased onto the current `main` if `main` moved during the run:
+   GitHub compares a new branch with the current `main`, so the app's push would look like it reverts `main`'s workflow
+   changes and is refused ("refusing to allow a GitHub App to create or update workflow", #3, 2026-10-24); the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
    draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`).
 5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; `.github/agent/review.md`, fresh `reviewer`) in parallel.
 6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
