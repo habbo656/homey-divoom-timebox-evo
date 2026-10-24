@@ -117,7 +117,8 @@ public. Layers, from the outside in:
    permissions "Read repository contents" (jobs request more explicitly), allow GitHub Actions to create and approve pull
    requests (the pipeline opens and merges PRs).
 2. Environments `agents` and `hardware`: deployment branches `main` only; secret `CLAUDE_CODE_OAUTH_TOKEN` (from
-   `claude setup-token`, billed to the Claude plan) in both.
+   `claude setup-token`, billed to the Claude plan) in both; `hardware` also holds `HOMEY_PAT` (Homey Developer Tools
+   personal access token, see "Homey without the cloud").
 3. Branch protection / ruleset on `main`: pull request required, no force pushes, no deletions. Do not require status
    checks from `ci.yml`: PRs opened with `GITHUB_TOKEN` do not trigger other workflows, so the pipeline runs `gate.yml`
    itself.
@@ -224,12 +225,14 @@ locked out for ~40 min). Both Homey paths therefore use an owner **API key** on 
 - **`HOMEY_PAT`** (personal access token from the Homey Developer Tools, read by the Homey CLI): every remaining cloud
   path of the CLI (`homey app run` in cloud mode, `homey api` without a key, `homey select`, the owner's
   `homey app install`) authenticates with it instead of the OAuth login, so the login and token refresh flow, which ran
-  into rate limits, never runs. `scripts/homey-env.sh` loads it with the other credentials and exports it; nothing
-  prints it.
+  into rate limits, never runs. The pipeline gets it from the secret `HOMEY_PAT` of the `hardware` environment (job env of the hardware test
+  and `runner-check`); local sessions read it from the key file. `scripts/homey-env.sh` loads it with the other
+  credentials and exports it; nothing prints it, and GitHub masks the secret in logs.
 
-Owner setup: create a personal access token in the Homey Developer Tools (tools.developer.homey.app) and an API key in my.homey.app → Settings → API Keys with the scopes devices read + control, flows read
+Owner setup: create a personal access token in the Homey Developer Tools (tools.developer.homey.app), store it as the
+secret `HOMEY_PAT` of the `hardware` environment (optionally also in the key file below, for local sessions), and create an API key in my.homey.app → Settings → API Keys with the scopes devices read + control, flows read
 + start, apps read + control, and the scope to **install and run apps** (`homey.app`, needed for dev runs), and set
-`HOMEY_PAT`, `HOMEY_TOKEN` and `HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`) in
+`HOMEY_TOKEN` and `HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`) in
 `~/.config/divoom-timebox/homey-api.env` (the runner and local sessions) or the gitignored `.homey-api.env` in the
 checkout (`KEY=VALUE` lines, `chmod 600`). `scripts/hw-preflight.sh` and `scripts/runner-check.sh` (checks `homey-pat`, `homey-run`)
 print the active mode. Without a key both wrappers fall back to the cloud (with `HOMEY_PAT`, else the OAuth login), which the scripts check with the local

@@ -24,6 +24,9 @@ jobs:
   check:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
+    environment: hardware
+    env:
+      HOMEY_PAT: ${{ secrets.HOMEY_PAT }}
     outputs:
       ready: ${{ steps.rc.outputs.ready }}
     steps:

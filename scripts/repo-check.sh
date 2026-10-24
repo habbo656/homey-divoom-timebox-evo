@@ -35,6 +35,9 @@ for env in agents hardware; do
   else say FAIL "env-$env" "deployment branches: $e (restrict to main)"; fi
   s=$(api "/environments/$env/secrets" --jq '[.secrets[].name] | join(",")')
   [[ ",$s," == *",CLAUDE_CODE_OAUTH_TOKEN,"* ]] && say OK "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN set" || say FAIL "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN missing"
+  if [ "$env" = hardware ]; then
+    [[ ",$s," == *",HOMEY_PAT,"* ]] && say OK env-hardware-pat "HOMEY_PAT set" || say FAIL env-hardware-pat "HOMEY_PAT missing (Homey CLI cloud paths would use the OAuth login)"
+  fi
 done
 rs=$(api /secrets --jq '[.secrets[].name] | join(",")')
 [ -z "$rs" ] && say OK repo-secrets "none (secrets live in the environments)" || say INFO repo-secrets "repository-level secrets: $rs (visible to every workflow; prefer environments)"

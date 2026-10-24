@@ -403,6 +403,8 @@ jobs:
       # Dev runs: over the LAN with the owner's API key (scripts/homey-dev-run.mjs, no Athom cloud); if that is not
       # available, via the cloud authenticated with HOMEY_PAT (no OAuth login). Both from the runner's key file.
       HOMEY_RUN_MODE: auto
+      # Athom personal access token (environment secret): the Homey CLI's cloud paths use it instead of the OAuth login.
+      HOMEY_PAT: ${{ secrets.HOMEY_PAT }}
     permissions:
       contents: read
       issues: write

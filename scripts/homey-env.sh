@@ -4,7 +4,8 @@
 #   HOMEY_PAT                    Athom personal access token (Homey Developer Tools): every cloud path of the Homey CLI
 #                                (`homey app run` cloud mode, `homey api` without a key, `homey select`, `homey app
 #                                install`) uses it instead of the OAuth login, so no login/refresh flow is involved
-# Sources, first value wins: the environment, the gitignored .homey-api.env in the checkout, then
+# Sources, first value wins: the environment (in GitHub Actions HOMEY_PAT comes from the `hardware` environment
+# secret), the gitignored .homey-api.env in the checkout, then
 # ${HOMEY_API_ENV:-~/.config/divoom-timebox/homey-api.env} (the runner's checkout has no .homey-api.env). KEY=VALUE lines.
 # HOMEY_PAT is exported, because the CLI reads it from its environment.
 homey_env_load() {
