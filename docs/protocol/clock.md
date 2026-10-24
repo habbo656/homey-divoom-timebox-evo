@@ -1,0 +1,43 @@
+# Clock evidence
+
+_Evidence for [divoom-protocol.md](../divoom-protocol.md) section 5.1; opcode rows and status stay there._
+
+## Opcode table notes
+
+### 5.1 Clock rows
+
+| Payload | Function | Reply | Status |
+|---|---|---|---|
+| `45 00 HH TT 01 WW EE CC RR GG BB` | clock: HH 24h/12h flag (`01`/`00`, **no effect, see below**; the app always sends HH `01`, #70), TT style, `01` fixed, WW weather / EE temperature / CC calendar page flags, colour RR GG BB | `45 55 00` | VERIFIED (Homey Pro 2026-10-06, #25). TT: 0 full screen, 1 rainbow, 2 boxed, 3 analog square, 4 full screen negative, 5 analog round, 6 small single-line digits (7–9 look identical to 6). **Style and colour** (photos): full_screen large digits on two lines; rainbow red digits between rainbow bars; boxed white frame, the colour applies to the digits only; analog_round red dial with white rim and hands; small one-line digits; analog_square square dial, the blue colour was only a faint glow so that visual is inconclusive. `46` d12..d14 and d15 read back the colour and style. **Flags (mapping confirmed):** WW = weather, EE = temperature, CC = calendar. Calendar only gives the red date page (`TUE` / `10-06`), weather only a rain-cloud page, temperature only a thermometer with a number and `C`. The flags only ADD these pages: with all three off and the "hot" flag on (`26 01`, the factory state) the clock is **not** static, it rotates through animation pages (a Divoom gallery slide show) and showed the time in only 2 of 14 photos over about 55 s. The fixed `01` byte after TT does **not** control them (NEGATIVE, #59/#106, see the `26 0X` row and "Animation pages" below); `26 00` does. **HH is NEGATIVE on this Evo:** `45 00 00 00 01 00 00 00 ff ff ff` (HH `00`) has no visible effect, the display stayed 24 h (15:35 / 15:36 / 15:37 in full_screen, small and boxed) and `46` d11 stayed `01` for both values (known issue, follow-up #58; the app therefore always sends HH `01` and has no 12/24 h setting, #70). Rotation with three flags on (#23, `45 00 01 00 01 01 01 01 ff ff ff`): pages change every ~6-12 s, full cycle ~1 min: time page (white, hour on top, `:MM` below, no seconds), date page (red 3-letter weekday e.g. `TUE` on top, `MM-DD` below, gradient background, no year), then weather/temperature/animation pages. The app (`setClock` in `src/protocol/commands.ts`) always sends the fixed `01` and compares `46` d15 / d12..d14 with the request in a log line after a clock switch. **Quirk (#88):** entered from lighting or from off, style 6 shows the default dial although `46` reports small, see the paragraph below the table |
+| `26 0X` | set the "hot" flag: `26 01` animation pages in the clock rotation (factory state), `26 00` none; read with `26 ff` (section 5.2) | **none** (no reply to the set; the read `26 ff` answers `26 55 0X`) | VERIFIED (Mac probe 2026-10-07, #106, #59, photos `.hwtest/agent_issue-106-clock-animations/`). **A persistent device setting.** `26 00`: from the next page change on the clock shows only the time and the pages enabled with the `45 00` flags (24 photos with all flags on: time, date, weather and temperature pages, no animation page); it takes effect without re-sending the clock frame, and a re-sent or newly entered clock frame keeps it. Read back as `26 55 00` also from a **new connection** (persists). `26 01` brings the animation pages back. In lighting and with the panel off the command changes **nothing visible**: no view change (`46` d0 stays `01`), no wake (panel dark, `46` d8 stays `00`), so in the clock view, in lighting and with the panel off it can be sent without side effects. Its effect in the cloud channel (`45 02`), the visualizer, custom pages or during a native text was not measured, so the app sends it only ahead of clock frames and, at session start, while the device reports the clock. See "Animation pages" below |
+
+## 5.1 Animation pages in the clock view: evidence
+
+Owner finding UAT-1: the clock shows pictures (heart, duck, ghost, cat, ...) after a short time even with all page flags off. They are gallery slides ("hot" = Divoom's trending pictures), switched by the persistent flag `26 0X`, **not** by the flags of `45 00`. Webcam photo about every 7 s (`q`, `snap:`, `w3.5` per step), no Homey run, starting state `26 ff` -> `26 55 01`, `46` d0 `00`:
+
+| Probe | Frame / command | Result |
+|---|---|---|
+| P1 | `45 00 01 00 01 00 00 00 ff ff ff` (full_screen, all flags off, byte 5 `01`), 24 photos over ~2.8 min | time page in 8 of 24 photos, 16 different animation pictures in between |
+| P1 rotation per style (`26 01`, 12 photos each, ~85 s) | `45 00 01 TT 01 00 00 00 ff ff ff` | time/clock page in 5 (rainbow, 1), 3 (boxed, 2), 2 (analog_square, 3), 5 (negative, 4), 3 (analog_round, 5), 2 (small, 6) of 12 photos; the rest are animation pictures. Every style rotates |
+| P2 | byte 5 `00`: `45 00 01 00 00 00 00 00 ff ff ff`, 24 photos | time page in 5 of 24: **same rotation, byte 5 is NEGATIVE** (#59 answered) |
+| P3a | `26 00`, then `26 ff`; 12 photos **without** a new clock frame | the set gets **no reply**; `26 ff` answers `26 55 00`. All 12 photos show the time (`20:59` .. `21:01`), no animation |
+| P3b | clock frame sent again after `26 00`, 24 photos over ~2.8 min | 24 of 24 photos show the time: the flag survives a clock frame |
+| P3c | `26 00` and all page flags on (`45 00 01 00 01 01 01 01 ff ff ff`), 24 photos | only time, date (`WED 10-07`), weather (rain cloud) and temperature (`19 C`) pages; **no animation page** (the flags still work) |
+| P4a | lighting green, then `26 00`, `26 01`, `26 00` | panel stays green, `46` d0 `01` after each: **no view change** |
+| P4b | panel off (`45 01 … 00`), then `26 00`, `26 01`, `26 00` | panel stays dark (webcam), `46` d8 `00` after each: **does not wake the panel** |
+| P4c | new probe process, `26 ff` | `26 55 00`: the flag **persists across connections** (and across lighting/off) |
+| P4d | from off with `26 00`: clock frame, 12 photos | clock shown, 12 of 12 photos time only |
+| P5 | `26 01`, clock frame | animation pages back (this is the factory state; the app restores nothing itself, see below) |
+
+`46` d0 was `00` in every one of the series (about 190 queries, one per photo), including the frames that showed an animation picture: **no `cloud` channel drift**. The animation pictures are not the cloud channel (`45 02`) as far as `46` can tell, and the clock channel code stays.
+Consequence for the app (#106): the setting "Show animation pages" (device setting `clock_animations`, default off) sends `26 00|01` ahead of every clock frame that the app builds (architecture, "Clock face"). `26` is shared with the Divoom phone app: the app writes it when the clock is shown, the phone app can change it again. The hass-divoom source (`26 0X` as "set hot") was not reachable in this session; only the device evidence above counts.
+Observation, not verified further: in the style 6 (small) series entered from the style 5 clock, the two clock pages in 12 photos were the analog dial, not small digits; the #88 table row D (full_screen to small is correct) is not contradicted for the case it covers, but analog_round to small is untested.
+
+## 5.1 Small clock quirk: evidence
+
+- A: lighting (green) then `45 00 01 06 01 00 00 00 ff 00 00` (Show clock small, red): the device acknowledges, `46` d15 reads `06` and d12..d14 read the colour, but the panel shows the round analog dial (red disc, blue rim, hands, no digits) for 8+ s.
+- B: the same switch from lighting into boxed, negative, analog_square and full_screen is correct. Only small is affected.
+- C: sending the identical small frame again 1.5 s later, now in clock mode, shows the correct small digits.
+- D: clock to clock (full_screen to small) is correct. From a panel that is off the small frame shows the same dial; powering on and sending it again fixes it.
+- `46` d15 does not prove what is shown: it reports the requested style while the panel shows the dial, so the app's `clock face confirmed` log line is no evidence for the small style.
+- Workaround in the app: after a switch into the clock with style small from another mode or from off (the confirm result does not matter, a newer switch cancels it, a newer small-clock switch inside the gap schedules its own), the identical `45 00 ...` frame is sent once more 1.5 s later (`CLOCK_RESEND_DELAY_MS`, architecture, "Small clock re-send"). Not applied from another clock face or for the other styles. Limit: when the device itself switches into the small clock (the app sent nothing), or after the device left the clock by itself before a status poll showed it, the dial may show.

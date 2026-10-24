@@ -1,0 +1,227 @@
+<style>
+  [hidden] { display: none !important; }
+  #scan-list { margin: 1em 0; }
+  #scan-list .homey-form-radio { display: block; margin-bottom: 0.75em; }
+  .scan-meta { opacity: 0.7; font-size: 0.85em; margin-left: 0.5em; }
+  #scan-showall { display: inline-block; margin: 0.25em 0 0.75em; cursor: pointer; }
+  #scan-showall[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+  .scan-spinner { display: inline-block; width: 1em; height: 1em; margin-right: 0.5em; vertical-align: -0.15em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: scan-spin 0.8s linear infinite; }
+  @keyframes scan-spin { to { transform: rotate(360deg); } }
+  #scan-message { margin: 0.5em 0; }
+  #scan-message.scan-error { color: #d32f2f; }
+  .scan-buttons { margin-top: 1em; }
+  .scan-buttons button { margin-bottom: 0.5em; }
+</style>
+
+<p id="scan-select" data-i18n="pair.scan.select"></p>
+<p id="scan-status"></p>
+<div id="scan-list" role="radiogroup"></div>
+<a id="scan-showall" href="#" role="button" hidden></a>
+<p id="scan-message" aria-live="polite"></p>
+<div class="scan-buttons">
+  <button id="scan-add" class="homey-button-primary-full" type="button" data-i18n="pair.scan.add" disabled></button>
+  <button id="scan-again" class="homey-button-secondary-full" type="button" data-i18n="pair.scan.search_again" hidden></button>
+</div>
+
+<script type="application/javascript">
+  (function () {
+    // Device names and addresses come from Bluetooth advertisements: untrusted, so they are only ever set with textContent.
+    var $ = function (id) { return document.getElementById(id); };
+    var t = function (key, vars) {
+      var text = Homey.__('pair.scan.' + key);
+      Object.keys(vars || {}).forEach(function (name) { text = text.split('{' + name + '}').join(String(vars[name])); });
+      return text;
+    };
+
+    // state: scanning | done | failed | verifying | verify_failed
+    var state = 'scanning';
+    var candidates = [];
+    var showAll = false;
+    var selectedId = null;
+    var durationMs = 60000;
+    var baseElapsedMs = 0;
+    var baseAt = Date.now();
+    var errorText = '';
+    var verifyReason = '';
+
+    function remainingSeconds() {
+      var elapsed = baseElapsedMs + (Date.now() - baseAt);
+      return Math.max(0, Math.ceil((durationMs - elapsed) / 1000));
+    }
+
+    // The Evo advertises only its name, so the list shows the devices the app flagged as matching (name or service) until
+    // "Show all devices" is pressed; the others are named devices of other kinds (a renamed Timebox shows up there).
+    function visibleCandidates() {
+      return candidates.filter(function (c) { return showAll || c.match; });
+    }
+
+    function renderList() {
+      var list = $('scan-list');
+      while (list.firstChild) list.removeChild(list.firstChild);
+      var locked = state === 'verifying';
+      visibleCandidates().forEach(function (c) {
+        var label = document.createElement('label');
+        label.className = 'homey-form-radio';
+        var input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'timebox-device';
+        input.className = 'homey-form-radio-input';
+        input.value = c.id;
+        input.checked = c.id === selectedId;
+        input.disabled = locked;
+        input.addEventListener('change', function () { selectedId = c.id; renderButtons(); });
+        var mark = document.createElement('span');
+        mark.className = 'homey-form-radio-checkmark';
+        var text = document.createElement('span');
+        text.className = 'homey-form-radio-text';
+        text.textContent = c.name;
+        if (c.address && c.address !== c.name) {
+          var meta = document.createElement('span');
+          meta.className = 'scan-meta';
+          meta.textContent = c.address;
+          text.appendChild(meta);
+        }
+        label.appendChild(input);
+        label.appendChild(mark);
+        label.appendChild(text);
+        list.appendChild(label);
+      });
+    }
+
+    function renderButtons() {
+      var known = visibleCandidates().some(function (c) { return c.id === selectedId; });
+      var idle = state === 'scanning' || state === 'done' || state === 'failed' || state === 'verify_failed';
+      $('scan-add').disabled = !(known && idle);
+      $('scan-again').hidden = !(state === 'done' || state === 'failed' || state === 'verify_failed');
+      $('scan-again').disabled = state === 'verifying';
+      var others = candidates.some(function (c) { return !c.match; });
+      $('scan-showall').hidden = !(others || showAll);
+      $('scan-showall').setAttribute('aria-disabled', state === 'verifying' ? 'true' : 'false');
+      $('scan-showall').textContent = showAll ? t('show_matching') : t('show_all');
+    }
+
+    function renderStatus() {
+      var status = '';
+      var message = '';
+      var isError = false;
+      if (state === 'scanning') status = t('searching', { seconds: remainingSeconds() });
+      else if (state === 'verifying') status = t('checking');
+      else if (state === 'done') status = visibleCandidates().length ? t('finished') : t('nothing_found');
+      else if (state === 'failed') { message = t('scan_failed', { error: errorText }); isError = true; }
+      else if (state === 'verify_failed') {
+        message = verifyReason === 'not_timebox' ? t('verify_not_timebox') : verifyReason === 'add_failed' ? t('add_failed', { error: errorText }) : t('verify_timeout');
+        isError = true;
+      }
+      var spinner = $('scan-status');
+      while (spinner.firstChild) spinner.removeChild(spinner.firstChild);
+      if (state === 'verifying') {
+        var wheel = document.createElement('span');
+        wheel.className = 'scan-spinner';
+        wheel.setAttribute('aria-hidden', 'true');
+        spinner.appendChild(wheel);
+      }
+      spinner.appendChild(document.createTextNode(status));
+      $('scan-message').textContent = message;
+      $('scan-message').className = isError ? 'scan-error' : '';
+      $('scan-select').hidden = visibleCandidates().length === 0;
+    }
+
+    function render() { renderList(); renderButtons(); renderStatus(); }
+
+    function keepSelection() {
+      var visible = visibleCandidates();
+      if (!visible.some(function (c) { return c.id === selectedId; })) selectedId = visible.length === 1 ? visible[0].id : null;
+    }
+
+    function setBusy(busy) {
+      // The loading overlay blocks the whole view; the disabled controls and the inline spinner are the fallback.
+      try {
+        if (busy && typeof Homey.showLoadingOverlay === 'function') Homey.showLoadingOverlay();
+        if (!busy && typeof Homey.hideLoadingOverlay === 'function') Homey.hideLoadingOverlay();
+      } catch (e) { /* the overlay is cosmetic */ }
+    }
+
+    function applyUpdate(update) {
+      if (state === 'verifying') return;
+      candidates = update.candidates || [];
+      durationMs = update.durationMs || durationMs;
+      baseElapsedMs = update.elapsedMs || 0;
+      baseAt = Date.now();
+      keepSelection();
+      if (update.state === 'done') state = 'done';
+      else if (update.state === 'failed') { state = 'failed'; errorText = String(update.error || ''); }
+      else state = 'scanning';
+      render();
+    }
+
+    function startScan() {
+      state = 'scanning';
+      candidates = [];
+      selectedId = null;
+      baseElapsedMs = 0;
+      baseAt = Date.now();
+      render();
+      Homey.emit('scan', null).then(function (result) {
+        if (result && result.durationMs) durationMs = result.durationMs;
+        baseElapsedMs = 0;
+        baseAt = Date.now();
+        renderStatus();
+      }).catch(function (error) {
+        state = 'failed';
+        errorText = String((error && error.message) || error);
+        render();
+      });
+    }
+
+    Homey.on('scan_update', applyUpdate);
+
+    Homey.on('verify_result', function (result) {
+      if (state !== 'verifying') return;
+      if (result && result.ok && result.device) {
+        Homey.createDevice(result.device).then(function () { return Homey.done(); }).catch(function (error) {
+          setBusy(false);
+          state = 'verify_failed';
+          verifyReason = 'add_failed';
+          errorText = String((error && error.message) || error);
+          render();
+        });
+        return;
+      }
+      setBusy(false);
+      state = 'verify_failed';
+      verifyReason = (result && result.reason) || 'timeout';
+      render();
+    });
+
+    $('scan-add').addEventListener('click', function () {
+      // `state` flips synchronously, so a second click while verifying never sends a second verify.
+      if (!selectedId || state === 'verifying' || $('scan-add').disabled) return;
+      state = 'verifying';
+      render();
+      setBusy(true);
+      Homey.emit('verify', { id: selectedId }).catch(function (error) {
+        setBusy(false);
+        state = 'verify_failed';
+        verifyReason = 'add_failed';
+        errorText = String((error && error.message) || error);
+        render();
+      });
+    });
+
+    $('scan-again').addEventListener('click', function () { if (state !== 'verifying') startScan(); });
+
+    $('scan-showall').addEventListener('click', function (event) {
+      event.preventDefault();
+      if (state === 'verifying') return;
+      showAll = !showAll;
+      keepSelection();
+      render();
+    });
+
+    // Only the Close button in the navigation (the view has its own buttons); no confirmation of ours is added.
+    try { if (typeof Homey.setNavigationClose === 'function') Homey.setNavigationClose(); } catch (e) { /* cosmetic */ }
+
+    setInterval(function () { if (state === 'scanning') renderStatus(); }, 500);
+    startScan();
+  })();
+</script>

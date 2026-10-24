@@ -1,0 +1,3 @@
+TimeBox Evo turns your Divoom TimeBox Evo into the friendly pixel screen of your home. Homey talks to it directly over Bluetooth and keeps its clock right all the time. Show the time and the weather in the morning, let a scrolling note tell you that the washing machine is done or that someone is at the door, start a pizza countdown in the kitchen, or put a snapshot of your doorbell camera on the 16x16 display.
+
+Everything is available from the device tile and from Flows: the clock in several styles, mood lighting in any colour, your own pixel pages, dimming in the evening and switching off at bedtime. A finished countdown can even start the next Flow.

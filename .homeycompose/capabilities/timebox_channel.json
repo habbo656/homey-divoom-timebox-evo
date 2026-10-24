@@ -1,0 +1,16 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Mode",
+    "de": "Modus"
+  },
+  "getable": true,
+  "setable": true,
+  "uiComponent": "picker",
+  "uiQuickAction": false,
+  "values": [
+    { "id": "clock", "title": { "en": "Clock", "de": "Uhr" } },
+    { "id": "lighting", "title": { "en": "Lighting", "de": "Beleuchtung" } },
+    { "id": "custom", "title": { "en": "Custom", "de": "Benutzerdefiniert" } }
+  ]
+}

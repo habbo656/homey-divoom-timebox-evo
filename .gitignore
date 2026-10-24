@@ -1,0 +1,12 @@
+node_modules/
+.homeybuild/
+.homeycompose/.cache
+env.json
+*.log
+.DS_Store
+.claude/settings.local.json
+.venv/
+__pycache__/
+.hwtest/
+.homey-api.env
+._*

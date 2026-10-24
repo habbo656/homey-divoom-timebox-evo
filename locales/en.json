@@ -1,0 +1,73 @@
+{
+  "app": {
+    "name": "Divoom TimeBox Evo"
+  },
+  "pair": {
+    "title": "Connect your TimeBox Evo",
+    "step_power": "Switch the TimeBox on and keep it within 1-2 m of your Homey.",
+    "step_close_app": "Close the Divoom app and disconnect the TimeBox from any phone or other Bluetooth device. It only accepts one connection.",
+    "step_reset": "If it was reset or does not show up: switch it off and on again, then wait until the clock/start screen is shown.",
+    "step_range": "Keep the TimeBox awake (screen on) during the search.",
+    "search_note": "The search takes up to 60 seconds. If nothing is found, repeat the steps above and search again.",
+    "scan": {
+      "select": "Select your TimeBox:",
+      "searching": "Searching for Bluetooth devices, {seconds} s left...",
+      "finished": "Search finished.",
+      "nothing_found": "No TimeBox found. Switch it on, keep it close and awake, then search again. If you renamed it, choose Show all devices.",
+      "add": "Add",
+      "search_again": "Search again",
+      "checking": "Checking the device...",
+      "scan_failed": "The search failed ({error}). Check that the TimeBox is switched on, awake and within 1-2 m of your Homey, and that Bluetooth is working on your Homey, then search again.",
+      "verify_not_timebox": "This is not a TimeBox Evo. Pick another device or search again.",
+      "verify_timeout": "The device did not answer. Close the Divoom app, make sure the TimeBox is on and awake, then try again.",
+      "add_failed": "Could not add the device ({error}). Check that the TimeBox is switched on and close to your Homey, close the Divoom app, then try again.",
+      "show_all": "Show all devices",
+      "show_matching": "Show only TimeBox devices"
+    }
+  },
+  "device": {
+    "unavailable": {
+      "unreachable": "The TimeBox does not respond. Switch it on, keep it within range and close the Divoom app.",
+      "not_timebox": "This device is not a TimeBox Evo. Remove it and pair your TimeBox again.",
+      "setup_failed": "The TimeBox could not be set up. Remove the device and pair it again, or restart the app."
+    },
+    "error": {
+      "not_connected": "The TimeBox is not connected right now. Try again in a moment.",
+      "not_confirmed": "The TimeBox did not confirm the change. Check the display and try again in a moment.",
+      "text_empty": "The text is empty after removing the characters the TimeBox cannot show (such as emoji).",
+      "text_too_long": "The text is too long: {length} characters. The TimeBox shows at most {max} characters (emoji are not counted).",
+      "countdown_zero": "Set a countdown of at least 1 second.",
+      "invalid_range": "{field}: {value} is out of range. Allowed is {min} to {max}.",
+      "invalid_number": "{field}: {value} is not a number.",
+      "invalid_choice": "{field}: {value} is not a valid choice. Allowed are: {allowed}.",
+      "invalid_color": "{field}: {value} is not a colour. Use a hex colour such as #FF8000.",
+      "invalid_text": "{field} must be text.",
+      "invalid_url": "{field}: {value} is not a web address the TimeBox Evo app can load. Use an http:// or https:// address of at most {max} characters, without a user name or password.",
+      "image_unreachable": "The image could not be loaded. Check the address and that Homey can reach it (the server must answer within 10 seconds).",
+      "image_unreadable": "The image could not be read from the image tag. Try again, or use another source.",
+      "image_too_large": "The image is too large. At most {max_mb} MB, {max_mp} megapixels and {max_side} pixels per side are supported.",
+      "image_unsupported": "The image cannot be shown. Only PNG, JPEG and GIF images are supported.",
+      "image_missing": "No image was given. Drop an image tag onto the card."
+    },
+    "field": {
+      "text": "Text",
+      "color": "Colour",
+      "text_color": "Text colour",
+      "background": "Background colour",
+      "speed": "Speed",
+      "duration": "Duration (s)",
+      "minutes": "Minutes",
+      "seconds": "Seconds",
+      "temperature": "Temperature (°C)",
+      "condition": "Weather",
+      "style": "Style",
+      "page": "Page",
+      "channel": "Mode",
+      "dim": "Brightness",
+      "hue": "Hue",
+      "saturation": "Saturation",
+      "fit": "Fit",
+      "url": "URL"
+    }
+  }
+}

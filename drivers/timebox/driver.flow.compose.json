@@ -1,0 +1,721 @@
+{
+  "triggers": [
+    {
+      "id": "timebox_connected",
+      "title": {
+        "en": "TimeBox connected",
+        "de": "TimeBox verbunden"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox answers again after it was unavailable.",
+        "de": "Wird ausgelöst, wenn die TimeBox wieder antwortet, nachdem sie nicht verfügbar war."
+      }
+    },
+    {
+      "id": "timebox_disconnected",
+      "title": {
+        "en": "TimeBox disconnected",
+        "de": "TimeBox getrennt"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox has been unreachable for 30 seconds.",
+        "de": "Wird ausgelöst, wenn die TimeBox 30 Sekunden lang nicht erreichbar war."
+      }
+    },
+    {
+      "id": "timebox_channel_changed",
+      "title": {
+        "en": "Mode changed",
+        "de": "Modus gewechselt"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox switches to another mode, from Homey, the Divoom app or the device itself.",
+        "de": "Wird ausgelöst, wenn die TimeBox auf einen anderen Modus wechselt, über Homey, die Divoom-App oder das Gerät selbst."
+      },
+      "tokens": [
+        {
+          "name": "channel",
+          "type": "string",
+          "title": {
+            "en": "Mode",
+            "de": "Modus"
+          },
+          "example": {
+            "en": "lighting",
+            "de": "lighting"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_countdown_ended",
+      "title": {
+        "en": "Countdown ended",
+        "de": "Countdown abgelaufen"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox reports that a countdown has ended, also one that a mode change, a text or turning the TimeBox off had hidden, and one that was started on the TimeBox itself or in the Divoom app. It does not trigger when you use \"Stop countdown\".",
+        "de": "Wird ausgelöst, wenn die TimeBox meldet, dass ein Countdown abgelaufen ist, auch einer, den ein Moduswechsel, ein Text oder das Ausschalten der TimeBox verdeckt hatte, und einer, der an der TimeBox selbst oder in der Divoom-App gestartet wurde. Wird nicht ausgelöst, wenn du \"Countdown beenden\" benutzt."
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "id": "timebox_is_connected",
+      "title": {
+        "en": "TimeBox !{{is|is not}} connected",
+        "de": "TimeBox !{{ist|ist nicht}} verbunden"
+      },
+      "hint": {
+        "en": "Checks whether the TimeBox is connected to Homey right now.",
+        "de": "Prüft, ob die TimeBox gerade mit Homey verbunden ist."
+      }
+    },
+    {
+      "id": "timebox_channel_is",
+      "title": {
+        "en": "Mode !{{is|is not}} ...",
+        "de": "Modus !{{ist|ist nicht}} ..."
+      },
+      "hint": {
+        "en": "Checks which mode the TimeBox shows: clock, lighting or custom.",
+        "de": "Prüft, welchen Modus die TimeBox zeigt: Uhr, Beleuchtung oder Benutzerdefiniert."
+      },
+      "titleFormatted": {
+        "en": "Mode !{{is|is not}} [[channel]]",
+        "de": "Modus !{{ist|ist nicht}} [[channel]]"
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "channel",
+          "title": {
+            "en": "Mode",
+            "de": "Modus"
+          },
+          "values": [
+            {
+              "id": "clock",
+              "label": {
+                "en": "Clock",
+                "de": "Uhr"
+              }
+            },
+            {
+              "id": "lighting",
+              "label": {
+                "en": "Lighting",
+                "de": "Beleuchtung"
+              }
+            },
+            {
+              "id": "custom",
+              "label": {
+                "en": "Custom",
+                "de": "Benutzerdefiniert"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "timebox_set_channel",
+      "title": {
+        "en": "Switch mode",
+        "de": "Modus wechseln"
+      },
+      "titleFormatted": {
+        "en": "Switch to mode [[channel]]",
+        "de": "Zu Modus [[channel]] wechseln"
+      },
+      "hint": {
+        "en": "Switches the TimeBox display to the chosen mode. Lighting uses the stored colour.",
+        "de": "Schaltet die Anzeige der TimeBox auf den gewählten Modus. Beleuchtung nutzt die gespeicherte Farbe."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "channel",
+          "title": {
+            "en": "Mode",
+            "de": "Modus"
+          },
+          "values": [
+            {
+              "id": "clock",
+              "label": {
+                "en": "Clock",
+                "de": "Uhr"
+              }
+            },
+            {
+              "id": "lighting",
+              "label": {
+                "en": "Lighting",
+                "de": "Beleuchtung"
+              }
+            },
+            {
+              "id": "custom",
+              "label": {
+                "en": "Custom",
+                "de": "Benutzerdefiniert"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timebox_show_clock",
+      "title": {
+        "en": "Show clock",
+        "de": "Uhr anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show clock [[style]] in [[color]]",
+        "de": "Uhr [[style]] in [[color]] anzeigen"
+      },
+      "hint": {
+        "en": "Switches the TimeBox to the clock with this style and colour. The colour is kept as the clock colour (the colour picker of the device shows it); the style stays until the clock is selected again or the clock settings are changed, and turning the TimeBox off and on shows the same clock. The weather, temperature and calendar pages come from the device settings; the settings themselves are not changed.",
+        "de": "Schaltet die TimeBox auf die Uhr mit diesem Stil und dieser Farbe. Die Farbe bleibt als Farbe der Uhr gespeichert (die Farbauswahl des Geräts zeigt sie); der Stil bleibt, bis die Uhr erneut gewählt oder die Uhr-Einstellungen geändert werden; Aus- und Einschalten zeigt dieselbe Uhr. Wetter-, Temperatur- und Kalenderseite stammen aus den Geräteeinstellungen; die Einstellungen selbst bleiben unverändert."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "style",
+          "title": {
+            "en": "Style",
+            "de": "Stil"
+          },
+          "values": [
+            {
+              "id": "full_screen",
+              "label": {
+                "en": "Full screen",
+                "de": "Vollbild"
+              }
+            },
+            {
+              "id": "rainbow",
+              "label": {
+                "en": "Rainbow",
+                "de": "Regenbogen"
+              }
+            },
+            {
+              "id": "boxed",
+              "label": {
+                "en": "Boxed",
+                "de": "Gerahmt"
+              }
+            },
+            {
+              "id": "analog_square",
+              "label": {
+                "en": "Analog, square",
+                "de": "Analog, eckig"
+              }
+            },
+            {
+              "id": "negative",
+              "label": {
+                "en": "Full screen, negative",
+                "de": "Vollbild, negativ"
+              }
+            },
+            {
+              "id": "analog_round",
+              "label": {
+                "en": "Analog, round",
+                "de": "Analog, rund"
+              }
+            },
+            {
+              "id": "small",
+              "label": {
+                "en": "Small",
+                "de": "Klein"
+              }
+            }
+          ]
+        },
+        {
+          "type": "color",
+          "name": "color",
+          "title": {
+            "en": "Colour",
+            "de": "Farbe"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_set_lighting",
+      "title": {
+        "en": "Set lighting",
+        "de": "Beleuchtung einstellen"
+      },
+      "titleFormatted": {
+        "en": "Set lighting to [[color]]",
+        "de": "Beleuchtung auf [[color]] setzen"
+      },
+      "hint": {
+        "en": "Switches the TimeBox to the lighting mode with this colour and turns the panel on. Brightness stays as it is (dim).",
+        "de": "Schaltet die TimeBox auf den Beleuchtungsmodus mit dieser Farbe und schaltet das Display ein. Die Helligkeit bleibt unverändert (dim)."
+      },
+      "args": [
+        {
+          "type": "color",
+          "name": "color",
+          "title": {
+            "en": "Colour",
+            "de": "Farbe"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_show_custom_page",
+      "title": {
+        "en": "Show custom page",
+        "de": "Eigene Seite anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show custom page [[page]]",
+        "de": "Eigene Seite [[page]] anzeigen"
+      },
+      "hint": {
+        "en": "Switches the TimeBox to the custom mode with this page and turns the panel on. Custom pages are the ones set up in the Divoom app.",
+        "de": "Schaltet die TimeBox auf den benutzerdefinierten Modus mit dieser Seite und schaltet das Display ein. Eigene Seiten sind die, die in der Divoom-App eingerichtet wurden."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "page",
+          "title": {
+            "en": "Page",
+            "de": "Seite"
+          },
+          "values": [
+            {
+              "id": "1",
+              "label": {
+                "en": "Page 1",
+                "de": "Seite 1"
+              }
+            },
+            {
+              "id": "2",
+              "label": {
+                "en": "Page 2",
+                "de": "Seite 2"
+              }
+            },
+            {
+              "id": "3",
+              "label": {
+                "en": "Page 3",
+                "de": "Seite 3"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timebox_show_text",
+      "title": {
+        "en": "Show text",
+        "de": "Text anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show text [[text]] in [[color]] on [[background]], [[speed]], for [[duration]] s",
+        "de": "Text [[text]] in [[color]] auf [[background]] anzeigen, [[speed]], für [[duration]] s"
+      },
+      "hint": {
+        "en": "Scrolls the text across the TimeBox display in its own large font and repeats it until the duration is over. Duration 0 keeps it until the Stop text action, a mode change or turning the TimeBox off. A new text replaces the running one; a turned-off TimeBox is turned on first. Texts longer than 64 characters (after removing emoji) make the action fail; emoji are removed because the TimeBox cannot show them.",
+        "de": "Lässt den Text in der eigenen großen Schrift der TimeBox über das Display laufen und wiederholt ihn, bis die Dauer vorbei ist. Dauer 0 behält ihn bis zur Aktion Text beenden, einem Moduswechsel oder dem Ausschalten der TimeBox. Ein neuer Text ersetzt den laufenden; eine ausgeschaltete TimeBox wird zuerst eingeschaltet. Texte mit mehr als 64 Zeichen (nach dem Entfernen von Emojis) lassen die Aktion fehlschlagen; Emojis werden entfernt, weil die TimeBox sie nicht darstellen kann."
+      },
+      "args": [
+        {
+          "type": "text",
+          "name": "text",
+          "title": {
+            "en": "Text",
+            "de": "Text"
+          },
+          "placeholder": {
+            "en": "Hello Homey",
+            "de": "Hallo Homey"
+          }
+        },
+        {
+          "type": "color",
+          "name": "color",
+          "title": {
+            "en": "Text colour",
+            "de": "Textfarbe"
+          }
+        },
+        {
+          "type": "color",
+          "name": "background",
+          "title": {
+            "en": "Background colour",
+            "de": "Hintergrundfarbe"
+          }
+        },
+        {
+          "type": "dropdown",
+          "name": "speed",
+          "title": {
+            "en": "Speed",
+            "de": "Geschwindigkeit"
+          },
+          "values": [
+            {
+              "id": "slow",
+              "label": {
+                "en": "Slow",
+                "de": "Langsam"
+              }
+            },
+            {
+              "id": "normal",
+              "label": {
+                "en": "Normal",
+                "de": "Normal"
+              }
+            },
+            {
+              "id": "fast",
+              "label": {
+                "en": "Fast",
+                "de": "Schnell"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "duration",
+          "title": {
+            "en": "Duration (s)",
+            "de": "Dauer (s)"
+          },
+          "min": 0,
+          "max": 3600,
+          "step": 1,
+          "placeholder": {
+            "en": "0 = until stopped",
+            "de": "0 = bis zum Stoppen"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_stop_text",
+      "title": {
+        "en": "Stop text",
+        "de": "Text beenden"
+      },
+      "hint": {
+        "en": "Ends the scrolling text; the TimeBox shows its previous mode again.",
+        "de": "Beendet den laufenden Text; die TimeBox zeigt wieder ihren vorherigen Modus."
+      }
+    },
+    {
+      "id": "timebox_show_image",
+      "title": {
+        "en": "Show image",
+        "de": "Bild anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show image [[droptoken]], [[fit]], for [[duration]] s",
+        "de": "Bild [[droptoken]] anzeigen, [[fit]], für [[duration]] s"
+      },
+      "hint": {
+        "en": "Shows the image of an image tag (for example a camera snapshot or an album cover) on the TimeBox display. The picture is scaled to 16x16 pixels: Fill the display crops the sides of a non-square image, Whole image keeps all of it with black bars. Transparent areas are shown black. PNG, JPEG and GIF (first frame) are supported, up to 5 MB and 8.3 megapixels (for example 3840 x 2160) with at most 16384 pixels per side. Duration 0 keeps the image until a mode change, a text, a countdown or turning the TimeBox off; with a duration the TimeBox returns to its previous mode afterwards. A turned-off TimeBox is turned on first. Large images can take a few seconds to prepare.",
+        "de": "Zeigt das Bild eines Bild-Tags (zum Beispiel ein Kamera-Schnappschuss oder ein Albumcover) auf dem Display der TimeBox. Das Bild wird auf 16x16 Pixel verkleinert: Display füllen schneidet bei nicht quadratischen Bildern die Seiten ab, Ganzes Bild zeigt alles mit schwarzen Rändern. Transparente Bereiche werden schwarz dargestellt. Unterstützt werden PNG, JPEG und GIF (erstes Bild) bis 5 MB und 8,3 Megapixel (zum Beispiel 3840 x 2160) mit höchstens 16384 Pixeln pro Seite. Dauer 0 behält das Bild bis zu einem Moduswechsel, einem Text, einem Countdown oder dem Ausschalten der TimeBox; mit einer Dauer kehrt die TimeBox danach in ihren vorherigen Modus zurück. Eine ausgeschaltete TimeBox wird zuerst eingeschaltet. Große Bilder brauchen einige Sekunden zur Aufbereitung."
+      },
+      "droptoken": [
+        "image"
+      ],
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "fit",
+          "title": {
+            "en": "Fit",
+            "de": "Einpassen"
+          },
+          "values": [
+            {
+              "id": "cover",
+              "label": {
+                "en": "Fill the display (crop)",
+                "de": "Display füllen (zuschneiden)"
+              }
+            },
+            {
+              "id": "contain",
+              "label": {
+                "en": "Whole image (black bars)",
+                "de": "Ganzes Bild (schwarze Ränder)"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "duration",
+          "title": {
+            "en": "Duration (s)",
+            "de": "Dauer (s)"
+          },
+          "min": 0,
+          "max": 3600,
+          "step": 1,
+          "placeholder": {
+            "en": "0 = until a mode change",
+            "de": "0 = bis zum Moduswechsel"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_show_image_url",
+      "title": {
+        "en": "Show image from URL",
+        "de": "Bild von URL anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show image from [[url]], [[fit]], for [[duration]] s",
+        "de": "Bild von [[url]] anzeigen, [[fit]], für [[duration]] s"
+      },
+      "hint": {
+        "en": "Downloads the picture at an http or https address when the action runs (Homey must be able to reach it; addresses in your own network work too) and shows it on the TimeBox display. The picture is scaled to 16x16 pixels: Fill the display crops the sides of a non-square image, Whole image keeps all of it with black bars. Transparent areas are shown black. PNG, JPEG and GIF (first frame) are supported, up to 5 MB and 8.3 megapixels (for example 3840 x 2160) with at most 16384 pixels per side. Duration 0 keeps the image until a mode change, a text, a countdown or turning the TimeBox off; with a duration the TimeBox returns to its previous mode afterwards. A turned-off TimeBox is turned on first. Large images can take a few seconds to prepare.",
+        "de": "Lädt das Bild von einer http- oder https-Adresse, wenn die Aktion läuft (Homey muss sie erreichen können; Adressen im eigenen Netzwerk funktionieren auch), und zeigt es auf dem Display der TimeBox. Das Bild wird auf 16x16 Pixel verkleinert: Display füllen schneidet bei nicht quadratischen Bildern die Seiten ab, Ganzes Bild zeigt alles mit schwarzen Rändern. Transparente Bereiche werden schwarz dargestellt. Unterstützt werden PNG, JPEG und GIF (erstes Bild) bis 5 MB und 8,3 Megapixel (zum Beispiel 3840 x 2160) mit höchstens 16384 Pixeln pro Seite. Dauer 0 behält das Bild bis zu einem Moduswechsel, einem Text, einem Countdown oder dem Ausschalten der TimeBox; mit einer Dauer kehrt die TimeBox danach in ihren vorherigen Modus zurück. Eine ausgeschaltete TimeBox wird zuerst eingeschaltet. Große Bilder brauchen einige Sekunden zur Aufbereitung."
+      },
+      "args": [
+        {
+          "type": "text",
+          "name": "url",
+          "title": {
+            "en": "URL",
+            "de": "URL"
+          },
+          "placeholder": {
+            "en": "https://example.com/picture.png",
+            "de": "https://example.com/bild.png"
+          }
+        },
+        {
+          "type": "dropdown",
+          "name": "fit",
+          "title": {
+            "en": "Fit",
+            "de": "Einpassen"
+          },
+          "values": [
+            {
+              "id": "cover",
+              "label": {
+                "en": "Fill the display (crop)",
+                "de": "Display füllen (zuschneiden)"
+              }
+            },
+            {
+              "id": "contain",
+              "label": {
+                "en": "Whole image (black bars)",
+                "de": "Ganzes Bild (schwarze Ränder)"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "duration",
+          "title": {
+            "en": "Duration (s)",
+            "de": "Dauer (s)"
+          },
+          "min": 0,
+          "max": 3600,
+          "step": 1,
+          "placeholder": {
+            "en": "0 = until a mode change",
+            "de": "0 = bis zum Moduswechsel"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_start_countdown",
+      "title": {
+        "en": "Start countdown",
+        "de": "Countdown starten"
+      },
+      "titleFormatted": {
+        "en": "Start a countdown of [[minutes]] min [[seconds]] s",
+        "de": "Countdown über [[minutes]] Min. [[seconds]] s starten"
+      },
+      "hint": {
+        "en": "Shows a countdown (hourglass, minutes and seconds) on the TimeBox display. At zero it shows 00:00 for a few seconds and the TimeBox returns to its previous mode. It replaces a running text; starting again restarts it; a turned-off TimeBox is turned on first. A mode change, a text or turning the TimeBox off only hides the countdown: it keeps running and shows 00:00 when it ends. Up to 99 minutes 59 seconds.",
+        "de": "Zeigt einen Countdown (Sanduhr, Minuten und Sekunden) auf dem Display der TimeBox. Bei null zeigt sie einige Sekunden 00:00 und kehrt dann in ihren vorherigen Modus zurück. Er ersetzt einen laufenden Text; ein erneuter Start beginnt von vorn; eine ausgeschaltete TimeBox wird zuerst eingeschaltet. Ein Moduswechsel, ein Text oder das Ausschalten der TimeBox verdeckt den Countdown nur: Er läuft weiter und zeigt am Ende 00:00. Bis zu 99 Minuten 59 Sekunden."
+      },
+      "args": [
+        {
+          "type": "number",
+          "name": "minutes",
+          "title": {
+            "en": "Minutes",
+            "de": "Minuten"
+          },
+          "min": 0,
+          "max": 99,
+          "step": 1,
+          "placeholder": {
+            "en": "5",
+            "de": "5"
+          }
+        },
+        {
+          "type": "number",
+          "name": "seconds",
+          "title": {
+            "en": "Seconds",
+            "de": "Sekunden"
+          },
+          "min": 0,
+          "max": 59,
+          "step": 1,
+          "placeholder": {
+            "en": "0",
+            "de": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_stop_countdown",
+      "title": {
+        "en": "Stop countdown",
+        "de": "Countdown beenden"
+      },
+      "hint": {
+        "en": "Ends the countdown while it is on screen; the TimeBox shows its previous mode again. A countdown that a mode change, a text or turning the TimeBox off has hidden cannot be stopped and still shows its end. Does nothing while the TimeBox is turned off or a text is shown.",
+        "de": "Beendet den Countdown, solange er auf dem Display zu sehen ist; die TimeBox zeigt wieder ihren vorherigen Modus. Ein Countdown, den ein Moduswechsel, ein Text oder das Ausschalten der TimeBox verdeckt hat, lässt sich nicht beenden und zeigt trotzdem sein Ende. Tut nichts, solange die TimeBox ausgeschaltet ist oder ein Text läuft."
+      }
+    },
+    {
+      "id": "timebox_set_temperature",
+      "title": {
+        "en": "Set temperature",
+        "de": "Temperatur setzen"
+      },
+      "titleFormatted": {
+        "en": "Set temperature to [[temperature]] °C",
+        "de": "Temperatur auf [[temperature]] °C setzen"
+      },
+      "hint": {
+        "en": "Sets the temperature the TimeBox shows on the clock's temperature page. It is shown when \"Show temperature\" is on in the device settings. The temperature is rounded to whole degrees. It is sent once the TimeBox is on and connected, together with the last weather (clear if it was never set). Turn off \"Show weather\" if you do not set the weather. Automatic weather from Open-Meteo overwrites temperature and weather at each update.",
+        "de": "Legt die Temperatur fest, die die TimeBox auf der Temperaturseite der Uhr zeigt. Sie erscheint, wenn in den Geräteeinstellungen „Temperatur anzeigen“ aktiv ist. Die Temperatur wird auf ganze Grad gerundet. Sie wird gesendet, sobald die TimeBox eingeschaltet und verbunden ist, zusammen mit dem zuletzt gesetzten Wetter (klar, falls nie eines gesetzt wurde). Schalte „Wetter anzeigen“ aus, wenn du das Wetter nicht setzt. Das automatische Wetter von Open-Meteo überschreibt Temperatur und Wetter bei jeder Aktualisierung."
+      },
+      "args": [
+        {
+          "type": "number",
+          "name": "temperature",
+          "title": {
+            "en": "Temperature (°C)",
+            "de": "Temperatur (°C)"
+          },
+          "min": -99,
+          "max": 99,
+          "step": 1,
+          "placeholder": {
+            "en": "21",
+            "de": "21"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_set_weather",
+      "title": {
+        "en": "Set weather",
+        "de": "Wetter setzen"
+      },
+      "titleFormatted": {
+        "en": "Set weather to [[condition]]",
+        "de": "Wetter auf [[condition]] setzen"
+      },
+      "hint": {
+        "en": "Sets the weather condition the TimeBox shows on the clock's weather page. It is shown when \"Show weather\" is on in the device settings. It is sent once the TimeBox is on and connected, together with the last temperature (0 °C if it was never set). Turn off \"Show temperature\" if you do not set the temperature. Automatic weather from Open-Meteo overwrites temperature and weather at each update.",
+        "de": "Legt das Wetter fest, das die TimeBox auf der Wetterseite der Uhr zeigt. Es erscheint, wenn in den Geräteeinstellungen „Wetter anzeigen“ aktiv ist. Es wird gesendet, sobald die TimeBox eingeschaltet und verbunden ist, zusammen mit der zuletzt gesetzten Temperatur (0 °C, falls nie eine gesetzt wurde). Schalte „Temperatur anzeigen“ aus, wenn du die Temperatur nicht setzt. Das automatische Wetter von Open-Meteo überschreibt Temperatur und Wetter bei jeder Aktualisierung."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "condition",
+          "title": {
+            "en": "Weather",
+            "de": "Wetter"
+          },
+          "values": [
+            {
+              "id": "clear",
+              "label": {
+                "en": "Clear",
+                "de": "Klar"
+              }
+            },
+            {
+              "id": "cloudy",
+              "label": {
+                "en": "Cloudy",
+                "de": "Bewölkt"
+              }
+            },
+            {
+              "id": "thunder",
+              "label": {
+                "en": "Thunderstorm",
+                "de": "Gewitter"
+              }
+            },
+            {
+              "id": "rain",
+              "label": {
+                "en": "Rain",
+                "de": "Regen"
+              }
+            },
+            {
+              "id": "snow",
+              "label": {
+                "en": "Snow",
+                "de": "Schnee"
+              }
+            },
+            {
+              "id": "fog",
+              "label": {
+                "en": "Fog",
+                "de": "Nebel"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

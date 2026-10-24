@@ -1,0 +1,12 @@
+# Development files that must not end up in the app bundle (#37). The store readme (README.txt, README.de.txt), assets,
+# locales and drivers stay. Patterns with a leading slash match only at the repository root. The dot-directories are also
+# covered by the CLI's default `.*` rule; they are listed so the intent is explicit.
+/docs/
+/scripts/
+/CLAUDE.md
+/README.md
+/eslint.config.mjs
+/.github/
+/.claude/
+/.hwtest/
+/.venv/

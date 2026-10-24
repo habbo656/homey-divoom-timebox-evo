@@ -1,0 +1,73 @@
+{
+  "app": {
+    "name": "Divoom TimeBox Evo"
+  },
+  "pair": {
+    "title": "TimeBox Evo verbinden",
+    "step_power": "Schalte die TimeBox ein und halte sie 1-2 m von deinem Homey entfernt.",
+    "step_close_app": "Schließe die Divoom-App und trenne die TimeBox von Smartphones oder anderen Bluetooth-Geräten. Sie akzeptiert nur eine Verbindung.",
+    "step_reset": "Wurde sie zurückgesetzt oder wird sie nicht gefunden: aus- und wieder einschalten und warten, bis die Uhr/der Startbildschirm angezeigt wird.",
+    "step_range": "Lass die TimeBox während der Suche eingeschaltet (Display an).",
+    "search_note": "Die Suche dauert bis zu 60 Sekunden. Wird nichts gefunden, wiederhole die Schritte und suche erneut.",
+    "scan": {
+      "select": "Wähle deine TimeBox:",
+      "searching": "Suche nach Bluetooth-Geräten, noch {seconds} s...",
+      "finished": "Suche beendet.",
+      "nothing_found": "Keine TimeBox gefunden. Schalte sie ein, halte sie nah und wach und suche erneut. Falls du sie umbenannt hast, wähle Alle Geräte anzeigen.",
+      "add": "Hinzufügen",
+      "search_again": "Erneut suchen",
+      "checking": "Gerät wird geprüft...",
+      "scan_failed": "Die Suche ist fehlgeschlagen ({error}). Prüfe, ob die TimeBox eingeschaltet und wach ist, sich in 1-2 m Abstand zu deinem Homey befindet und Bluetooth an deinem Homey funktioniert, und suche dann erneut.",
+      "verify_not_timebox": "Das ist keine TimeBox Evo. Wähle ein anderes Gerät oder suche erneut.",
+      "verify_timeout": "Das Gerät hat nicht geantwortet. Schließe die Divoom-App, stelle sicher, dass die TimeBox an und wach ist, und versuche es erneut.",
+      "add_failed": "Das Gerät konnte nicht hinzugefügt werden ({error}). Prüfe, ob die TimeBox eingeschaltet und nah an deinem Homey ist, schließe die Divoom-App und versuche es erneut.",
+      "show_all": "Alle Geräte anzeigen",
+      "show_matching": "Nur TimeBox-Geräte anzeigen"
+    }
+  },
+  "device": {
+    "unavailable": {
+      "unreachable": "Die TimeBox antwortet nicht. Schalte sie ein, halte sie in Reichweite und schließe die Divoom-App.",
+      "not_timebox": "Dieses Gerät ist keine TimeBox Evo. Entferne es und verbinde deine TimeBox erneut.",
+      "setup_failed": "Die TimeBox konnte nicht eingerichtet werden. Entferne das Gerät und verbinde es erneut, oder starte die App neu."
+    },
+    "error": {
+      "not_connected": "Die TimeBox ist gerade nicht verbunden. Versuche es gleich noch einmal.",
+      "not_confirmed": "Die TimeBox hat die Änderung nicht bestätigt. Prüfe die Anzeige und versuche es gleich noch einmal.",
+      "text_empty": "Der Text ist leer, nachdem die Zeichen entfernt wurden, die die TimeBox nicht darstellen kann (zum Beispiel Emojis).",
+      "text_too_long": "Der Text ist zu lang: {length} Zeichen. Die TimeBox zeigt höchstens {max} Zeichen (Emojis zählen nicht).",
+      "countdown_zero": "Stelle einen Countdown von mindestens 1 Sekunde ein.",
+      "invalid_range": "{field}: {value} liegt außerhalb des erlaubten Bereichs von {min} bis {max}.",
+      "invalid_number": "{field}: {value} ist keine Zahl.",
+      "invalid_choice": "{field}: {value} ist keine gültige Auswahl. Erlaubt sind: {allowed}.",
+      "invalid_color": "{field}: {value} ist keine Farbe. Verwende eine Hex-Farbe wie #FF8000.",
+      "invalid_text": "{field} muss ein Text sein.",
+      "invalid_url": "{field}: {value} ist keine Webadresse, die die TimeBox-Evo-App laden kann. Verwende eine http://- oder https://-Adresse mit höchstens {max} Zeichen, ohne Benutzernamen oder Passwort.",
+      "image_unreachable": "Das Bild konnte nicht geladen werden. Prüfe die Adresse und ob Homey sie erreichen kann (der Server muss innerhalb von 10 Sekunden antworten).",
+      "image_unreadable": "Das Bild konnte nicht aus dem Bild-Tag gelesen werden. Versuche es erneut oder verwende eine andere Quelle.",
+      "image_too_large": "Das Bild ist zu groß. Unterstützt werden höchstens {max_mb} MB, {max_mp} Megapixel und {max_side} Pixel pro Seite.",
+      "image_unsupported": "Das Bild kann nicht angezeigt werden. Unterstützt werden nur PNG-, JPEG- und GIF-Bilder.",
+      "image_missing": "Es wurde kein Bild übergeben. Ziehe ein Bild-Tag auf die Karte."
+    },
+    "field": {
+      "text": "Text",
+      "color": "Farbe",
+      "text_color": "Textfarbe",
+      "background": "Hintergrundfarbe",
+      "speed": "Geschwindigkeit",
+      "duration": "Dauer (s)",
+      "minutes": "Minuten",
+      "seconds": "Sekunden",
+      "temperature": "Temperatur (°C)",
+      "condition": "Wetter",
+      "style": "Stil",
+      "page": "Seite",
+      "channel": "Modus",
+      "dim": "Helligkeit",
+      "hue": "Farbton",
+      "saturation": "Sättigung",
+      "fit": "Einpassen",
+      "url": "URL"
+    }
+  }
+}

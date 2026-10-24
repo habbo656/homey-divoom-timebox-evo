@@ -1,0 +1,37 @@
+{
+  "name": "com.habbo656.divoom-timebox",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Homey app for the Divoom Timebox Evo",
+  "main": ".homeybuild/app.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "tsc",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release:check": "node scripts/release.mjs check",
+    "release:bump": "node scripts/release.mjs bump"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.0",
+    "@types/node": "^22.0.0",
+    "@types/omggif": "^1.0.5",
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^9.0.0",
+    "ignore": "5.3.2",
+    "pngjs": "^7.0.0",
+    "prettier": "3.9.9",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "omggif": "^1.0.10"
+  }
+}

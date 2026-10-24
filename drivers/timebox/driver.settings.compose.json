@@ -1,0 +1,198 @@
+[
+  {
+    "type": "group",
+    "label": {
+      "en": "Clock",
+      "de": "Uhr"
+    },
+    "children": [
+      {
+        "id": "clock_style",
+        "type": "dropdown",
+        "label": {
+          "en": "Clock style",
+          "de": "Stil der Uhr"
+        },
+        "hint": {
+          "en": "The look of the clock mode. Changes are shown at once while the clock is displayed, otherwise the next time the clock is selected.",
+          "de": "Das Aussehen des Uhr-Modus. Änderungen sind sofort sichtbar, solange die Uhr angezeigt wird, sonst beim nächsten Wechsel zur Uhr."
+        },
+        "value": "full_screen",
+        "values": [
+          {
+            "id": "full_screen",
+            "label": {
+              "en": "Full screen",
+              "de": "Vollbild"
+            }
+          },
+          {
+            "id": "rainbow",
+            "label": {
+              "en": "Rainbow",
+              "de": "Regenbogen"
+            }
+          },
+          {
+            "id": "boxed",
+            "label": {
+              "en": "Boxed",
+              "de": "Gerahmt"
+            }
+          },
+          {
+            "id": "analog_square",
+            "label": {
+              "en": "Analog, square",
+              "de": "Analog, eckig"
+            }
+          },
+          {
+            "id": "negative",
+            "label": {
+              "en": "Full screen, negative",
+              "de": "Vollbild, negativ"
+            }
+          },
+          {
+            "id": "analog_round",
+            "label": {
+              "en": "Analog, round",
+              "de": "Analog, rund"
+            }
+          },
+          {
+            "id": "small",
+            "label": {
+              "en": "Small",
+              "de": "Klein"
+            }
+          }
+        ]
+      },
+      {
+        "id": "clock_weather",
+        "type": "checkbox",
+        "label": {
+          "en": "Show weather",
+          "de": "Wetter anzeigen"
+        },
+        "hint": {
+          "en": "The weather page is added to the clock's rotation. The weather comes from the Set weather Flow card or Open-Meteo.",
+          "de": "Die Wetterseite wird zur Abfolge der Uhr hinzugefügt. Das Wetter kommt von der Flow-Karte „Wetter setzen“ oder von Open-Meteo."
+        },
+        "value": false
+      },
+      {
+        "id": "clock_temperature",
+        "type": "checkbox",
+        "label": {
+          "en": "Show temperature",
+          "de": "Temperatur anzeigen"
+        },
+        "hint": {
+          "en": "The temperature page is added to the clock's rotation. The temperature comes from the Set temperature Flow card or Open-Meteo.",
+          "de": "Die Temperaturseite wird zur Abfolge der Uhr hinzugefügt. Die Temperatur kommt von der Flow-Karte „Temperatur setzen“ oder von Open-Meteo."
+        },
+        "value": false
+      },
+      {
+        "id": "clock_calendar",
+        "type": "checkbox",
+        "label": {
+          "en": "Show calendar",
+          "de": "Kalender anzeigen"
+        },
+        "hint": {
+          "en": "The calendar page is added to the clock's rotation.",
+          "de": "Die Kalenderseite wird zur Abfolge der Uhr hinzugefügt."
+        },
+        "value": false
+      },
+      {
+        "id": "clock_animations",
+        "type": "checkbox",
+        "label": {
+          "en": "Show animation pages",
+          "de": "Animationsseiten zeigen"
+        },
+        "hint": {
+          "en": "Gallery pictures the TimeBox shows between the clock pages. Off: only the time and the pages switched on above.",
+          "de": "Galeriebilder, die die TimeBox zwischen den Uhrseiten zeigt. Aus: nur die Uhrzeit und die oben eingeschalteten Seiten."
+        },
+        "value": false
+      },
+      {
+        "id": "time_sync",
+        "type": "checkbox",
+        "label": {
+          "en": "Set the time automatically",
+          "de": "Uhrzeit automatisch stellen"
+        },
+        "hint": {
+          "en": "Sets the TimeBox clock and calendar to your Homey's local time when it connects, once a day and when the time zone or daylight saving time changes.",
+          "de": "Stellt Uhr und Kalender der TimeBox auf die lokale Zeit deines Homey, sobald sie verbunden ist, einmal täglich und wenn sich die Zeitzone oder die Sommerzeit ändert."
+        },
+        "value": true
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Weather",
+      "de": "Wetter"
+    },
+    "children": [
+      {
+        "id": "weather_auto",
+        "type": "checkbox",
+        "label": {
+          "en": "Automatic weather from Open-Meteo",
+          "de": "Automatisches Wetter von Open-Meteo"
+        },
+        "hint": {
+          "en": "Fetches the current weather and temperature for your Homey's location from Open-Meteo, no account needed. It is shown when the clock's weather and temperature pages are on. Weather data by Open-Meteo.com (CC BY 4.0).",
+          "de": "Holt aktuelles Wetter und Temperatur für den Standort deines Homey von Open-Meteo, ohne Konto. Beides erscheint, wenn die Wetter- und Temperaturseiten der Uhr aktiv sind. Wetterdaten von Open-Meteo.com (CC BY 4.0)."
+        },
+        "value": false
+      },
+      {
+        "id": "weather_interval",
+        "type": "dropdown",
+        "label": {
+          "en": "Update interval",
+          "de": "Aktualisierungsintervall"
+        },
+        "hint": {
+          "en": "How often the automatic weather is fetched from Open-Meteo. Only used when the automatic weather is on.",
+          "de": "Wie oft das automatische Wetter von Open-Meteo abgerufen wird. Gilt nur, wenn das automatische Wetter aktiv ist."
+        },
+        "value": "30",
+        "values": [
+          {
+            "id": "15",
+            "label": {
+              "en": "Every 15 minutes",
+              "de": "Alle 15 Minuten"
+            }
+          },
+          {
+            "id": "30",
+            "label": {
+              "en": "Every 30 minutes",
+              "de": "Alle 30 Minuten"
+            }
+          },
+          {
+            "id": "60",
+            "label": {
+              "en": "Every 60 minutes",
+              "de": "Alle 60 Minuten"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

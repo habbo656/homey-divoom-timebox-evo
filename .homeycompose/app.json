@@ -1,0 +1,25 @@
+{
+  "id": "com.habbo656.divoom-timebox",
+  "version": "1.1.0",
+  "compatibility": ">=12.0.0",
+  "sdk": 3,
+  "platforms": ["local"],
+  "brandColor": "#FF6A00",
+  "name": { "en": "Divoom TimeBox Evo", "de": "Divoom TimeBox Evo" },
+  "description": {
+    "en": "The pixel heart of your smart home.",
+    "de": "Das Pixel-Herz deines Smart Homes."
+  },
+  "category": ["tools"],
+  "permissions": ["homey:wireless:ble", "homey:manager:geolocation"],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": { "name": "habbo656" },
+  "source": "https://github.com/habbo656/homey-divoom-timebox-evo",
+  "support": "https://github.com/habbo656/homey-divoom-timebox-evo/issues",
+  "bugs": { "url": "https://github.com/habbo656/homey-divoom-timebox-evo/issues" },
+  "icon": "/assets/icon.svg"
+}

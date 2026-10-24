@@ -1,0 +1,3 @@
+TimeBox Evo macht aus deiner Divoom TimeBox Evo den freundlichen Pixel-Bildschirm deines Zuhauses. Homey spricht direkt per Bluetooth mit ihr und hält ihre Uhr immer richtig. Zeige morgens Uhrzeit und Wetter an, lass dir per Lauftext sagen, dass die Waschmaschine fertig ist oder jemand an der Tür steht, starte in der Küche einen Pizza-Countdown oder bring einen Schnappschuss deiner Türklingel-Kamera auf das 16x16-Display.
+
+Alles steht dir auf der Gerätekachel und in Flows zur Verfügung: die Uhr in mehreren Stilen, Stimmungslicht in jeder Farbe, eigene Pixel-Seiten, Dimmen am Abend und Ausschalten zur Schlafenszeit. Ein abgelaufener Countdown kann sogar den nächsten Flow starten.

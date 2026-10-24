@@ -1,0 +1,14 @@
+name: Bug
+description: Something does not work
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: {label: What happened vs. expected}
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes: {label: Steps to reproduce / logs}
+  - type: input
+    id: env
+    attributes: {label: Homey firmware / app version}

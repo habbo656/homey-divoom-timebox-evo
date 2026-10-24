@@ -1,0 +1,13 @@
+# Only code (.ts, .mjs) is formatted; docs, JSON, YAML and generated files are left alone.
+.homeybuild/
+.homeycompose/.cache/
+node_modules/
+.venv/
+.hwtest/
+app.json
+package-lock.json
+*.md
+*.json
+*.yml
+*.yaml
+*.html

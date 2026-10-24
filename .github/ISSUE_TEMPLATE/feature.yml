@@ -1,0 +1,15 @@
+name: Feature / requirement
+description: A capability the app should have
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: story
+    attributes: {label: User story, description: "As a ..., I want ..., so that ..."}
+    validations: {required: true}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria, description: One checkbox per testable criterion}
+    validations: {required: true}
+  - type: textarea
+    id: notes
+    attributes: {label: Notes / constraints}
