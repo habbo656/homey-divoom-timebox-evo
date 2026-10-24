@@ -2,7 +2,8 @@ name: claude
 description: >
   Run Claude Code headless on a prompt file and return its structured output. The model gets no GitHub token (the
   checkout must use persist-credentials: false) and runs under .github/agent/ci-settings.json on top of the project
-  settings; its structured result is scrubbed (scripts/agent/scrub.py) and workflow steps outside this action publish it.
+  settings (which must carry the allow rules: a CI checkout is an untrusted workspace, so Claude Code ignores the
+  project's permissions.allow); its structured result is scrubbed (scripts/agent/scrub.py) and workflow steps outside this action publish it.
 inputs:
   prompt-file:
     description: >

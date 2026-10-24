@@ -199,7 +199,9 @@ Their commits carry the bot identity (`.claude/settings.json` `env`, see "Bot id
   direct `homey app run` (only via `scripts/homey-run.sh`, which holds the hardware lock), `homey app install/publish`,
   deleting Homey devices/Flows, `homey api raw`, `gh repo/secret/workflow/release/api`, `sudo`, `rm -rf` on `/` or `~`,
   `curl`/`wget`/`ssh`, `npm publish`, unpairing Bluetooth devices. In Actions `.github/agent/ci-settings.json` adds the
-  CI denies listed above. Deny rules match command prefixes only; the real boundary in CI is the read-only token.
+  CI denies listed above and repeats the allow rules: a fresh CI checkout is an untrusted workspace, and Claude Code
+  then ignores `permissions.allow` from the project's `.claude/settings.json` (deny rules still apply), so headless
+  agents could run only read-only commands (`git checkout -b` was denied). Deny rules match command prefixes only; the real boundary in CI is the read-only token.
 - Planner, reviewer and tester are read-only; the doc-keeper edits docs only.
 - Never merge with a red gate or open findings; never force-push; releases and App Store publishing stay with the owner.
 - One hardware user at a time (concurrency group `hardware`). The lock in `scripts/homey-run.sh` only means "a dev build
