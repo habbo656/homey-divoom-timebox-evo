@@ -94,7 +94,8 @@ the pipeline's own **GitHub App** (`<slug>[bot]`), never from the owner's accoun
   `await-device.sh` and revokes it (`DELETE installation/token`) before the tester starts.
 - Repository variables: `AGENT_APP_ID`, `AGENT_BOT_SLUG` (the app slug; workflows use `<slug>[bot]` as `BOT` for REST
   and event logins and the bare slug for GraphQL `author.login`), `AGENT_BOT_EMAIL`
-  (`<bot user id>+<slug>[bot]@users.noreply.github.com`, so GitHub links the commits to the bot).
+  (`<bot user id>+<slug>[bot]@users.noreply.github.com`, so GitHub links the commits to the bot). This repository's
+  app: slug `timebox-agent`, bot `timebox-agent[bot]`, email `347505997+timebox-agent[bot]@users.noreply.github.com`.
 - App permissions (repository, installed on this repository only): Contents, Issues, Pull requests and Actions
   read/write, Metadata read. **No Workflows permission**, so the bot cannot push `.github/workflows/**`.
 - Events made with an app token, unlike `GITHUB_TOKEN`, trigger workflows: `ci.yml` now runs on agent PRs, and
