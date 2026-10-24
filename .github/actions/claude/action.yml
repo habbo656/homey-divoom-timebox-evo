@@ -7,7 +7,8 @@ inputs:
   prompt-file:
     description: >
       Prompt template; {{NAME}} is replaced by the environment variable VAR_NAME, {{@NAME}} by the contents of the
-      file whose path VAR_NAME holds (for sessions without tools)
+      file whose path VAR_NAME holds (for sessions without tools). The folder of every VAR_* file below
+      $RUNNER_TEMP (not $RUNNER_TEMP itself) is added with --add-dir, so the session may read it.
     required: true
   schema-file:
     description: JSON schema of the result
@@ -66,6 +67,15 @@ runs:
         args=(-p "$prompt" --model "$MODEL" --output-format json --json-schema "$(cat "$SCHEMA_FILE")"
               --settings .github/agent/ci-settings.json --permission-mode acceptEdits --no-session-persistence)
         [ "$TOOLS" = default ] || args+=(--tools "$TOOLS")
+        # Headless sessions may not read outside the checkout; grant the folders of the VAR_* input files (context).
+        # (bash 3.2 compatible: the Mac runner may use /bin/bash)
+        t=$(cd "$RUNNER_TEMP" && pwd -P); seen=$'\n'
+        while IFS= read -r v; do
+          f=${!v}; [ -f "$f" ] || continue
+          d=$(cd "$(dirname "$f")" && pwd -P)
+          [[ "$d" == "$t"/* ]] || { echo "::error::$v is not in a folder below RUNNER_TEMP"; exit 1; }
+          [[ "$seen" == *$'\n'"$d"$'\n'* ]] || { seen+="$d"$'\n'; args+=(--add-dir "$d"); }
+        done < <(compgen -e | grep '^VAR_' || true)
         set +e; claude "${args[@]}" >"$raw" 2>"$raw.err"; rc=$?; set -e
         # On the self-hosted runner also redact its user, host and runner name (GitHub-hosted values are generic).
         SCRUB_EXTRA=""

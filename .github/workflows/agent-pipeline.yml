@@ -347,7 +347,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ needs.pick.outputs.issue }}
-        run: bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/context.md"
+        run: mkdir -p "$RUNNER_TEMP/ctx" && bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/ctx/context.md"
       - id: c
         uses: ./.github/actions/claude
         env:
@@ -355,7 +355,7 @@ jobs:
           VAR_ROUND: ${{ needs.pick.outputs.round }}
           VAR_BRANCH: ${{ needs.publish.outputs.branch }}
           VAR_SHA: ${{ needs.publish.outputs.sha }}
-          VAR_CONTEXT: ${{ runner.temp }}/context.md
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
         with:
           prompt-file: .github/agent/review.md
           schema-file: .github/agent/review.schema.json
@@ -486,7 +486,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ needs.pick.outputs.issue }}
-        run: bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/context.md"
+        run: mkdir -p "$RUNNER_TEMP/ctx" && bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/ctx/context.md"
       - id: c
         if: steps.pair.outcome == 'success'
         uses: ./.github/actions/claude
@@ -495,7 +495,7 @@ jobs:
           VAR_VERSION: ${{ needs.pick.outputs.version }}
           VAR_BRANCH: ${{ needs.publish.outputs.branch }}
           VAR_SHA: ${{ needs.publish.outputs.sha }}
-          VAR_CONTEXT: ${{ runner.temp }}/context.md
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
         with:
           prompt-file: .github/agent/hwtest.md
           schema-file: .github/agent/hwtest.schema.json

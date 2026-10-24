@@ -84,13 +84,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ github.event.issue.number }}
-        run: bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/context.md" owner-only
+        run: mkdir -p "$RUNNER_TEMP/ctx" && bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/ctx/context.md" owner-only
       - name: Heuristic screen
         id: h
         run: |
           # Cheap second opinion that does not depend on a model: any hit flags the issue for the owner.
-          hits=$(grep -noiE 'ignore (all |the )?(previous|prior|above) (instructions|prompts?)|system prompt|you are (now )?(an? )?(ai|assistant|claude)|CLAUDE\.md|\.github/workflows|settings\.json|(api[_ -]?key|token|secret|password|credential)s?\b.{0,40}(print|send|post|show|reveal|echo|upload)|(curl|wget|nc|bash -c|eval|base64 -d)\b|https?://[^ )]*(webhook|ngrok|requestbin|pipedream|burp|interact)' "$RUNNER_TEMP/context.md" | cut -c1-160 || true)
-          hidden=$(grep -cP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]' "$RUNNER_TEMP/context.md" || true)
+          hits=$(grep -noiE 'ignore (all |the )?(previous|prior|above) (instructions|prompts?)|system prompt|you are (now )?(an? )?(ai|assistant|claude)|CLAUDE\.md|\.github/workflows|settings\.json|(api[_ -]?key|token|secret|password|credential)s?\b.{0,40}(print|send|post|show|reveal|echo|upload)|(curl|wget|nc|bash -c|eval|base64 -d)\b|https?://[^ )]*(webhook|ngrok|requestbin|pipedream|burp|interact)' "$RUNNER_TEMP/ctx/context.md" | cut -c1-160 || true)
+          hidden=$(grep -cP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]' "$RUNNER_TEMP/ctx/context.md" || true)
           {
             echo "hits<<EOF"; echo "$hits"; [ "${hidden:-0}" -gt 1 ] && echo "zero-width/bidi characters: $hidden line(s)"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -98,7 +98,7 @@ jobs:
         id: m
         uses: ./.github/actions/claude
         env:
-          VAR_CONTEXT: ${{ runner.temp }}/context.md
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
         with:
           prompt-file: .github/agent/screen.md
           schema-file: .github/agent/screen.schema.json
