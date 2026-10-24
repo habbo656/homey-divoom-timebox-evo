@@ -7,7 +7,7 @@
 | Doc | Purpose |
 |---|---|
 | [project-requirements.md](project-requirements.md) | Refined repo/process requirements (source of truth for the setup) |
-| [pipeline.md](pipeline.md) | Local agent workflow: commands, roles, gates |
+| [pipeline.md](pipeline.md) | Agent pipeline in GitHub Actions: owner commands, workflows, security model, runner check, hardware testing |
 | [conventions.md](conventions.md) | Coding, branching, commit, test conventions |
 | [architecture.md](architecture.md) | App architecture overview (living document): layers, data flow, module status, layout |
 | [architecture/](architecture.md#areas) | Area files with the detail per topic (transport, pairing, device, modes, clock, text, weather, store assets, ...); the overview lists them |
@@ -27,11 +27,12 @@
 |---|---|---|
 | [0001](decisions/0001-agentic-pipeline.md) | Label-driven GitHub Actions pipeline | superseded by 0003 |
 | [0002](decisions/0002-transport.md) | Transport: direct BLE | accepted |
-| [0003](decisions/0003-local-agent-workflow.md) | Local agent workflow | accepted, amended by 0006 |
+| [0003](decisions/0003-local-agent-workflow.md) | Local agent workflow | superseded by 0011 |
 | [0004](decisions/0004-text-as-images.md) | Text rendered in software | superseded by 0005 |
 | [0005](decisions/0005-rebuild-on-verified-protocol.md) | Rebuild on the verified protocol | accepted |
-| [0006](decisions/0006-autonomous-pipeline.md) | Autonomous pipeline with hardware tests | accepted, amended by 0007 |
+| [0006](decisions/0006-autonomous-pipeline.md) | Autonomous pipeline with hardware tests | accepted, amended by 0007 and 0011 |
 | [0007](decisions/0007-owner-acceptance-per-milestone.md) | Owner acceptance test per milestone | accepted |
 | [0008](decisions/0008-native-text-overlay.md) | Native text as an overlay, not a mode | accepted |
 | [0009](decisions/0009-pure-js-image-decoding.md) | Pure-JS image decoding for the Show image actions | accepted, amended by 0010 |
 | [0010](decisions/0010-bounded-memory-image-decoding.md) | Bounded-memory image decoding | accepted |
+| [0011](decisions/0011-actions-pipeline-public-repo.md) | Agent pipeline in GitHub Actions for a public repository | accepted |

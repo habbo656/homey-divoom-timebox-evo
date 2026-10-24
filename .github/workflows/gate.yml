@@ -1,0 +1,32 @@
+name: gate
+# The merge gate (scripts/gate.sh: npm ci, lint, format check, build, tests, release check, homey app validate) on a
+# GitHub-hosted runner. Reusable; ci.yml runs it for pushes and pull requests, the agent workflows for agent branches.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+    outputs:
+      green:
+        value: ${{ jobs.gate.outputs.green }}
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      green: ${{ steps.gate.outputs.green }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm install -g homey >/dev/null
+      - id: gate
+        run: |
+          if bash scripts/gate.sh; then echo green=true >> "$GITHUB_OUTPUT"; else echo green=false >> "$GITHUB_OUTPUT"; exit 1; fi

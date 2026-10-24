@@ -1,0 +1,99 @@
+name: claude
+description: >
+  Run Claude Code headless on a prompt file and return its structured output. The model gets no GitHub token (the
+  checkout must use persist-credentials: false) and runs under .github/agent/ci-settings.json on top of the project
+  settings; its structured result is scrubbed (scripts/agent/scrub.py) and workflow steps outside this action publish it.
+inputs:
+  prompt-file:
+    description: >
+      Prompt template; {{NAME}} is replaced by the environment variable VAR_NAME, {{@NAME}} by the contents of the
+      file whose path VAR_NAME holds (for sessions without tools)
+    required: true
+  schema-file:
+    description: JSON schema of the result
+    required: true
+  model:
+    description: Model of the top-level session (subagents use their own definitions)
+    default: sonnet
+  tools:
+    description: Comma-separated tool list ("" = no tools at all, "default" = all tools allowed by the settings)
+    default: default
+  oauth-token:
+    description: CLAUDE_CODE_OAUTH_TOKEN (claude setup-token)
+    required: true
+  cli-version:
+    description: "@anthropic-ai/claude-code version installed when no claude CLI is present"
+    default: "2.1.285"
+outputs:
+  result-file:
+    description: Path of the JSON file with the structured output
+    value: ${{ steps.run.outputs.result-file }}
+  ok:
+    description: '"true" when the session ended successfully with a structured result'
+    value: ${{ steps.run.outputs.ok }}
+  limited:
+    description: '"true" when the session stopped at a usage or rate limit (retry later)'
+    value: ${{ steps.run.outputs.limited }}
+runs:
+  using: composite
+  steps:
+    - name: Install Claude Code
+      shell: bash
+      env:
+        V: ${{ inputs.cli-version }}
+      run: command -v claude >/dev/null || npm install -g "@anthropic-ai/claude-code@$V" >/dev/null
+    - name: Run Claude Code
+      id: run
+      shell: bash
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+        PROMPT_FILE: ${{ inputs.prompt-file }}
+        SCHEMA_FILE: ${{ inputs.schema-file }}
+        MODEL: ${{ inputs.model }}
+        TOOLS: ${{ inputs.tools }}
+      run: |
+        unset GH_TOKEN GITHUB_TOKEN
+        id="$(date +%s)-$RANDOM"; raw="$RUNNER_TEMP/claude-raw-$id.json"; res="$RUNNER_TEMP/claude-$id.json"
+        prompt=$(python3 - "$PROMPT_FILE" <<'PY'
+        import os, re, sys
+        text = open(sys.argv[1]).read()
+        def sub(m):
+            v = os.environ.get("VAR_" + m.group(2), "")
+            return (open(v).read() if v else "") if m.group(1) else v
+        print(re.sub(r"\{\{(@?)([A-Z_]+)\}\}", sub, text))
+        PY
+        )
+        args=(-p "$prompt" --model "$MODEL" --output-format json --json-schema "$(cat "$SCHEMA_FILE")"
+              --settings .github/agent/ci-settings.json --permission-mode acceptEdits --no-session-persistence)
+        [ "$TOOLS" = default ] || args+=(--tools "$TOOLS")
+        set +e; claude "${args[@]}" >"$raw" 2>"$raw.err"; rc=$?; set -e
+        # On the self-hosted runner also redact its user, host and runner name (GitHub-hosted values are generic).
+        SCRUB_EXTRA=""
+        [ "${RUNNER_ENVIRONMENT:-}" != self-hosted ] || SCRUB_EXTRA="$(printf '%s\n' "$(id -un)" "$(hostname -s)" "$(hostname)" "${RUNNER_NAME:-}")"
+        export SCRUB_EXTRA
+        python3 - "$raw" "$res" "$rc" <<'PY' >>"$GITHUB_OUTPUT"
+        import json, re, sys
+        raw, res, rc = sys.argv[1], sys.argv[2], int(sys.argv[3])
+        try:
+            d = json.load(open(raw))
+        except Exception:
+            d = {}
+        text = json.dumps(d.get("result", "")) + open(raw + ".err", errors="replace").read()
+        limited = bool(re.search(r"(usage|rate) limit|limit reached|overloaded", text, re.I))
+        out = d.get("structured_output")
+        ok = rc == 0 and not d.get("is_error") and isinstance(out, dict)
+        # Every string the workflow may post is scrubbed of bench and personal details (public repository).
+        import subprocess
+        def clean(v):
+            if isinstance(v, str):
+                return subprocess.run(["python3", "scripts/agent/scrub.py"], input=v, capture_output=True, text=True, check=True).stdout
+            if isinstance(v, list):
+                return [clean(x) for x in v]
+            if isinstance(v, dict):
+                return {k: clean(x) for k, x in v.items()}
+            return v
+        json.dump(clean(out) if isinstance(out, dict) else {}, open(res, "w"))
+        cost = d.get("total_cost_usd") or 0
+        sys.stderr.write(f"claude: rc={rc} subtype={d.get('subtype')} turns={d.get('num_turns')} ok={ok} limited={limited} api-equivalent=${cost:.2f}\n")
+        print(f"result-file={res}\nok={'true' if ok else 'false'}\nlimited={'true' if limited else 'false'}")
+        PY

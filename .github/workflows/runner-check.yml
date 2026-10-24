@@ -1,0 +1,49 @@
+name: runner-check
+# Health check of the self-hosted hardware runner (Bluetooth, BLE permission, webcam, Homey CLI and LAN API, TimeBox
+# paired and available). Manual, daily, or reusable via `uses: ./.github/workflows/runner-check.yml`; jobs inside other
+# workflows use the composite action ./.github/actions/runner-check directly.
+on:
+  workflow_dispatch:
+    inputs:
+      require:
+        description: Checks that must be OK
+        default: bluetooth,ble,camera,homey-cli,homey-api,device
+  schedule:
+    - cron: "41 6 * * *"
+  workflow_call:
+    inputs:
+      require:
+        type: string
+        default: bluetooth,ble,camera,homey-cli,homey-api,device
+    outputs:
+      ready:
+        value: ${{ jobs.check.outputs.ready }}
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 10
+    outputs:
+      ready: ${{ steps.rc.outputs.ready }}
+    steps:
+      - name: Prepare the hardware runner
+        # First step on purpose: mask the bench's user, home, host and runner name in every later log line (public
+        # repository), and use the native git binary when the runner itself runs translated.
+        run: |
+          for v in "$(id -un)" "$HOME" "$(hostname -s)" "$(hostname)" "$RUNNER_NAME" "$(dirname "$RUNNER_WORKSPACE")"; do
+            [ "${#v}" -ge 3 ] && echo "::add-mask::$v"
+          done
+          if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            printf '#!/bin/sh\nexec arch -arm64 /usr/bin/git "$@"\n' > "$RUNNER_TEMP/bin/git"
+            chmod +x "$RUNNER_TEMP/bin/git"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: rc
+        uses: ./.github/actions/runner-check
+        with:
+          require: ${{ inputs.require || 'bluetooth,ble,camera,homey-cli,homey-api,device' }}

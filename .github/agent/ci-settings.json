@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh *)",
+      "Bash(git push*)",
+      "Bash(git remote *)",
+      "Bash(git config *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(nc *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(env)",
+      "Bash(printenv*)",
+      "Bash(npm publish*)",
+      "Bash(npm install *)",
+      "Bash(npm i *)",
+      "Bash(homey app publish*)",
+      "Bash(homey app install*)",
+      "WebFetch",
+      "WebSearch",
+      "Edit(.github/**)",
+      "Write(.github/**)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)",
+      "Edit(CLAUDE.md)",
+      "Write(CLAUDE.md)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}

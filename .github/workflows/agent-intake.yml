@@ -1,0 +1,193 @@
+name: agent-intake
+# Owner commands on issues and PRs → screened, recorded, dispatched. Nobody but the repository owner can start agent
+# work: the router ignores everyone else and revokes approvals that someone else set or invalidated.
+on:
+  issues:
+    types: [labeled, edited]
+  issue_comment:
+    types: [created]
+permissions: {}
+concurrency:
+  group: intake-${{ github.event.issue.number }}
+  cancel-in-progress: false
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      do: ${{ steps.r.outputs.do }}
+      reason: ${{ steps.r.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: r
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          SENDER: ${{ github.event.sender.login }}
+          OWNER: ${{ github.repository_owner }}
+          LABEL: ${{ github.event.label.name }}
+          ISSUE: ${{ github.event.issue.number }}
+          IS_PR: ${{ github.event.issue.pull_request != null }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          BODY: ${{ github.event.comment.body }}
+        run: |
+          bash scripts/agent/route.sh
+          cat "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+
+  revoke:
+    needs: route
+    if: needs.route.outputs.do == 'revoke'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.issue.number }}
+          REASON: ${{ needs.route.outputs.reason }}
+        run: bash scripts/agent/issue.sh revoke "$N" "$REASON"
+
+  screen:
+    needs: route
+    if: needs.route.outputs.do == 'screen' || needs.route.outputs.do == 'override'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: agents
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      verdict: ${{ steps.v.outputs.verdict }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Trusted context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.issue.number }}
+        run: bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/context.md" owner-only
+      - name: Heuristic screen
+        id: h
+        run: |
+          # Cheap second opinion that does not depend on a model: any hit flags the issue for the owner.
+          hits=$(grep -noiE 'ignore (all |the )?(previous|prior|above) (instructions|prompts?)|system prompt|you are (now )?(an? )?(ai|assistant|claude)|CLAUDE\.md|\.github/workflows|settings\.json|(api[_ -]?key|token|secret|password|credential)s?\b.{0,40}(print|send|post|show|reveal|echo|upload)|(curl|wget|nc|bash -c|eval|base64 -d)\b|https?://[^ )]*(webhook|ngrok|requestbin|pipedream|burp|interact)' "$RUNNER_TEMP/context.md" | cut -c1-160 || true)
+          hidden=$(grep -cP '[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}]' "$RUNNER_TEMP/context.md" || true)
+          {
+            echo "hits<<EOF"; echo "$hits"; [ "${hidden:-0}" -gt 1 ] && echo "zero-width/bidi characters: $hidden line(s)"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Model screen (no tools)
+        id: m
+        uses: ./.github/actions/claude
+        env:
+          VAR_CONTEXT: ${{ runner.temp }}/context.md
+        with:
+          prompt-file: .github/agent/screen.md
+          schema-file: .github/agent/screen.schema.json
+          model: sonnet
+          tools: ""
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Verdict
+        id: v
+        env:
+          RESULT: ${{ steps.m.outputs.result-file }}
+          OK: ${{ steps.m.outputs.ok }}
+          HITS: ${{ steps.h.outputs.hits }}
+        run: |
+          v=$(python3 -c 'import json,os; print(json.load(open(os.environ["RESULT"])).get("verdict","suspicious"))')
+          [ "$OK" = true ] || v=suspicious
+          [ -n "$(echo "$HITS" | tr -d '[:space:]')" ] && v=suspicious
+          echo "verdict=$v" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY' > "$RUNNER_TEMP/screen.md"
+          import json, os
+          r = json.load(open(os.environ["RESULT"])) if os.path.getsize(os.environ["RESULT"]) else {}
+          print("**Screen:** " + r.get("verdict", "no model verdict") + " — " + r.get("summary", ""))
+          for x in r.get("reasons", []): print(f"- {x}")
+          h = os.environ.get("HITS", "").strip()
+          if h: print("\n**Heuristic hits:**\n```text\n" + h + "\n```")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screen
+          path: ${{ runner.temp }}/screen.md
+          retention-days: 3
+
+  approve:
+    needs: [route, screen]
+    if: always() && needs.screen.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: screen
+          path: ${{ runner.temp }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.issue.number }}
+          DO: ${{ needs.route.outputs.do }}
+          VERDICT: ${{ needs.screen.outputs.verdict }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "$VERDICT" = clean ] || [ "$DO" = override ]; then
+            bash scripts/agent/issue.sh approve "$N" "$OWNER"
+            gh workflow run agent-pipeline.yml -f issue="$N"
+          else
+            gh issue edit "$N" --add-label security:flagged >/dev/null
+            gh issue comment "$N" --body "@$OWNER the injection screen flagged this issue, so no agent will read it.
+          $(cat "$RUNNER_TEMP/screen.md")
+
+          If the text is fine, comment \`/agent override\`; otherwise edit the issue and approve again." >/dev/null
+          fi
+
+  dispatch:
+    needs: route
+    if: contains(fromJSON('["resume","approve-diff","stop","next","uat-check"]'), needs.route.outputs.do)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          DO: ${{ needs.route.outputs.do }}
+          N: ${{ github.event.issue.number }}
+          IS_PR: ${{ github.event.issue.pull_request != null }}
+        run: |
+          issue=$N
+          if [ "$IS_PR" = true ]; then
+            head=$(gh pr view "$N" --json headRefName --jq .headRefName)
+            [[ "$head" =~ ^agent/issue-([0-9]+)- ]] || { echo "PR #$N is not an agent PR"; exit 0; }
+            issue=${BASH_REMATCH[1]}
+          fi
+          case "$DO" in
+            resume) gh issue edit "$issue" --remove-label agent:blocked --remove-label agent:needs-owner >/dev/null 2>&1 || true
+                    gh workflow run agent-pipeline.yml -f issue="$issue" ;;
+            approve-diff)
+              sha=$(gh pr view "$N" --json headRefOid --jq .headRefOid)
+              gh pr comment "$N" --body "Owner approved the protected-path diff at \`$sha\`; hardware test and merge may proceed for exactly this commit.
+          <!-- agent-diff-approval sha=$sha -->" >/dev/null
+              gh workflow run agent-pipeline.yml -f issue="$issue" ;;
+            stop) gh issue edit "$issue" --add-label agent:blocked >/dev/null; gh issue comment "$issue" --body "Stopped by the owner. \`/agent retry\` resumes." >/dev/null ;;
+            next) gh workflow run agent-pipeline.yml ;;
+            uat-check) gh workflow run agent-uat.yml -f issue="$issue" ;;
+          esac

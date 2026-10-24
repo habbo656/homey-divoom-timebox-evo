@@ -10,8 +10,7 @@
       "Bash(homey api devices delete-*)", "Bash(homey api flow delete-*)", "Bash(homey api raw*)",
       "Bash(gh repo *)", "Bash(gh secret *)", "Bash(gh workflow *)", "Bash(gh release *)", "Bash(gh api *)",
       "Bash(sudo *)", "Bash(rm -rf /*)", "Bash(rm -rf ~*)", "Bash(curl *)", "Bash(wget *)", "Bash(ssh *)",
-      "Bash(npm publish*)", "Bash(blueutil --unpair*)",
-      "Edit(.github/workflows/**)", "Write(.github/workflows/**)"
+      "Bash(npm publish*)", "Bash(blueutil --unpair*)"
     ]
   }
 }

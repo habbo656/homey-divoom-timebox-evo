@@ -42,8 +42,9 @@ weather via Open-Meteo (no API key); locales en + de; public App Store release; 
 The GitHub milestones still carry their old names (`v0.3.0 Display & channels`, `v0.4.0 Text, notifications &
 weather`, `v0.5.0 Images & animations`); the owner renames them. `v0.6.0 Tools & audio` is no longer used.
 
-Execution is sequential in the listed order. `/autopilot` takes the next open issue from this table and runs
-`/implement` (plan → develop → docs → review → hardware test → merge, see `docs/pipeline.md`). Merged issues are
+Execution is sequential in the listed order. The `agent-pipeline` workflow takes the first open issue from this table
+that the owner approved (`agent:approved`) and runs it end to end (plan → develop → docs → gate + review → hardware
+test → merge, see `docs/pipeline.md`). Merged issues are
 marked ✅ in the table by the doc-keeper. Each milestone ends with an owner acceptance test (`docs/uat/README.md`);
 the next milestone starts only after acceptance, and the owner releases a milestone once it is accepted.
 
@@ -105,7 +106,7 @@ covers the rest.
 - A real app restart cannot be driven by `scripts/homey-run.sh` (stop/start reuses the build); it is an owner case (M4, M6 in `docs/testing/stability.md`) in the v1.0.0 UAT.
 
 ## Risks
-- Homey BLE long-run link stability: measured in #36 (2026-10-16, Homey Pro, `docs/testing/stability.md`): 110 min active and
+- Homey BLE long-run link stability: measured in #36 (2026-10-16, `docs/testing/stability.md`): 110 min active and
   110 min idle without a disconnect, 1.00 `poll ok` per minute, induced drops reconnect in 3 to 6 s, a muted link in 64 s, no
   `Unhandled` or memory warning. The Homey BLE MTU is still not measured (20-byte writes work; mitigations: `46` polling and
   reconnect with backoff in `ConnectionManager`, #21). A physical power cycle of the Evo

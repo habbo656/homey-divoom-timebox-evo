@@ -26,7 +26,7 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) sections 1 and 2 and 1
   `46` query every 30 s. Result: 60/60 replies, 0 disconnects, no keep-alive or re-init needed (the Classic A2DP link to
   the Mac was connected at the same time). No `f7` heartbeats arrived on this plain connection. They seem to appear only
   after the iOS init sequence, so do not use them as a liveness signal; poll `46` instead.
-- **Long-running link on the Homey (#36, 2026-10-16):** the app on a Homey Pro polled `46` every 60 s for 110 min while
+- **Long-running link on the Homey (#36, 2026-10-16):** the app on the test Homey polled `46` every 60 s for 110 min while
   driven (30 actions) and for 110 min idle: no disconnect, 1.00 `poll ok` per minute. A simulated drop reconnected in 3 to
   6 s, a muted link was declared dead after two missed polls and reconnected 64 s after the first missed one. Details:
   `docs/testing/stability.md`.
@@ -49,7 +49,7 @@ which is why it believes SetUTC is the "keystone". Sending SetUTC but keeping `S
 
 ## 1.3 Bluetooth Classic RFCOMM: evidence
 
-- Classic name `TimeBox-Evo-audio` (owner's unit: MAC `xx-xx-xx-xx-xx-xx`). SDP "Serial Port" on **RFCOMM channel 1**,
+- Classic name `TimeBox-Evo-audio` (the unit's MAC address: `blueutil --paired`). SDP "Serial Port" on **RFCOMM channel 1**,
   MTU 666. Plain SPP frames work right after the channel opens, with no escaping.
 - Gotcha: the macOS tty `/dev/cu.TimeBox-Evo-audio` worked once and then stayed silent. A direct RFCOMM channel works.
 - Gotcha: connecting Classic makes macOS switch its default audio input **and** output to the Evo (A2DP/HFP).

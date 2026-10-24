@@ -1,6 +1,6 @@
 # Release checklist (App Store)
 
-_Added with #37. Part of the release process in [versioning.md](versioning.md); the agent items run in `/implement`, the owner items
+_Added with #37. Part of the release process in [versioning.md](versioning.md); the agent items run in the agent pipeline, the owner items
 after the milestone UAT ([uat/README.md](uat/README.md))._
 
 Who: **agent** = checked by the pipeline (a test or command), **owner** = done or confirmed by the owner. Tick an item (`[x]`) only

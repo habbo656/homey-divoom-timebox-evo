@@ -49,9 +49,104 @@ A [Homey](https://homey.app) app that integrates the **Divoom TimeBox Evo** pixe
 > light the panel: the app holds the value and sends it when the panel is switched on again (#62).
 > Current version: 1.1.0 (milestone Bugfix after Release 1.0, accepted 2026-10-18). Changelog: `.homeychangelog.json`.
 
-This repository is developed by **autonomous local Claude Code agents** (plan → implement → docs → review →
-hardware test on the real Homey with a webcam → merge), started with `/autopilot` or `/implement <issue>`.
-GitHub only manages the work (issues, PRs); the knowledge lives in this repo. The owner is asked via ntfy when needed.
+## How this app is built (agent pipeline)
+
+This app is written by AI agents (Claude Code) that run in GitHub Actions. The owner decides **what** gets built and
+**whether** the result is good; the agents do the work in between: plan, code, documentation, review and a test on a
+real Homey with a real TimeBox, watched by a webcam. All communication happens here on GitHub, in issues and pull requests.
+
+**In plain words:**
+
+1. **An issue describes a feature or a bug.** Anyone can open one, but agents ignore it until the owner approves it with
+   the label `agent:approved`.
+2. **Safety check first.** Before any agent with tools reads the issue, a separate check without tools looks for text
+   that tries to trick an AI ("prompt injection"): hidden instructions, requests for secrets, links to send data to.
+   Anything suspicious stops here until the owner looks at it. Comments by people other than the owner are never shown
+   to an agent, and an edit of an approved issue cancels the approval.
+3. **Plan.** A planner agent writes a plan and posts it on the issue. If it needs a decision, it asks the owner there
+   and waits for the answer.
+4. **Build.** A developer agent writes the code and tests, a doc-keeper updates the documentation, and the quality gate
+   (lint, build, tests, Homey validation) must pass. These agents cannot write to GitHub at all; a separate, simple
+   workflow step publishes their branch and opens a pull request.
+5. **Review.** A second, independent agent reviews the change, including signs of manipulation (unrelated code, network
+   calls, new dependencies).
+6. **Hardware test.** On the owner's Mac (a self-hosted runner next to the Homey) a check confirms Bluetooth, the
+   camera, the Homey and the TimeBox; then a tester agent installs the build on the Homey, drives it and judges the
+   webcam photos. If the TimeBox has to be paired, the owner gets a comment and the test waits. The Mac only runs jobs
+   that the pipeline itself started from `main`.
+7. **Merge or fix.** All green → the pull request is merged and the next approved issue starts. Otherwise the findings
+   go back to the developer (up to three rounds), then the owner is asked.
+8. **Owner acceptance.** When every issue of a milestone is done, the agents write test instructions, pre-test what
+   they can, and the owner tests the app by hand. `ACCEPTED` → version bump and tag; `REJECTED` → each failing case
+   becomes a bug that goes through the same pipeline. Publishing to the Homey App Store stays with the owner.
+
+```mermaid
+flowchart LR
+  subgraph OWNER["👤 Owner (GitHub issues and PRs)"]
+    direction TB
+    O1["Write or confirm an issue"]
+    O2["Approve: label agent:approved"]
+    O3["Answer a question:<br/>/agent answer …"]
+    O4["Pair the TimeBox<br/>when asked"]
+    O5["Check a protected diff:<br/>/agent approve-diff"]
+    O6["Test the milestone by hand<br/>(UAT checklist)"]
+    O7{"Verdict"}
+    O8["Publish to the App Store"]
+  end
+  subgraph GUARD["🛡️ Pipeline control (plain scripts, no AI)"]
+    direction TB
+    G1{"Sent by<br/>the owner?"}
+    G2{"Injection screen:<br/>AI without tools<br/>+ pattern check"}
+    G3["Record approval<br/>(content fingerprint)"]
+    G4["Pick next approved issue<br/>(roadmap order)"]
+    G5["Push branch, post plan,<br/>open pull request"]
+    G6{"Gate green, review OK,<br/>no protected files?"}
+    G7{"Hardware test<br/>passed?"}
+    G8["Merge"]
+    G9["Open UAT issue,<br/>post checklist"]
+    G10["Version bump + tag"]
+    G11["File bugs for failed cases"]
+  end
+  subgraph AGENTS["🤖 Agents on GitHub-hosted runners (read-only)"]
+    direction TB
+    A1["Planner: plan"]
+    A2["Developer: code + tests"]
+    A3["Doc-keeper: docs"]
+    A4["Quality gate"]
+    A5["Independent reviewer"]
+    A6["Write UAT instructions"]
+  end
+  subgraph MAC["🖥️ Owner's Mac: hardware runner"]
+    direction TB
+    M1["Runner check: Bluetooth,<br/>camera, Homey, TimeBox"]
+    M2["Install build on the Homey"]
+    M3["Tester: drive the app,<br/>judge webcam photos"]
+  end
+
+  O1 --> O2 --> G1
+  G1 -- no --> X1(["ignored / approval removed"])
+  G1 -- yes --> G2
+  G2 -- suspicious --> O2
+  G2 -- clean --> G3 --> G4 --> A1
+  A1 -- question --> O3 --> A1
+  A1 --> A2 --> A3 --> A4 --> G5
+  G5 --> A5 --> G6
+  G6 -- protected files --> O5 --> M1
+  G6 -- findings --> A2
+  G6 -- yes --> M1 --> M2
+  M2 -- not paired --> O4 --> M3
+  M2 --> M3 --> G7
+  G7 -- no --> A2
+  G7 -- yes --> G8 --> G4
+  G4 -- milestone done --> A6 --> M3
+  G8 -. UAT docs merged .-> G9 --> O6 --> O7
+  O7 -- ACCEPTED --> G10 --> O8
+  O7 -- REJECTED --> G11 --> G4
+```
+
+Details, rules and the full security model: [`docs/pipeline.md`](docs/pipeline.md) (decision record:
+[ADR 0011](docs/decisions/0011-actions-pipeline-public-repo.md)). The documentation in this repository is the complete
+knowledge base; GitHub only manages the work.
 
 - Start here for agents and humans: [`CLAUDE.md`](CLAUDE.md)
 - Documentation / knowledge base: [`docs/`](docs/README.md)

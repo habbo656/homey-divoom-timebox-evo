@@ -1,6 +1,6 @@
 # ADR 0006: Autonomous local pipeline with hardware-in-the-loop tests
 
-**Status:** accepted, amended by 0007 · **Date:** 2026-10-06 · **Amends:** 0003 (owner gates)
+**Status:** accepted, amended by 0007 and 0011 (agents run in GitHub Actions; owner channel is GitHub issues, not ntfy) · **Date:** 2026-10-06 · **Amends:** 0003 (owner gates)
 
 **Context:** The owner wants the pipeline to run unattended: plan, implement, review, test on the real Homey and Timebox,
 and merge, reaching the owner only when help is needed. GitHub should only manage the work; all execution is local,
