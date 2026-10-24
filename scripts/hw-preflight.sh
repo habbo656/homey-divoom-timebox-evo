@@ -2,7 +2,7 @@
 # Check that the hardware test bench is ready. Prints one line per check; exit 0 = ready, 1 = not ready.
 # Fixes the one known local blocker itself: the Mac holding a Bluetooth Classic link to the Evo (the Evo then ignores BLE).
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 ok=1
 say() { echo "PREFLIGHT $1: $2"; [ "$1" = FAIL ] && ok=0; }
 
@@ -17,23 +17,23 @@ case "$run" in
      else say OK "hardware lock free"; fi ;;
 esac
 
-if command -v imagesnap >/dev/null && imagesnap -l 2>/dev/null | grep -q "=>"; then say OK "camera: $(imagesnap -l 2>/dev/null | grep '=>' | head -1 | sed 's/=> //')"
+if command -v imagesnap >/dev/null && imagesnap -l 2>/dev/null | grep -q "=>"; then say OK "camera present"
 else say FAIL "no webcam (brew install imagesnap; camera permission for the terminal)"; fi
 
 if command -v blueutil >/dev/null; then
   mac=$(blueutil --paired 2>/dev/null | grep -i timebox | sed -E 's/^address: ([0-9a-f-]+).*/\1/' | head -1)
   if [ -n "$mac" ] && [ "$(blueutil --is-connected "$mac")" = 1 ]; then
     blueutil --disconnect "$mac" && sleep 2
-    [ "$(blueutil --is-connected "$mac")" = 1 ] && say FAIL "Mac holds a Classic link to the Evo ($mac) and could not drop it" \
-      || say OK "dropped the Mac's Classic link to the Evo ($mac) so it accepts BLE again"
+    [ "$(blueutil --is-connected "$mac")" = 1 ] && say FAIL "Mac holds a Classic link to the Evo and could not drop it" \
+      || say OK "dropped the Mac's Classic link to the Evo so it accepts BLE again"
   else say OK "Mac has no Classic link to the Evo"; fi
 fi
 
 mode=$(scripts/homey-api.sh --mode)
-case "$mode" in token*) say OK "homey api mode: $mode" ;; *) say INFO "homey api mode: cloud (rate limited; owner: API key, see docs/pipeline.md)" ;; esac
-dev=$(scripts/homey-api.sh devices get-devices --jq '[.[]|select(.driverId|test("timebox";"i"))|{id,name,available}]' 2>/dev/null || echo "[]")
+case "$mode" in token*) say OK "homey api mode: token (LAN)" ;; *) say INFO "homey api mode: cloud (rate limited; owner: API key, see docs/pipeline.md)" ;; esac
+dev=$(scripts/homey-api.sh devices get-devices --jq '[.[]|select(.driverId|test("timebox";"i"))|{available}]' 2>/dev/null || echo "[]")
 if [ "$dev" = "[]" ] || [ -z "$dev" ]; then say INFO "no Timebox device paired on the Homey (needed for device tests; owner pairs it in the Homey app)"
-else say OK "Timebox device(s): $dev"; fi
+else say OK "Timebox device(s): $(grep -o '"available"' <<<"$dev" | grep -c .) paired, $(grep -o '"available": *true' <<<"$dev" | grep -c .) available (ids: scripts/homey-api.sh devices get-devices)"; fi
 
 [ $ok = 1 ] && echo "PREFLIGHT: ready" || echo "PREFLIGHT: NOT ready"
 [ $ok = 1 ]

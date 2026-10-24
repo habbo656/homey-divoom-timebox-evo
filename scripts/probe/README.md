@@ -45,7 +45,7 @@ Pair the Evo in the macOS Bluetooth settings first. `blueutil --paired` shows it
 `01 … 02`.
 
 ```sh
-export TIMEBOX_MAC=xx-xx-xx-xx-xx-xx
+export TIMEBOX_MAC=xx-xx-xx-xx-xx-xx   # from blueutil --paired
 ../../.venv/bin/python rfcomm.py --sdp q
 ../../.venv/bin/python rfcomm.py q b60 img snap:img.jpg clock
 ```

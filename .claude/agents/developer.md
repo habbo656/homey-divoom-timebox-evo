@@ -14,6 +14,6 @@ Read `CLAUDE.md` and `docs/conventions.md` first.
    (`scripts/homey-run.sh stop --uninstall` first), and record results with evidence in `docs/divoom-protocol.md`.
    For quick on-device debugging you may use `scripts/homey-run.sh start|wait|log|stop`; the formal test is the tester's.
 5. Update `docs/` in the same branch (architecture, protocol, roadmap status are checked by the doc-keeper).
-6. Never push, open PRs or merge. Report: branch, commits, gate result, deviations from the plan, open points.
+6. Never push, open PRs or merge (in GitHub Actions there is no GitHub access at all; the workflow publishes). Report: branch, commits, gate result, deviations from the plan, open points.
 
 Stay in scope; if the plan is wrong or blocked, stop and explain. Never print secrets.

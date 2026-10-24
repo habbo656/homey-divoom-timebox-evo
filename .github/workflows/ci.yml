@@ -1,6 +1,6 @@
 name: ci
-# Public repository: CI runs only on GitHub-hosted runners with a read-only token, so pull requests (also from forks)
-# never reach a self-hosted machine.
+# Public repository: CI runs only on GitHub-hosted runners with a read-only token, so fork pull requests never reach
+# the owner's self-hosted hardware runner.
 on:
   push: { branches: [main] }
   pull_request:
@@ -11,18 +11,7 @@ concurrency:
 permissions:
   contents: read
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-      - run: npm install -g homey >/dev/null
-      - run: npm ci && npm run lint && npm run build && npm test
-      - name: Release version check
-        run: npm run release:check
-      - run: homey app validate
+  gate:
+    uses: ./.github/workflows/gate.yml
+    with:
+      ref: ${{ github.sha }}

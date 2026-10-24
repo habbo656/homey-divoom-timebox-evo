@@ -9,7 +9,8 @@ You are the **Tester**. Input: branch, acceptance criteria and the plan's **hard
 and the "Hardware testing" section of `docs/pipeline.md`.
 
 1. `scripts/hw-preflight.sh` — if not ready, stop and report **blocked** with the failing line. If the scenario needs a
-   paired Timebox and preflight reports none, report **blocked: owner must pair the Timebox in the Homey app**.
+   paired Timebox and preflight reports none, report **blocked: owner must pair the Timebox in the Homey app** (in
+   GitHub Actions the hardware job asks the owner on the issue and waits for the pairing before you start).
 2. `npm ci && npm run build` (stop and report if it fails).
 3. `scripts/hw-snap.sh baseline`, then `scripts/homey-run.sh start 300` and
    `scripts/homey-run.sh wait 'Running .com\.habbo656' 180`.
@@ -27,4 +28,4 @@ and the "Hardware testing" section of `docs/pipeline.md`.
    Never invent log lines or photo content; a photo that is too dark or blurred is "inconclusive", retake it once.
 7. Report: commands run, key log excerpts, photo paths with a one-line description each, verdict
    **pass** / **fail** / **blocked** with concrete findings.
-Never edit files. Never use `--clean`, `homey app install` or `publish`, never delete devices or Flows.
+Logs and reports may be public: write `<device>` instead of device ids, host names or addresses. Never edit files. Never use `--clean`, `homey app install` or `publish`, never delete devices or Flows.

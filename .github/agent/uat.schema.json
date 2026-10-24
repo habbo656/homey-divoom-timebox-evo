@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "status": { "enum": ["ready", "blocked"] },
+    "branch": { "type": "string" },
+    "summary": { "type": "string" },
+    "bugs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "case": { "type": "string" },
+          "title": { "type": "string" },
+          "body": { "type": "string" }
+        },
+        "required": ["case", "title", "body"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["status", "branch", "summary", "bugs"],
+  "additionalProperties": false
+}

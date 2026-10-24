@@ -1,97 +1,189 @@
-# Agentic workflow (local, autonomous)
+# Agentic workflow (GitHub Actions, autonomous)
 
-Development runs as local Claude Code subagents (`.claude/agents/`) orchestrated by slash commands
-(`.claude/commands/`). Everything executes on the owner's Mac against the owner's Homey and Timebox Evo. **GitHub only
-manages the work** (issues, PRs, review/test comments, merge); it is never the place where knowledge lives — the repo
-docs must be complete on their own (ADR 0006).
+Development runs as Claude Code agents (`.claude/agents/`) inside GitHub Actions (ADR 0011). Everything that needs no
+hardware runs on GitHub-hosted runners; only the hardware test runs on the owner's Mac as a self-hosted runner, which
+reaches the Homey on the LAN, the TimeBox over the Homey and the webcam. The owner talks to the pipeline **only through
+GitHub issues and PRs** (labels and comments; GitHub notifies the owner of every `@mention`). The repo docs stay the
+complete knowledge base (ADR 0006): GitHub records the work, it does not hold knowledge. A human-readable overview with a
+diagram is in the [README](../README.md#how-this-app-is-built-agent-pipeline).
 
 ```
-issue ─► PLAN (planner) ─► plan as issue comment ─► DEVELOP (developer, own branch) ─► DOCS (doc-keeper)
-                                                                                          ▼
-     merge ◄── PR + evidence ◄── local gate ◄── HARDWARE TEST (tester, Homey + webcam) ◄── REVIEW (fresh reviewer)
-                                                  └──────── findings ──► developer (2 rounds + 1 Opus escalation)
-owner is asked via ntfy only when blocked (open product question, pairing, repeated failure)
-
-last issue of a milestone merged ─► UAT prepare (doc-keeper writes docs/uat/v<x>.md, tester pre-checks [auto] cases)
-   ─► UAT issue + ntfy ─► OWNER tests by hand ─► ACCEPTED: next milestone · REJECTED: uat-finding bugs ─► fix ─► new round
+owner: label agent:approved ─► INTAKE: router (owner only) ─► injection screen (no tools) + heuristics ─► approval record
+                                                                                │ flagged → owner: /agent override
+PIPELINE  pick (roadmap order) ─► guard (approval + hash) ─► DEVELOP: planner → developer → doc-keeper → gate (ubuntu)
+   ─► publish (push branch, plan comment, draft PR) ─► gate (ubuntu) ∥ REVIEW: fresh reviewer (ubuntu)
+   ─► protected paths? → owner: /agent approve-diff ─► HARDWARE TEST: runner check → build → dev run → pairing → tester (Mac)
+   ─► finish: merge + next issue │ findings → next round (2 + 1 Opus escalation) → agent:blocked → owner
+milestone done ─► UAT issue ─► doc-keeper writes docs/uat/v<x>.md ─► [auto] pre-check on the Mac ─► owner tests
+   ─► ACCEPTED: docs + version bump + tag v<x> ─► next milestone │ REJECTED: uat-finding bugs ─► pipeline ─► new round
 ```
 
-## Usage
-- `/autopilot [n]` — work through the roadmap: next open issue in `docs/roadmap.md` order, full `/implement`, merge,
-  repeat up to `n` issues (default 1). Headless: `scripts/autopilot.sh [n]` (orchestrator on Sonnet, log in
-  `.hwtest/`, ntfy message if the run ends abnormally, e.g. at the plan usage limit).
-- `/uat <version> [prepare|check]` — owner acceptance test of a milestone (`docs/uat/README.md`): write test
-  instructions and open the UAT issue, or read the owner's verdict. `/autopilot` runs it automatically and does not
-  start a later milestone before the earlier one is accepted.
-- Interrupted runs resume: `/implement` continues an existing `agent/issue-<n>-*` branch / PR at the first missing stage.
-- `/implement <issue#>` — whole pipeline for one issue, including PR and merge.
-- `/review [PR#]` — independent review of the current branch or a PR.
-- `/hwtest [scenario]` — hardware test of the current branch.
-- `/docs` — audit docs against the code (doc-keeper).
-- Requirements: the `brainstormer` agent (interactive) creates issues after the owner confirms them.
-- One issue at a time, in this checkout, on a plain branch `agent/issue-<n>-<slug>` (no worktrees).
+## Owner commands
+Only the repository owner can start or steer anything; labels or comments by anyone else are ignored, and an
+`agent:approved` label set by someone else is removed.
+
+| Where | Command | Effect |
+|---|---|---|
+| issue | label `agent:approved` or comment `/agent approve` | screen the issue, record the approval, start the pipeline (one issue at a time, roadmap order) |
+| issue | `/agent override` | approve although the screen flagged it (`security:flagged`) |
+| issue | `/agent answer <text>` | answer the planner's questions (`agent:needs-owner`) and resume |
+| issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, pairing timeout, 3 red rounds) |
+| issue | `/agent stop` | label `agent:blocked`; nothing runs until `/agent retry` |
+| PR | `/agent approve-diff` | allow hardware test and merge of exactly the current head of a PR that touches protected paths |
+| any issue | `/agent next` | start the next approved roadmap issue |
+| UAT issue | `ACCEPTED …` / `REJECTED UAT-3, UAT-7 …` | the milestone verdict (first word of the comment) |
+
+What the owner still does by hand: write or confirm issues (the `brainstormer` agent helps locally), approve them, answer
+questions, pair the TimeBox when a hardware test asks for it (comment on the issue, the job waits 30 min), review
+protected diffs, the UAT per milestone, and publishing to the Homey App Store.
+
+## Workflows
+
+| Workflow | Trigger | Runner | Does |
+|---|---|---|---|
+| `agent-intake.yml` | issue labelled/edited, comment created | ubuntu | `scripts/agent/route.sh` decides; screen + approval, revoke, or dispatch |
+| `agent-pipeline.yml` | dispatch (`issue`, `round`, `from`), every 3 h | ubuntu + Mac | one issue end to end (below); the schedule resumes after usage limits and picks up approved issues |
+| `agent-uat.yml` | dispatch by intake on an owner verdict | ubuntu | ACCEPTED: acceptance docs, `release:bump`, merge, tag; REJECTED: bug issues |
+| `gate.yml` | reusable | ubuntu | `scripts/gate.sh` on a commit; the merge gate |
+| `ci.yml` | push to `main`, pull requests | ubuntu | `gate.yml`; GitHub-hosted only, so fork PRs never reach the Mac |
+| `runner-check.yml` | manual, daily, reusable | Mac | `scripts/runner-check.sh` via `.github/actions/runner-check` |
+
+Pipeline jobs (`agent-pipeline.yml`):
+1. **pick** — `scripts/agent/next.sh`: first open issue of the first not-accepted milestone in `docs/roadmap.md`
+   (approved `uat-finding` bugs first); waits while an issue is blocked or questioned; opens the UAT issue when every issue
+   of the milestone is closed. Detects an existing `agent/issue-<n>-*` branch; a PR head that already has an approving
+   review and no findings resumes at the hardware test (`stage: verify`).
+2. **guard** — `scripts/agent/issue.sh verify`: open, `agent:approved` set by the owner (or by the bot for issues it
+   filed from an owner verdict), title + body unchanged since the approval (sha256 in the approval record), not
+   `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
+3. **develop** (ubuntu, read-only token) — `.github/agent/develop.md`: planner → developer (round 3: Opus) → doc-keeper →
+   `scripts/gate.sh`; returns JSON (`develop.schema.json`) and the branch as a git bundle. Questions end the run with
+   `agent:needs-owner`.
+4. **publish** (deterministic) — validates the branch name, pushes fast-forward only, posts the plan once
+   (`<!-- agent-plan hw=… -->`), opens a draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`).
+5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; `.github/agent/review.md`, fresh `reviewer`) in parallel.
+6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
+   (or `/agent approve-diff` for that head).
+7. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
+   Homey CLI, Homey API, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start`, then
+   `scripts/agent/await-device.sh` (asks the owner to pair if no TimeBox is available, polls 30 min), then the tester
+   (`.github/agent/hwtest.md`), finally `homey-run.sh stop` (`--uninstall` before a UAT).
+8. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
+   issue. Otherwise a findings comment (`<!-- agent-findings round=… sha=… -->`) and the next round; after round 3
+   `agent:blocked` and an `@owner` comment.
+
+Rounds: the fix budget is 2 rounds plus one Opus escalation round (round 3), counted per dispatch. Pipeline and UAT
+runs share the concurrency group `agent-pipeline` (one at a time); GitHub keeps only one pending run per group, so a
+dispatch can be replaced by a newer one — the 3-hourly schedule re-picks the work from the roadmap and the markers.
+
+State lives in GitHub, written only by deterministic steps: labels (`agent:approved`, `agent:needs-owner`,
+`agent:blocked`, `security:flagged`, `status:in-progress`, `owner:review`, `uat`, `uat-finding`) and hidden markers in
+bot comments (`agent-approval`, `agent-plan`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
+`agent-diff-approval`, `agent-pairing`, `agent-uat-ready`, `agent-uat-rejected`).
+
+## Security model (public repository)
+The repository is public: anyone can open issues, comment and send fork PRs, and every Actions log and artifact is
+public. Layers, from the outside in:
+1. **Owner-only triggers.** `route.sh` acts only on events whose sender is the owner. The pipeline reads an issue only
+   after the owner approved it; the guard re-checks the label event's actor and the content hash on every run, and an
+   edit by anyone else revokes the approval. Comments by other users never reach a model (`issue.sh context`).
+2. **Injection screen.** On approval the title, body and owner comments go through `.github/agent/screen.md` — a model
+   with **no tools** and a fixed JSON verdict — plus a regex heuristic (instructions to AIs, secrets, exfiltration URLs,
+   `curl`/`eval`/base64, workflow paths, zero-width/bidi characters). Either flag → `security:flagged`, nothing runs
+   until the owner overrides. The screen is defence in depth, not a guarantee: the layers below assume it can fail.
+3. **Models cannot write to GitHub.** Model jobs get `contents: read` (and `issues: read`), checkouts without persisted
+   credentials, `GH_TOKEN` unset, and `.github/agent/ci-settings.json` (no `gh`, `git push`, `curl`, `env`, web tools,
+   `npm install`, edits of `.github/`, `.claude/`, `CLAUDE.md`). Their output is JSON and a git bundle; deterministic jobs
+   validate and publish it.
+4. **Independent review** by a fresh reviewer that treats injection symptoms (unrelated code, network calls, env access,
+   new dependencies, edits to tooling) as blockers; deterministic merge rules on top.
+5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute,
+   `scripts/probe/`, `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.homeyignore`, lint/TS config): such a PR
+   is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. `GITHUB_TOKEN` cannot
+   push `.github/workflows/**` at all.
+6. **Self-hosted runner guard.** `scripts/runner/job-started.sh`, installed outside the checkout as the runner's
+   `ACTIONS_RUNNER_HOOK_JOB_STARTED`, refuses every job whose workflow is not from `main`, whose event is not
+   `workflow_dispatch`/`schedule`/push to `main`, or whose triggering actor is not the owner or the bot — so a fork PR or a
+   branch that edits a workflow to `runs-on: self-hosted` cannot execute on the Mac. CI never uses the self-hosted runner.
+7. **Secrets.** `CLAUDE_CODE_OAUTH_TOKEN` lives in the environments `agents` and `hardware` (deployment branch: `main`
+   only). The Homey key never goes to GitHub: it stays on the Mac in `~/.config/divoom-timebox/homey-api.env`
+   (`chmod 600`), read by `scripts/homey-api.sh`. Webcam photos stay in `.hwtest/` on the Mac and are never uploaded;
+   reports and the runner check leave out host names and device ids.
+8. **Owner verification.** Features and bugs are verified twice by the owner: before work (approval) and per milestone
+   (UAT). Releases are tagged after `ACCEPTED`; publishing stays with the owner.
+
+## Owner setup (once)
+1. Repository settings → Actions → General: "Require approval for all external contributors" (fork PR runs), workflow
+   permissions "Read repository contents" (jobs request more explicitly), allow GitHub Actions to create and approve pull
+   requests (the pipeline opens and merges PRs).
+2. Environments `agents` and `hardware`: deployment branches `main` only; secret `CLAUDE_CODE_OAUTH_TOKEN` (from
+   `claude setup-token`, billed to the Claude plan) in both.
+3. Branch protection / ruleset on `main`: pull request required, no force pushes, no deletions. Do not require status
+   checks from `ci.yml`: PRs opened with `GITHUB_TOKEN` do not trigger other workflows, so the pipeline runs `gate.yml`
+   itself.
+4. Labels: `agent:approved`, `agent:needs-owner`, `security:flagged`, `owner:review` (plus the existing ones).
+5. Runner (Mac, interactive session so that Bluetooth and camera permissions apply): register it with a neutral name and a
+   work folder outside the home directory (`./config.sh --name hw-runner --work /opt/hw-runner/_work …`, or
+   `./config.sh remove` and register again), `scripts/runner/install-hook.sh <runner dir>`, restart the runner, Homey key
+   in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
 
 ## Roles and models
-The pipeline runs on the owner's **Claude Pro** plan: one usage pool shared with the Claude apps, a 5-hour window
-plus a weekly cap; Opus drains it about twice as fast as Sonnet; Fable is billed to extra usage credits on Pro and is
-therefore not used. Rule: Opus only where a small number of tokens decides quality (plan, review); the token-heavy
-roles (orchestrator, developer) run on Sonnet. Measure with `/usage` before/after a run; `scripts/autopilot.sh`
-also prints the API-equivalent cost.
+The agents run on the owner's **Claude Pro** plan via `CLAUDE_CODE_OAUTH_TOKEN`: one usage pool shared with the Claude
+apps (5-hour window plus a weekly cap; Opus drains it about twice as fast as Sonnet; Fable is billed to extra usage on
+Pro and is not used). A run that hits the limit says so on the issue and the schedule resumes it.
 
-| Agent | Model | Why | Tools | Output |
-|---|---|---|---|---|
-| orchestrator | sonnet (`autopilot.sh`; interactive: session model) | follows the checklist; context grows across issues | all | PR, merge, notifications |
-| `planner` | opus, high | plans are no longer owner-reviewed; errors here multiply | read-only + Bash | plan incl. hardware test scenario |
-| `developer` | sonnet, high | largest token consumer; review + hardware test catch defects | all (no push) | branch + commits |
-| `developer` escalation | opus (per call) | one extra round after 2 failed fix rounds | all (no push) | fixes |
-| `doc-keeper` | sonnet, medium | consistency check against code; edits docs only | read + edit docs | doc commits, verdict |
-| `reviewer` | opus, high | last code gate before an unattended merge | read-only + Bash | findings + verdict |
-| `tester` | sonnet, medium | follows a concrete scenario; reads logs and photos | read-only + Bash | pass / fail / blocked |
-| `brainstormer` | session model | interactive with the owner | all | issues, milestones |
-| `Explore` (built-in) | built-in | only for issues that span unknown code | read-only | conclusions |
+| Agent | Model | Runs in | Output |
+|---|---|---|---|
+| orchestrator (top-level sessions) | sonnet | develop, review, hwtest, uat jobs | JSON result |
+| injection screen | sonnet, no tools | intake | clean / suspicious |
+| `planner` | opus, high | develop | plan incl. hardware test scenario |
+| `developer` | sonnet, high (round 3: opus) | develop | commits |
+| `doc-keeper` | sonnet, medium | develop (branch / uat mode), uat (acceptance) | doc commits, verdict |
+| `reviewer` | opus, high | review | findings + verdict |
+| `tester` | sonnet, medium | hwtest (Mac) | pass / fail / blocked |
+| `brainstormer` | session model | local, with the owner | issues, milestones |
 
-## Gates (all local, all must pass before merge)
-1. Plan exists and is posted on the issue (no owner approval; blocking questions go to the owner via ntfy).
-2. `scripts/gate.sh` green: `npm ci`, lint, `format:check` (Prettier), build, tests, `homey app validate` — on the final branch head.
-3. Doc-keeper: **consistent** (architecture, protocol, roadmap status, index, learnings).
-4. Reviewer: **approve** (no blocker/major).
-5. Tester: **pass** for every plan with a hardware test scenario.
-6. Then: push branch, `gh pr create` (`Closes #n`, evidence), review + test report as PR comments,
-   `gh pr merge --squash --delete-branch`, update local `main`. CI on GitHub (`ci.yml`) is not waited for.
+## Local use
+The agents still work in a local Claude Code session: `/review [PR#]`, `/hwtest [scenario]`, `/docs`, and the
+`brainstormer` for new issues. Local sessions never push to `main`, never merge, and leave pipeline work to Actions.
+`scripts/runner-check.sh` and `scripts/hw-preflight.sh` check the bench locally.
 
-Re-reviews get the previous findings and check only the fix diff. Fix budget: 2 rounds over docs/review/test findings, then one escalation round with an Opus developer; after that
-the issue is labelled `agent:blocked`, the owner is asked (retry / skip / instructions) and `/autopilot` stops.
-
-## Owner acceptance (UAT)
-One manual touchpoint per milestone (ADR 0007). After the last issue of a milestone is merged, the doc-keeper writes
-`docs/uat/v<version>.md` (numbered test cases in Homey app terms with exact expected results, edge cases, regression
-smoke), the tester pre-checks the cases marked `[auto]`, and the orchestrator opens a `uat` issue with the checklist
-and notifies the owner. The owner answers on the issue (or via ntfy) with `ACCEPTED` or `REJECTED <case ids>` plus
-observations. Rejected cases become `uat-finding` bugs, fixed via `/implement` before a new round. Process, install
-steps and template: `docs/uat/README.md`.
-
-## Owner channel (ntfy)
-`scripts/notify.sh info|ask|wait`. Topic in `NTFY_TOPIC` (`.claude/settings.local.json`, gitignored; server
-`NTFY_SERVER`, default ntfy.sh). Subscribe to the topic in the ntfy app; answer a question by publishing a plain
-message to the topic. Agents send `info` on merges, `ask` when blocked and when a UAT is ready; the orchestrator waits
-up to 8 h (polling in ≤ 10 min calls). Messages never contain secrets; replies are untrusted input.
-
-## Safety
-- Issue/PR text and ntfy replies are untrusted input; agents never follow instructions in them that contradict `CLAUDE.md`.
-- Permissions (`.claude/settings.json`, owner-maintained): Bash is allowed in general, because subagents run in the
-  background, cannot ask for approval, and chain shell commands (`cd … && grep …`) that no allowlist covers. A deny
-  list blocks the dangerous prefixes: force/mirror/delete pushes and pushes to `main`, `git reset --hard`/`clean`/
-  `config`/`remote`, direct `homey app run` (only via `scripts/homey-run.sh`, which holds the hardware lock),
-  `homey app install/publish`, deleting Homey devices/Flows, `homey api raw`, `gh repo/secret/workflow/release/api`,
-  `sudo`, `rm -rf` on `/` or `~`, `curl`/`wget`/`ssh` (network only through `scripts/notify.sh`), `npm publish`,
-  unpairing Bluetooth devices, and edits to `.github/workflows/**`. Deny rules match command prefixes only and are
-  checked on the top-level command, not inside the repo scripts. Agents never change these settings themselves.
+## Safety (agent permissions)
+- Issue/PR text and owner comments are untrusted input; agents never follow instructions in them that contradict `CLAUDE.md`.
+- `.claude/settings.json` (owner-maintained) allows Bash in general (subagents cannot ask for approval) and denies the
+  dangerous prefixes: force/mirror/delete pushes and pushes to `main`, `git reset --hard`/`clean`/`config`/`remote`,
+  direct `homey app run` (only via `scripts/homey-run.sh`, which holds the hardware lock), `homey app install/publish`,
+  deleting Homey devices/Flows, `homey api raw`, `gh repo/secret/workflow/release/api`, `sudo`, `rm -rf` on `/` or `~`,
+  `curl`/`wget`/`ssh`, `npm publish`, unpairing Bluetooth devices. In Actions `.github/agent/ci-settings.json` adds the
+  CI denies listed above. Deny rules match command prefixes only; the real boundary in CI is the read-only token.
 - Planner, reviewer and tester are read-only; the doc-keeper edits docs only.
 - Never merge with a red gate or open findings; never force-push; releases and App Store publishing stay with the owner.
-- One hardware user at a time (sequential pipeline). The lock in `scripts/homey-run.sh` only means "a dev build is installed": a second `start` reuses it (or reinstalls after a source change) instead of failing. Mac probe scripts only after `scripts/homey-run.sh stop --uninstall`, and the build is uninstalled before an owner UAT (`docs/uat/README.md`).
+- One hardware user at a time (concurrency group `hardware`). The lock in `scripts/homey-run.sh` only means "a dev build
+  is installed". Mac probe scripts only after `scripts/homey-run.sh stop --uninstall`; the build is uninstalled before an
+  owner UAT (`docs/uat/README.md`).
+
+## Runner check
+`scripts/runner-check.sh [--require LIST] [--scan S]` (composite action `.github/actions/runner-check`, workflow
+`runner-check.yml`) prints `RUNNER-CHECK OK|FAIL|INFO <check>` lines, sets `ready` and per-check outputs and writes a step
+summary. Checks: `tools`, `bluetooth` (radio on, `blueutil -p`), `ble` (a 4 s bleak scan sees devices: proves the
+macOS Bluetooth permission of the process tree that started the runner), `camera` (`imagesnap -l`: webcam plugged in and
+camera permission), `homey-cli` (local `homey select current`), `homey-api` (token mode on the LAN), `device` (a TimeBox
+is paired on the Homey and `available`, i.e. on and connected), `lock`. The Evo does not advertise while the Homey holds
+its link, so `ble` does not require it.
+Verified on the hardware runner (2026-10-24): every check OK except `camera` (webcam unplugged at the time). The runner
+must run interactively from a terminal (`run.sh`): only then do the Bluetooth and camera permissions of that terminal
+apply; as a launchd service (`svc.sh`) `ble`/`camera` fail. The repository volume stores no file modes, so scripts are
+called with `bash` or their mode is set with `git update-index --chmod=+x`.
+
+**No personal or bench data in public output.** Logs, artifacts and comments of a public repository are public. The
+runner check prints states and counts only (no user, host, runner, camera, device names or tool versions); self-hosted
+jobs start with the step "Prepare the hardware runner", which masks the user name, home directory, host name and runner name in all
+later log lines; reports use `<device>`; photos never leave the Mac. GitHub's own "Set up job" header (runner name,
+machine name, work folder) is printed before any step can mask it, so the runner is registered with a neutral name
+(`hw-runner`) and a work folder outside the home directory (owner setup, below).
 
 ## Hardware testing
-Bench: Homey Pro, the Timebox Evo paired on the Homey, a webcam webcam on the Mac pointed at the Evo display.
+Bench: a Homey, the Timebox Evo paired on it, and a webcam on the Mac pointed at the Evo display.
 
 | Script | Purpose |
 |---|---|
@@ -135,10 +227,12 @@ test of the device therefore pairs once per run (owner, Homey app) and keeps tha
 
 Flow of a test: preflight → build → baseline photo → `start` → `wait 'Running .com\.habbo656'` → scenario steps with a
 photo after each → `stop` → verdict from log + photos. The dev run uninstalls the dev build when stopped, and the devices paired during it
-go with it (see above). Pairing itself needs the owner (Homey app UI): the tester reports `blocked`
-and the orchestrator asks via ntfy.
+go with it (see above). Pairing itself needs the owner (Homey app UI): in Actions the hardware job asks on the issue and waits up to 30 min
+(`scripts/agent/await-device.sh`); in a local session the tester reports `blocked`.
+
 
 ## CI
-`.github/workflows/ci.yml` (GitHub-hosted runner) still runs on pushes/PRs as an extra signal, but merges do not depend on
-it: `scripts/gate.sh` runs the same checks locally. The Prettier `format:check` step exists only in the local gate; `ci.yml`
-does not run it (unchanged, #63).
+`.github/workflows/ci.yml` runs `gate.yml` (the full `scripts/gate.sh`, including the Prettier check) on GitHub-hosted
+runners for pushes to `main` and pull requests. It is the signal for human and fork PRs; agent PRs are gated inside
+`agent-pipeline.yml`, because PRs opened with `GITHUB_TOKEN` do not trigger other workflows. CI never runs on the
+self-hosted runner (public repository).

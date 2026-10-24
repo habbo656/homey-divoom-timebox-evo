@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": { "enum": ["clean", "suspicious"] },
+    "reasons": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" }
+  },
+  "required": ["verdict", "reasons", "summary"],
+  "additionalProperties": false
+}

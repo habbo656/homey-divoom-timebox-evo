@@ -60,7 +60,7 @@ Probe step for a later Mac measurement: `img8` in `scripts/probe/divoom.py` (gol
 
 ## Native 16x16 image (#129)
 
-Hardware test, 2026-10-17, Homey Pro, TimeBox Evo, dev build 8d614194a75b (branch sources). Images generated with
+Hardware test, 2026-10-17, test Homey, TimeBox Evo, dev build 8d614194a75b (branch sources). Images generated with
 pngjs/omggif, served over HTTP on the LAN and sent with the Flow action `timebox_show_image_url` (duration 0):
 `native16.png` (RGBA 16x16, 33 colours: 1-px red/blue checkerboard top-left with red at 0,0; white at even / black at odd
 columns top-right; grey ramp rows 8..11; green ramp rows 12..15, x*255/15), `native16.gif` (same pattern, 64-entry

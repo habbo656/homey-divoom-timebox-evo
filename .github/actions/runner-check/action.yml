@@ -1,0 +1,62 @@
+name: runner-check
+description: >
+  Verify that the self-hosted hardware runner can do hardware work: Bluetooth radio and BLE permission, webcam,
+  Homey CLI login, Homey API on the LAN, and a Timebox paired on the Homey that is available (on and connected).
+  Wraps scripts/runner-check.sh; use after actions/checkout.
+inputs:
+  require:
+    description: Comma-separated checks that must be OK (tools, bluetooth, ble, camera, homey-cli, homey-api, device, lock)
+    default: bluetooth,ble,homey-cli,homey-api,device
+  scan-seconds:
+    description: Length of the BLE scan
+    default: "4"
+  fail:
+    description: Fail the step when a required check is not OK ("false" only reports, read the `ready` output)
+    default: "true"
+  homey-token:
+    description: Homey API key (optional; default is the runner-host file ~/.config/divoom-timebox/homey-api.env)
+    default: ""
+  homey-address:
+    description: Homey LAN address, e.g. http://homey-<id>.local (optional, see homey-token)
+    default: ""
+outputs:
+  ready:
+    description: '"true" when every required check is OK'
+    value: ${{ steps.check.outputs.ready }}
+  ble:
+    description: ok | fail
+    value: ${{ steps.check.outputs.ble }}
+  camera:
+    description: ok | fail
+    value: ${{ steps.check.outputs.camera }}
+  device:
+    description: ok | fail
+    value: ${{ steps.check.outputs.device }}
+runs:
+  using: composite
+  steps:
+    - name: Probe venv (bleak) in the runner-host cache
+      shell: bash
+      run: |
+        venv="$HOME/.cache/divoom-timebox/venv"
+        if ! "$venv/bin/python" -c 'import bleak' 2>/dev/null; then
+          python3 -m venv "$venv"
+          "$venv/bin/pip" install -q -r scripts/probe/requirements.txt
+        fi
+        echo "PROBE_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+    - name: Runner check
+      id: check
+      shell: bash
+      env:
+        HOMEY_TOKEN: ${{ inputs.homey-token }}
+        HOMEY_ADDRESS: ${{ inputs.homey-address }}
+        REQUIRE: ${{ inputs.require }}
+        SCAN: ${{ inputs.scan-seconds }}
+        FAIL: ${{ inputs.fail }}
+      run: |
+        [ -n "$HOMEY_TOKEN" ] || unset HOMEY_TOKEN
+        [ -n "$HOMEY_ADDRESS" ] || unset HOMEY_ADDRESS
+        scripts/runner-check.sh --require "$REQUIRE" --scan "$SCAN" && exit 0
+        [ "$FAIL" = "false" ] && exit 0
+        echo "::error title=Hardware runner not ready::required checks: $REQUIRE (see the step summary)"
+        exit 1

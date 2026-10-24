@@ -1,6 +1,6 @@
 # ADR 0003: Local agent workflow replaces GitHub Actions pipeline
 
-**Status:** accepted, owner gates amended by 0006 · **Date:** 2026-10-06 · **Supersedes:** 0001
+**Status:** superseded by 0011 (owner gates amended by 0006) · **Date:** 2026-10-06 · **Supersedes:** 0001
 
 **Context:** The label-driven pipeline on a self-hosted runner was cumbersome (runner quirks, permission
 allow-lists for headless runs, label state machine, branch sync, budget plumbing).

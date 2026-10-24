@@ -24,7 +24,9 @@ Check against the code and the diff (`git diff main...HEAD`), then fix what is w
 
 **uat mode** (input: a milestone version): write `docs/uat/v<version>.md` from the template in `docs/uat/README.md`,
 for the owner, who tests by hand in the Homey app. Sources: the acceptance criteria of every issue in the milestone
-(`gh issue list --milestone … --state all`, `gh issue view <n> --comments`, including the plans' hardware scenarios),
+(in GitHub Actions: the milestone context file the orchestrator names, which holds every approved issue with its plan
+comment; locally: `gh issue list --milestone … --state all`, `gh issue view <n> --comments`), including the plans'
+hardware scenarios,
 the merged code (`.homeycompose/` capabilities, settings, Flow cards, `locales/`), and earlier UAT docs (`docs/uat/archive/*.md`).
 Every acceptance criterion maps to at least one test case; each case has numbered steps in Homey app terms (device
 tile, device settings, Flow editor), the exact expected result on the device display and in the app, and `[auto]` if

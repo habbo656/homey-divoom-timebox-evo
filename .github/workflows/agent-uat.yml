@@ -1,0 +1,200 @@
+name: agent-uat
+# The owner's UAT verdict (comment starting with ACCEPTED or REJECTED on the UAT issue, routed by agent-intake):
+# ACCEPTED → acceptance docs + version bump PR, merge, tag v<version>, close the UAT issue, next milestone.
+# REJECTED → one approved uat-finding bug per failing case, then the pipeline fixes them and prepares a new round.
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: UAT issue number
+        required: true
+permissions: {}
+concurrency:
+  group: agent-pipeline
+  cancel-in-progress: false
+env:
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  verdict:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      verdict: ${{ steps.v.outputs.verdict }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ inputs.issue }}
+        run: |
+          [[ "$N" =~ ^[0-9]+$ ]] || exit 1
+          gh issue view "$N" --json labels,state --jq '.state + " " + ([.labels[].name] | join(","))' | grep -qE '^OPEN .*\buat\b' || { echo "#$N is not an open UAT issue"; exit 1; }
+          version=$(gh issue view "$N" --json title --jq .title | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | tr -d v)
+          # The owner's newest comment whose first word is ACCEPTED or REJECTED (agents never start a comment so).
+          verdict=$(gh api "repos/$GITHUB_REPOSITORY/issues/$N/comments" --paginate \
+            --jq ".[] | select(.user.login == \"$OWNER\") | .body | ltrimstr(\"\\n\") | ltrimstr(\" \") | split(\" \")[0] | split(\"\\n\")[0]" \
+            | grep -E '^(ACCEPTED|REJECTED)$' | tail -n 1)
+          [ -n "$verdict" ] && [ -n "$version" ] || { echo "no verdict or version"; exit 1; }
+          printf 'verdict=%s\nversion=%s\n' "$verdict" "$version" | tee -a "$GITHUB_OUTPUT"
+          mkdir -p ctx && bash scripts/agent/issue.sh context "$N" ctx/context.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context
+          path: ctx/
+          retention-days: 3
+
+  agent:
+    needs: verdict
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: agents
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci >/dev/null && npm install -g homey >/dev/null
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - uses: actions/download-artifact@v4
+        with:
+          name: context
+          path: ${{ runner.temp }}/ctx
+      - id: c
+        uses: ./.github/actions/claude
+        env:
+          VAR_ISSUE: ${{ inputs.issue }}
+          VAR_VERSION: ${{ needs.verdict.outputs.version }}
+          VAR_VERDICT: ${{ needs.verdict.outputs.verdict }}
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
+        with:
+          prompt-file: .github/agent/uat.md
+          schema-file: .github/agent/uat.schema.json
+          model: sonnet
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - env:
+          RESULT: ${{ steps.c.outputs.result-file }}
+          V: ${{ needs.verdict.outputs.version }}
+        run: |
+          mkdir -p out; cp "$RESULT" out/result.json
+          b="agent/release-v$V"
+          git rev-parse -q --verify "refs/heads/$b" >/dev/null && git bundle create out/branch.bundle "refs/heads/$b" ^origin/main 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uat
+          path: out/
+          retention-days: 3
+
+  publish:
+    needs: [verdict, agent]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      sha: ${{ steps.p.outputs.sha }}
+      pr: ${{ steps.p.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: uat
+          path: ${{ runner.temp }}/out
+      - id: p
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ inputs.issue }}
+          V: ${{ needs.verdict.outputs.version }}
+          VERDICT: ${{ needs.verdict.outputs.verdict }}
+          OUT: ${{ runner.temp }}/out
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          status=$(python3 -c 'import json,os; print(json.load(open(os.environ["OUT"]+"/result.json")).get("status",""))')
+          if [ "$status" != ready ]; then
+            bash scripts/agent/issue.sh say "$N" "could not process the UAT verdict: $(python3 -c 'import json,os; print(json.load(open(os.environ["OUT"]+"/result.json")).get("summary","no result"))' | head -c 1500)"
+            exit 1
+          fi
+          if [ "$VERDICT" = REJECTED ]; then
+            ms=$(gh issue view "$N" --json milestone --jq '.milestone.title // empty')
+            list=""
+            python3 - <<'PY'
+          import json, os
+          out, n = os.environ["OUT"], os.environ["N"]
+          for i, b in enumerate(json.load(open(out + "/result.json"))["bugs"]):
+              open(f"{out}/bug{i}.title", "w").write(b["title"][:200])
+              open(f"{out}/bug{i}.md", "w").write(b["body"] + f"\n\nFrom the owner's UAT verdict on #{n}.")
+          PY
+            for t in "$OUT"/bug*.title; do
+              [ -e "$t" ] || continue
+              url=$(gh issue create --title "$(cat "$t")" --label type:bug --label uat-finding ${ms:+--milestone "$ms"} --body-file "${t%.title}.md")
+              bash scripts/agent/issue.sh approve "${url##*/}" "github-actions[bot]" >/dev/null
+              list="$list #${url##*/}"
+            done
+            gh issue comment "$N" --body "Rejected cases filed as approved \`uat-finding\` bugs:$list. The pipeline fixes them, then prepares a new round here.
+          <!-- agent-uat-rejected -->" >/dev/null
+            echo "sha=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          b="agent/release-v$V"
+          [ -s "$OUT/branch.bundle" ] || { bash scripts/agent/issue.sh say "$N" "the acceptance run produced no release branch."; exit 1; }
+          git fetch -q "$OUT/branch.bundle" "refs/heads/$b:refs/heads/$b"
+          # Release diff may touch only docs, changelog, readmes and the version fields.
+          bad=$(git diff --name-only "origin/main...$b" | grep -vE '^(docs/|README(\.de)?\.(md|txt)$|\.homeychangelog\.json$|app\.json$|\.homeycompose/app\.json$|package(-lock)?\.json$)' || true)
+          ver=$(git diff "origin/main...$b" -- package.json package-lock.json app.json .homeycompose/app.json | grep -E '^[+-] ' | grep -vE '"version": ' || true)
+          if [ -n "$bad$ver" ]; then bash scripts/agent/issue.sh say "$N" "the release branch changes more than docs and version fields; not merged. Files: $bad"; exit 1; fi
+          git push -q origin "refs/heads/$b:refs/heads/$b"
+          url=$(gh pr create --base main --head "$b" --title "chore(release): v$V" --body "Refs #$N. UAT v$V accepted by @$OWNER; acceptance docs and version bump. Tag \`v$V\` follows the merge; publishing stays with the owner.")
+          printf 'sha=%s\npr=%s\n' "$(git rev-parse "refs/heads/$b")" "${url##*/}" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: publish
+    if: needs.publish.outputs.sha != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gate.yml
+    with:
+      ref: ${{ needs.publish.outputs.sha }}
+
+  finish:
+    needs: [verdict, publish, gate]
+    if: always() && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ inputs.issue }}
+          V: ${{ needs.verdict.outputs.version }}
+          PR: ${{ needs.publish.outputs.pr }}
+          SHA: ${{ needs.publish.outputs.sha }}
+          GATE: ${{ needs.gate.outputs.green }}
+        run: |
+          if [ -z "$SHA" ]; then gh workflow run agent-pipeline.yml -f from="$N"; exit 0; fi
+          if [ "$GATE" != true ]; then bash scripts/agent/issue.sh say "$N" "gate red on release PR #$PR; not merged."; exit 1; fi
+          gh pr merge "$PR" --squash --delete-branch
+          git fetch -q origin main && git tag "v$V" origin/main && git push -q origin "v$V"
+          gh issue close "$N" --comment "@$OWNER v$V accepted: docs and version bump merged (PR #$PR), tagged \`v$V\`. Publishing to the Homey App Store stays with you." >/dev/null
+          gh workflow run agent-pipeline.yml -f from="$N"

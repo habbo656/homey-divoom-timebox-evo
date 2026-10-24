@@ -91,7 +91,7 @@ Cannot be automated; they go into the v1.0.0 UAT (`docs/uat/`).
 | M6 | Restart the app in the Homey app (App settings, Restart) | the device stays paired, the app initialises once and the device reconnects within about 3 min; the state (clock, brightness) is shown again |
 
 ## Results
-Hardware run of 2026-10-16 on a Homey Pro with the Timebox Evo paired in a `homey app run` dev build. Verdict:
+Hardware run of 2026-10-16 on the test Homey with the Timebox Evo paired in a `homey app run` dev build. Verdict:
 all scenarios and criteria pass, S8 is not automatable (see below), one app finding (open follow-up). The first run, for S1 to S4,
 used build `6089ae4df1ed`; the rest used build `a0f30897c68f`.
 

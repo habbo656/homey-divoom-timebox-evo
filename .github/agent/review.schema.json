@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": { "enum": ["approve", "changes_requested"] },
+    "blockers": { "type": "integer" },
+    "majors": { "type": "integer" },
+    "minors": { "type": "integer" },
+    "findings": { "type": "string" }
+  },
+  "required": ["verdict", "blockers", "majors", "minors", "findings"],
+  "additionalProperties": false
+}

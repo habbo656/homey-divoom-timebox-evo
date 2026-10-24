@@ -34,7 +34,7 @@ def sdp(dev):
 
 def main():
     ap = argparse.ArgumentParser(epilog=STEPS_HELP)
-    ap.add_argument("--mac", default=os.environ.get("TIMEBOX_MAC"), help="e.g. xx-xx-xx-xx-xx-xx (blueutil --paired)")
+    ap.add_argument("--mac", default=os.environ.get("TIMEBOX_MAC"), help="the Evo's Classic address, see blueutil --paired")
     ap.add_argument("--channel", type=int, default=1)
     ap.add_argument("--wait", type=float, default=1.5, help="seconds to listen after each command")
     ap.add_argument("--sdp", action="store_true", help="list SDP services first")
