@@ -399,6 +399,12 @@ jobs:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 120
     environment: hardware
+    env:
+      # Dev runs: over the LAN with the owner's API key (scripts/homey-dev-run.mjs, no Athom cloud); if that is not
+      # available, via the cloud authenticated with HOMEY_PAT (no OAuth login). Both from the runner's key file.
+      HOMEY_RUN_MODE: auto
+      # Athom personal access token (environment secret): the Homey CLI's cloud paths use it instead of the OAuth login.
+      HOMEY_PAT: ${{ secrets.HOMEY_PAT }}
     permissions:
       contents: read
       issues: write
@@ -430,7 +436,7 @@ jobs:
       - id: rc
         uses: ./.github/actions/runner-check
         with:
-          require: tools,bluetooth,ble,camera,homey-cli,homey-api,lock
+          require: tools,bluetooth,ble,camera,homey-api,homey-run,lock
           fail: "false"
       - name: Build and start the dev run
         if: steps.rc.outputs.ready == 'true'

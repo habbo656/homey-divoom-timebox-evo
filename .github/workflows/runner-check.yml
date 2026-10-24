@@ -1,5 +1,5 @@
 name: runner-check
-# Health check of the self-hosted hardware runner (Bluetooth, BLE permission, webcam, Homey CLI and LAN API, TimeBox
+# Health check of the self-hosted hardware runner (Bluetooth, BLE permission, webcam, Homey LAN API, LAN dev runs, TimeBox
 # paired and available). Manual, daily, or reusable via `uses: ./.github/workflows/runner-check.yml`; jobs inside other
 # workflows use the composite action ./.github/actions/runner-check directly.
 on:
@@ -7,14 +7,14 @@ on:
     inputs:
       require:
         description: Checks that must be OK
-        default: bluetooth,ble,camera,homey-cli,homey-api,device
+        default: bluetooth,ble,camera,homey-api,homey-run,device
   schedule:
     - cron: "41 6 * * *"
   workflow_call:
     inputs:
       require:
         type: string
-        default: bluetooth,ble,camera,homey-cli,homey-api,device
+        default: bluetooth,ble,camera,homey-api,homey-run,device
     outputs:
       ready:
         value: ${{ jobs.check.outputs.ready }}
@@ -24,6 +24,9 @@ jobs:
   check:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
+    environment: hardware
+    env:
+      HOMEY_PAT: ${{ secrets.HOMEY_PAT }}
     outputs:
       ready: ${{ steps.rc.outputs.ready }}
     steps:
@@ -46,4 +49,4 @@ jobs:
       - id: rc
         uses: ./.github/actions/runner-check
         with:
-          require: ${{ inputs.require || 'bluetooth,ble,camera,homey-cli,homey-api,device' }}
+          require: ${{ inputs.require || 'bluetooth,ble,camera,homey-api,homey-run,device' }}
