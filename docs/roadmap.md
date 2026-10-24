@@ -37,7 +37,7 @@ weather via Open-Meteo (no API key); locales en + de; public App Store release; 
 | 0.5.0 ✅ accepted 2026-10-08 | Images | #31 image (token/URL) ✅ (hardware test round 1 failed on memory with 4K photo JPEGs, fixed with bounded-memory decoders, ADR 0010; re-test passed; the token card is checked in the v0.5.0 UAT), #101 "Countdown ended" Flow trigger ✅ (hardware test passed 2026-10-08; owner, 2026-10-08; UAT case: Flow "When Countdown ended" sends a push notification) |
 | 1.0.0 ✅ accepted 2026-10-16 | App Store release | #92 icons, images, name & readme ✅, #36 stability ✅, #37 store readiness ✅ ([release checklist](release-checklist.md)), #38 release process ✅ (`npm run release:check` / `release:bump`, [procedure](versioning.md#release-procedure)), #133 "TimeBox" spelling ✅ (owner, 2026-10-16), #142 driver icon redrawn with 40/20/10 px strokes ✅ (UAT-1 finding, round 1, 2026-10-16) |
 | 1.1.0 ✅ accepted 2026-10-18 | Bugfix after Release 1.0 | #147 app icon missing in "Add new device" and in the App Store (owner, 2026-10-16: first) ✅, #141 mode change reports success without a confirm ✅ (owner, 2026-10-16: fail with `not_confirmed`; dim, power off and custom-page confirm timeouts: #151), #125 `onoff` after a hidden countdown end ✅, #48 stale BLE connection and timing options ✅, #62 dim while off is held until power on ✅, #60 clock settings save during a switch ✅, #129 native 16x16 image unchanged ✅, #94 `homey-run.sh` without arguments ✅, #151 dim, power off and custom page confirm timeouts still report success ✅ (owner, 2026-10-17: in 1.1.0) |
-| 1.x (backlog) | After the first release | #29 notification icons, #34 volume + playing state, #35 persistent settings + sleep light |
+| 1.2.0 | Additional features (planned 2026-10-18, GitHub milestone `v1.2.0 Additional Features`) | #158 ESLint ignores `.hwtest/`, #168 Equalizer mode (`45 04 00`, owner, 2026-10-18), #169 Noise meter mode (`72 02 01`; hardware probe first: `46` d0 likely not updated), #34 volume + playing state, #29 notification icons (TT sweep first), #35 persistent settings + sleep light |
 
 The GitHub milestones still carry their old names (`v0.3.0 Display & channels`, `v0.4.0 Text, notifications &
 weather`, `v0.5.0 Images & animations`); the owner renames them. `v0.6.0 Tools & audio` is no longer used.
@@ -66,8 +66,32 @@ None for existing Flows or paired devices: no id, capability, setting, Flow card
 ## Not planned (backlog, only on request)
 Alarms/memorials (`43`/`54`, Homey Flows schedule better), games (`a0`), drawing pad (`6f`/`58`), FM/source modes
 (no audible effect), device rename (`75`), firmware opcodes (never). Removed in the 2026-10-06 rework: cloud channel,
-visualizations, scoreboard, stopwatch and noise meter, lighting effects, GIF animations (#32), 12/24-hour setting
+visualization styles other than the spectrum bars (#27), scoreboard, stopwatch, lighting effects, GIF animations (#32), 12/24-hour setting
 (#58), status interval setting, Flow "Sync time now".
+
+## Milestone 1.2.0 plan (2026-10-18)
+Evaluation per issue is posted on each issue (protocol status, derived acceptance, open points). The equalizer (spectrum
+bars `45 04 00`) and the noise meter, removed in the 2026-10-06 rework, come back on owner request (2026-10-18). Order and reasons:
+1. #158: pipeline hygiene; protects the gate during the many hardware tests of this milestone.
+2. #168 Equalizer: all VERIFIED (`45 04 00`, `46` d0 `04`); extends the mode set (new id `equalizer`; the old `visualizer`
+   value stays cleared). Reaction to audio needs an A2DP stream: owner UAT case.
+3. #169 Noise meter: builds on the mode extension. Blocking unknown: whether `46` reports it (the scoreboard `45 06` does
+   not); if not, the app tracks the mode itself (like an image) and a device-side switch is not detected.
+4. #34 Volume: `08`/`09`/`0b` VERIFIED; `08` has no reply, so the `09` read-back is the confirm (#141/#151 rule);
+   unsolicited `09` frames not verified (else the tile follows on the poll). Audible checks are owner UAT cases.
+5. #29 Notification icons: `50 TT` verified for TT 1 and 3 only; a photographed TT sweep comes first, only verified icons
+   are offered. "Notify with text" is not in scope (a Flow can chain icon and text).
+6. #35 Persistent settings and sleep light: most unknowns (auto power-off and sleep light vs the power/mode tracking,
+   startup channel values 4–6, sleep-light volume/sound bytes vs #34); persistent writes are restored after each hardware
+   test; the power cycle is an owner case. **The auto power-off wait is owner-attended:** it is not known whether the
+   Evo stays reachable over BLE after it switches itself off; if not, the tester could not restore `ab` and the Evo would
+   keep switching off. The owner powers it back on and the original value is restored right after the reconnect.
+
+Owner defaults (change on the issue if wanted): Equalizer shows only the spectrum bars, no style setting; a device-side
+visualization maps to Equalizer only when `46` d9 (last visualization index) is `00`, the other 11 stay an "other mode"
+(tile cleared, as today); the noise meter is app-tracked if `46` cannot report it; no combined "Notify with text"
+card. Hardware: A2DP audio (#168, #34), the power cycle and the auto power-off wait (#35) need the owner; the tester
+covers the rest.
 
 ## Known limitations and open follow-ups (v1.1.0)
 - Flow arguments are validated when the card runs, not when the Flow is saved (Homey text arguments have no length limit; tags/variables resolve at run time). Owner accepted this in UAT v0.4.0 round 2.

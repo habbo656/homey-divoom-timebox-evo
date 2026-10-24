@@ -29,6 +29,11 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
 - Accepted by design (#48): after a BLE call that hung for more than `openWaitMs`, a late stale release with no started
   newer attempt can overlap the next connect for at most `disconnectTimeoutMs`; backoff and polling recover it (see
   architecture/transport.md).
-- Countdown (#33, section 5.6): the meaning of the unsolicited `bd 55 13 01 32 00` / `01 1e 00` frames after the end; whether the end plays a sound; whether a stop takes effect after the `46` poll shows the countdown again (the app cannot know that it is hidden); what the official app's stopwatch/scoreboard/noise-meter modes (`72 00`..`72 02`) do to a running countdown (out of scope).
+- Countdown (#33, section 5.6): the meaning of the unsolicited `bd 55 13 01 32 00` / `01 1e 00` frames after the end; whether the end plays a sound; whether a stop takes effect after the `46` poll shows the countdown again (the app cannot know that it is hidden); what the official app's stopwatch/scoreboard modes (`72 00`, `72 01`) do to a running countdown (out of scope; the noise meter `72 02` is probed in #169).
 - Does the link stay up for hours on Homey's BLE stack? (The Mac held 30 min without keep-alives, see 1.1.)
 - Static image `44` (#31): persistence (> 75 s), `46` d0 unchanged after `44`, the end of a native text by `44` and the end of the image by a text, a mode command, power off and a mode change made at the device are measured (hardware test #31). Still open: the effect of `5f`, `26 0X`, `74 32` and `18` on a shown image, `44` over a countdown or with the panel off (M3, M5, M6 in [images.md](images.md#static-image-behaviour-31)); branch B2 stays the conservative assumption.
+- Milestone 1.2.0 (planned 2026-10-18, answered by the issues' hardware probes): noise meter `72 02 01` (#169): whether `46`
+  d0 changes (the scoreboard `45 06` does not), how the view ends, power off/on and dim in that view, what it does to a running countdown; unsolicited `09`
+  frames on a volume change at the phone (#34); the full `50 TT` icon list beyond TT 1 and 3 (#29); whether the Evo stays reachable over BLE after
+  the auto power-off `ab` fires (owner-attended test), what `46` reports then and during a sleep light `40`, and what a sleep-light stop returns to; whether the sleep light's mode, FM and volume bytes (MO, FL FH, VV) change the speaker
+  volume or play sound (interacts with #34); whether startup channel values 4–6 of `8a 01 CC` are custom pages 0–2 (#35).

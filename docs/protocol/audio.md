@@ -31,4 +31,4 @@ Over BLE, Homey can **set and read the volume** (`08`/`09`, 0..15, verified by m
 (`0b`). Play/pause and next/previous (`0a`, `12`) do not control the A2DP source. Source modes, FM and the sound previews
 had no audible effect. Useful Homey audio features are therefore limited to a volume capability (plus a "playing"
 indicator). Because of the AVRCP sync, a volume set from Homey also moves the volume slider of the connected phone or
-computer, and the other way round. Poll `09` or watch for unsolicited `09` frames to keep the capability in sync.
+computer, and the other way round. Poll `09` to keep the capability in sync; unsolicited `09` frames on such a change were not observed (open question, #34).
