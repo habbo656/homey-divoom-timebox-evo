@@ -49,6 +49,9 @@ runs:
       shell: bash
       env:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+        # Subagents (and long Bash commands) run in the foreground: a headless session that backgrounds them ends its
+        # turn and returns the result before they report back, so their work is lost.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         PROMPT_FILE: ${{ inputs.prompt-file }}
         SCHEMA_FILE: ${{ inputs.schema-file }}
         MODEL: ${{ inputs.model }}

@@ -201,7 +201,11 @@ Their commits carry the bot identity (`.claude/settings.json` `env`, see "Bot id
   `curl`/`wget`/`ssh`, `npm publish`, unpairing Bluetooth devices. In Actions `.github/agent/ci-settings.json` adds the
   CI denies listed above and repeats the allow rules: a fresh CI checkout is an untrusted workspace, and Claude Code
   then ignores `permissions.allow` from the project's `.claude/settings.json` (deny rules still apply), so headless
-  agents could run only read-only commands (`git checkout -b` was denied). Deny rules match command prefixes only; the real boundary in CI is the read-only token.
+  agents could run only read-only commands (`git checkout -b` was denied).
+- `.github/actions/claude` sets `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`. Otherwise subagents run in the background, and
+  a headless (`-p`) session returns its final result as soon as its own turn ends, without waiting for them: the
+  orchestrator reported "blocked" with the planner or developer still running (#3, 2026-10-24; reproduced with CLI
+  2.1.285). Deny rules match command prefixes only; the real boundary in CI is the read-only token.
 - Planner, reviewer and tester are read-only; the doc-keeper edits docs only.
 - Never merge with a red gate or open findings; never force-push; releases and App Store publishing stay with the owner.
 - One hardware user at a time (concurrency group `hardware`). The lock in `scripts/homey-run.sh` only means "a dev build
