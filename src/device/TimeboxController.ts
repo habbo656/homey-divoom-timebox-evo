@@ -320,6 +320,14 @@ export class TimeboxController {
    * at the device (or a reboot), which ends the tracking and is then handled like any report. Null until the first report.
    */
   private imageShadow: number | null = null;
+  /** The noise meter (`72 02 01`) was sent by this run and is believed to be on the device (#3); a mode change, power off or tile colour ends it. */
+  private noiseActive = false;
+  /**
+   * The "noise shadow": the `46` d0 the device reports under the noise meter (unmeasured, so the design works for any
+   * code), like the image shadow. Reports equal to it are ignored while the noise meter is tracked; a different known code
+   * is a mode change made at the device, which ends the tracking. Null until the confirm or the first report.
+   */
+  private noiseShadow: number | null = null;
   /**
    * The d0 code of a mode the app does not offer (`02` cloud, `04` visualizer) while the device shows it, else null.
    * `knownChannel` then keeps the last offered mode (what "power on" returns to), `getChannel()` reports null and the
@@ -837,6 +845,12 @@ export class TimeboxController {
       }
       this.textEndedByCommand('mode change', textAtSend);
       this.imageEndedByCommand('mode change', imageAtSend);
+      if (channel === 'noise_meter') {
+        this.noiseActive = true;
+        this.noiseShadow = null;
+      } else {
+        this.noiseEnded('mode change');
+      }
       if (lighting) this.log(`lighting -> ${formatHexColor(lighting.color)}: ${toHex(command)}`);
       else if (customPage === undefined) this.log(`channel -> ${channel}: ${toHex(command)}`);
       if (lighting) this.knownColor = rgbIsBlack(lighting.color) ? this.knownColor : lighting.color;
@@ -873,7 +887,11 @@ export class TimeboxController {
         const status = decodeStatus(await this.link.request(queryStatus(), 0x46, this.channelConfirmMs));
         const device = channelFromCode(status.channel);
         const shown = device ?? otherModeName(status.channel) ?? `code ${status.channel}`;
-        if (device !== channel) this.log(`channel mismatch: device ${shown}, requested ${channel}`);
+        if (channel === 'noise_meter') {
+          // The code the device reports under the noise meter is unknown: any code confirms and becomes the shadow.
+          this.log(`channel confirmed: ${channel} (device reports channel code ${hexByte(status.channel)})`);
+          if (this.noiseActive && generation === this.channelGeneration) this.noiseShadow = status.channel;
+        } else if (device !== channel) this.log(`channel mismatch: device ${shown}, requested ${channel}`);
         else if (lighting) this.confirmLighting(status, lighting.color);
         else this.log(`channel confirmed: ${channel}`);
         if (channel === 'clock' && device === 'clock') this.confirmClockFace(status, face);
@@ -1279,6 +1297,14 @@ export class TimeboxController {
     this.imageShadow = null;
   }
 
+  /** A mode change or power off ended the noise meter on the device: forget it, nothing is sent. */
+  private noiseEnded(reason: string): void {
+    if (!this.noiseActive) return;
+    this.noiseActive = false;
+    this.noiseShadow = null;
+    this.log(`noise meter ended (${reason})`);
+  }
+
   /**
    * A pending small-clock re-send (#88) would arrive after a text or countdown that is sent now and end it (a `45` command
    * does): take it out of the timer and return it to send ahead of the new frames, in the same queue (the clock under the
@@ -1555,6 +1581,7 @@ export class TimeboxController {
       }
       this.textEndedByCommand('power off', textAtSend);
       this.imageEndedByCommand('power off', imageAtSend);
+      this.noiseEnded('power off');
       this.log(`power -> off: ${toHex(command)}`);
       this.power = false;
       this.offShadow = null;
@@ -1686,6 +1713,7 @@ export class TimeboxController {
     if (!this.power) return 'panel off';
     if (this.textActive !== null || this.textSending > 0) return 'text running';
     if (this.imageActive !== null || this.imageSending > 0) return 'image shown';
+    if (this.noiseActive) return 'noise meter shown';
     return null;
   }
 
@@ -1909,6 +1937,19 @@ export class TimeboxController {
       this.log('power <- device: on');
       this.call(() => this.surface.setOnOff(true));
       this.applyPendingBrightness();
+    }
+    if (this.noiseActive && this.power) {
+      // The noise meter is not a `45` mode and the code `46` reports under it is unmeasured: the first report is its shadow,
+      // equal reports and codes that are no mode are ignored, a different known code means the device left the noise meter.
+      if (this.noiseShadow === null) {
+        this.noiseShadow = code;
+        this.log(`noise meter shadow: device reports channel code ${hexByte(code)}`);
+        return false;
+      }
+      if (code === this.noiseShadow || (!id && !other)) return false;
+      this.log(`noise meter ended (device mode change): channel code ${hexByte(this.noiseShadow)} -> ${hexByte(code)}`);
+      this.noiseActive = false;
+      this.noiseShadow = null;
     }
     if (other) {
       this.unknownCode = null;
