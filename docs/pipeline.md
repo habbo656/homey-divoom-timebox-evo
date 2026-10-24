@@ -113,6 +113,10 @@ public. Layers, from the outside in:
    (UAT). Releases are tagged after `ACCEPTED`; publishing stays with the owner.
 
 ## Owner setup (once)
+On the GitHub Free plan, rulesets/branch protection and environments (with environment secrets and deployment branch
+rules) work only in **public** repositories. Steps 2 and 3 are therefore done right after the repository is made public;
+while it is private, the pipeline cannot start (its model jobs need the `agents` environment).
+
 1. Repository settings → Actions → General: "Require approval for all external contributors" (fork PR runs), workflow
    permissions "Read repository contents" (jobs request more explicitly), allow GitHub Actions to create and approve pull
    requests (the pipeline opens and merges PRs).
@@ -123,8 +127,9 @@ public. Layers, from the outside in:
    itself.
 4. Labels: `agent:approved`, `agent:needs-owner`, `security:flagged`, `owner:review` (plus the existing ones).
 5. Runner (Mac, interactive session so that Bluetooth and camera permissions apply): register it with a neutral name and a
-   work folder outside the home directory (`./config.sh --name hw-runner --work /opt/hw-runner/_work …`, or
-   `./config.sh remove` and register again), `scripts/runner/install-hook.sh <runner dir>`, restart the runner, Homey key
+   work folder outside the home directory (`./config.sh --name hw-runner --work /Users/Shared/hw-runner/_work …`; quote nothing
+   with `$HOME`, which `config.sh` stores literally; an existing registration can change `workFolder` in the runner's
+   `.runner` file), `scripts/runner/install-hook.sh <runner dir>`, restart the runner, Homey key
    in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
 
 ## Roles and models
