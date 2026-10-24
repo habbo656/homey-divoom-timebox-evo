@@ -9,7 +9,7 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
     section 5.1) is sent whenever the stored value is pending and can be sent. Condition ids (`WEATHER_CONDITION_IDS`, stable, never translated):
     `clear`, `cloudy`, `thunder`, `rain`, `snow`, `fog`. Temperature: whole degrees Celsius within `TEMPERATURE_RANGE` (-99..99, what the display
     shows; the byte allows -128..127); `parseTemperatureArg` (Flow) rounds (`Math.round`, -0 becomes 0) and throws `ArgumentError` (a `RangeError`) outside the range after
-    rounding or for a non-number (`parseWeatherConditionId` likewise for an unknown condition); `clampTemperature` (Open-Meteo) rounds and clamps instead, logged. Fahrenheit (`2b`) is not supported (follow-up #96).
+    rounding or for a non-number (`parseWeatherConditionId` likewise for an unknown condition); `clampTemperature` (Open-Meteo) rounds and clamps instead, logged. Fahrenheit (`2b`) is not supported (follow-up #7).
     - Sources (#98): the Flow actions `timebox_set_temperature` (`device.setWeather({temperatureC})`) and `timebox_set_weather`
       (`device.setWeather({condition})`) set one part each, the automatic weather (Open-Meteo) always sets both. The last value wins, whoever set it.
       `TimeboxController.setWeather(update: WeatherUpdate, source: 'flow' | 'open-meteo')` first merges the update into the stored weather

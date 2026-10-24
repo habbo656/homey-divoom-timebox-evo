@@ -1,8 +1,9 @@
 # Documentation index
 
 > **History note.** This repository starts with a single commit at v1.1.0 (2026-10-24). Issue and PR numbers mentioned
-> in the docs for work up to v1.1.0 (`#1` to `#170`) refer to the earlier private development repository, not to
-> issues of this repository.
+> for work up to v1.1.0 (milestones 0.2.0 to 1.1.0, ADRs, `docs/uat/archive/`, protocol evidence) refer to the earlier
+> private development repository. From milestone 1.2.0 on, numbers refer to this repository: the open issues were
+> recreated here as #1 (was #158), #2 (#168), #3 (#169), #4 (#34), #5 (#29), #6 (#35) and #7 (#96).
 
 | Doc | Purpose |
 |---|---|
