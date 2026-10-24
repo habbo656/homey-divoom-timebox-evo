@@ -315,6 +315,14 @@ export interface CountdownTime {
 }
 
 /**
+ * `72 02 01`: start the noise meter (dB) mode (VERIFIED, reply `72 55 02`). It is not a `45` channel: any other mode
+ * command, a power off or a mode change on the device ends it.
+ */
+export function startNoiseMeter(): Uint8Array {
+  return Uint8Array.of(0x72, 0x02, 0x01);
+}
+
+/**
  * `72 03 01 MM SS`: start the countdown overlay (VERIFIED, protocol section 5.6). It is not a channel and replaces a
  * running one or a native text. 0:00 is rejected: the device would end it at once. The device accepts any bytes, so
  * both values are checked first.

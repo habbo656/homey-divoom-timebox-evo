@@ -15,6 +15,7 @@ import {
   setHot,
   setLighting,
   setWeather,
+  startNoiseMeter,
   staticImage,
   startCountdown,
   stopCountdown,
@@ -60,6 +61,12 @@ describe('setChannel', () => {
   // 1 lighting needs arguments, 4 (visualizer) is not offered, 3 does nothing on the Evo, 7 is ignored.
   it.each([1, 3, 4, 7, -1, 256, 0.5, NaN])('rejects %s', (value) => {
     expect(() => setChannel(value)).toThrow(RangeError);
+  });
+});
+
+describe('startNoiseMeter', () => {
+  it('is 72 02 01', () => {
+    expect(toHex(startNoiseMeter())).toBe('72 02 01');
   });
 });
 
