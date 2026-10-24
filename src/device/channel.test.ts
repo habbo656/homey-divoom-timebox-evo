@@ -16,14 +16,20 @@ import {
   parseChannelId,
   parseCustomPageId,
 } from './channel';
+import type { CodedChannelId } from './channel';
 
 const FACE = DEFAULT_CLOCK_FACE;
 const status = (hex: string): DeviceStatus => decodeStatus(parseReply(decodeSppFrame(fromHex(hex))));
 
 describe('channel ids and codes', () => {
   it('maps every id to its device code and back', () => {
-    expect(CHANNEL_IDS.map(channelCode)).toEqual([0, 1, 5]);
-    for (const id of CHANNEL_IDS) expect(channelFromCode(channelCode(id))).toBe(id);
+    const coded = CHANNEL_IDS.filter((id): id is CodedChannelId => id !== 'noise_meter');
+    expect(coded.map(channelCode)).toEqual([0, 1, 5]);
+    for (const id of coded) expect(channelFromCode(channelCode(id))).toBe(id);
+  });
+
+  it('never maps a device code to the noise meter', () => {
+    for (let code = 0; code <= 255; code++) expect(channelFromCode(code)).not.toBe('noise_meter');
   });
 
   it.each([2, 3, 4, 6, 7, 8, 0xff, -1, 1.5, NaN])('has no mode for code %s', (code) => {
@@ -45,6 +51,11 @@ describe('channel ids and codes', () => {
 });
 
 describe('channelCommand', () => {
+  it('noise_meter: 72 02 01, whatever the stored state', () => {
+    expect(toHex(channelCommand('noise_meter', null, null, FACE))).toBe('72 02 01');
+    expect(toHex(channelCommand('noise_meter', status(STATUS_CLOCK_B50), 50, FACE))).toBe('72 02 01');
+  });
+
   const clock = status(STATUS_CLOCK_B50); // colour red, brightness 50, last visualization 3
   const lighting = status(STATUS_LIGHTING_GREEN_B100); // colour green, brightness 100, last visualization 11
 

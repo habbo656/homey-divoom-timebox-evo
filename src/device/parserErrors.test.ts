@@ -117,7 +117,7 @@ describe('channel and custom page', () => {
     expect(summary(thrown(() => parseChannelId('cloud')))).toEqual([
       'invalid_choice',
       'channel',
-      { value: '"cloud"', allowed: 'clock, lighting, custom' },
+      { value: '"cloud"', allowed: 'clock, lighting, custom, noise_meter' },
     ]);
   });
 
