@@ -41,7 +41,7 @@ that index was set via `45 04 NN`; it is not reset by other channel changes.
 
 Noise meter (`72 02 01`, #3): the app does not map any d0 to the noise meter. It tracks the mode itself and treats the first d0
 reported after the switch as the "noise shadow" (any code confirms; reports equal to it are ignored, a different known code
-ends the tracking). The d0 under the noise meter was measured in the #3 hardware test; see `docs/architecture/modes.md`
+ends the tracking). The d0 under the noise meter is still unmeasured (recorded by the #3 hardware test report); see `docs/architecture/modes.md`
 "Noise meter (#3)" for the resulting rules and limits.
 
 Use in the app (#24, #68, `docs/architecture.md` "Mode picker"): d0 is the sync source of the `timebox_channel` capability
