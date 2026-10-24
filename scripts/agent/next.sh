@@ -49,5 +49,5 @@ pick "$issues"
 url=$(gh issue create --title "UAT v$version: $name" --label uat ${milestone:+--milestone "$milestone"} \
   --body "Owner acceptance test for v$version ($name). The pipeline writes \`docs/uat/v$version.md\`, pre-checks the [auto] cases on the hardware and then posts the checklist here.")
 n=${url##*/}
-bash scripts/agent/issue.sh approve "$n" "github-actions[bot]" >/dev/null
+bash scripts/agent/issue.sh approve "$n" "${BOT:?}" >/dev/null
 emit issue "$n" "milestone v$version complete: UAT issue #$n opened"

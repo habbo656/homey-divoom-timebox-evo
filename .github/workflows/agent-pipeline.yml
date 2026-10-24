@@ -22,15 +22,17 @@ concurrency:
   cancel-in-progress: false
 env:
   OWNER: ${{ github.repository_owner }}
+  # The pipeline's GitHub App (docs/pipeline.md "Bot identity"): REST/event login and GraphQL login (without [bot]).
+  BOT: ${{ vars.AGENT_BOT_SLUG }}[bot]
+  BOT_LOGIN: ${{ vars.AGENT_BOT_SLUG }}
 
 jobs:
   pick:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: bot
     permissions:
-      contents: read
-      issues: write
-      pull-requests: read
+      contents: read # writes use the bot token
     outputs:
       go: ${{ steps.s.outputs.go }}
       issue: ${{ steps.s.outputs.issue }}
@@ -43,14 +45,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
       - id: next
         if: inputs.issue == ''
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
         run: bash scripts/agent/next.sh
       - id: s
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           IN_ISSUE: ${{ inputs.issue }}
           IN_ROUND: ${{ inputs.round || '1' }}
           FROM: ${{ inputs.from }}
@@ -82,7 +89,7 @@ jobs:
             head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq .object.sha)
             # Verify only: the PR head was reviewed with "approve" and no findings were filed for that commit.
             if [ -n "$pr" ] && [ "$IN_ROUND" = 1 ] \
-               && gh pr view "$pr" --json comments --jq '.comments[] | select(.author.login == "github-actions") | .body' \
+               && gh pr view "$pr" --json comments --jq '.comments[] | select(.author.login == env.BOT_LOGIN) | .body' \
                   | grep -q "<!-- agent-review sha=$head verdict=approve -->" \
                && ! bash scripts/agent/issue.sh marker "$n" findings | grep -q "sha=$head"; then
               stage=verify
@@ -154,9 +161,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci >/dev/null && npm install -g homey >/dev/null
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - env:
+          NAME: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          EMAIL: ${{ vars.AGENT_BOT_EMAIL }}
+        run: git config user.name "$NAME" && git config user.email "$EMAIL"
       - uses: actions/download-artifact@v4
         with:
           name: context
@@ -199,10 +207,9 @@ jobs:
     if: always() && needs.pick.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: bot
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read # writes use the bot token
     outputs:
       next: ${{ steps.p.outputs.next }}
       sha: ${{ steps.p.outputs.sha }}
@@ -216,6 +223,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          name: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          email: ${{ vars.AGENT_BOT_EMAIL }}
+          git: "true"
       - uses: actions/download-artifact@v4
         if: needs.pick.outputs.stage == 'develop'
         with:
@@ -224,7 +240,7 @@ jobs:
         continue-on-error: true
       - id: p
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ needs.pick.outputs.issue }}
           KIND: ${{ needs.pick.outputs.kind }}
           STAGE: ${{ needs.pick.outputs.stage }}
@@ -235,8 +251,6 @@ jobs:
           OUT: ${{ runner.temp }}/out
           ROUND: ${{ needs.pick.outputs.round }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           say() { bash scripts/agent/issue.sh say "$N" "$1"; }
           stop() { echo "next=stop" >> "$GITHUB_OUTPUT"; exit 0; }
           j() { python3 -c 'import json,os,sys; print(json.load(open(os.environ["OUT"]+"/result.json")).get(sys.argv[1], ""))' "$1"; }
@@ -268,7 +282,7 @@ jobs:
               git fetch -q origin "$b:refs/remotes/origin/$b"
               git merge-base --is-ancestor "origin/$b" "$b" || { say "the new commits do not extend \`$b\` (no force pushes); blocked."; gh issue edit "$N" --add-label agent:blocked >/dev/null; stop; }
             fi
-            # GITHUB_TOKEN cannot push .github/workflows changes; such a push fails here and the owner is told.
+            # The bot app has no "Workflows" permission, so it cannot push .github/workflows changes; such a push fails here.
             git push -q origin "refs/heads/$b:refs/heads/$b" || { gh issue edit "$N" --add-label agent:blocked >/dev/null; say "push of \`$b\` was rejected (workflow files cannot be pushed by the pipeline)."; stop; }
             gh issue edit "$N" --remove-label agent:needs-owner >/dev/null 2>&1 || true
             hw=$(j needs_hwtest | tr 'TF' 'tf')
@@ -297,7 +311,7 @@ jobs:
           $(j summary)" >/dev/null
           fi
           appr=false
-          gh pr view "$pr" --json comments --jq '.comments[] | select(.author.login == "github-actions") | .body' | grep -q "<!-- agent-diff-approval sha=$sha -->" && appr=true
+          gh pr view "$pr" --json comments --jq '.comments[] | select(.author.login == env.BOT_LOGIN) | .body' | grep -q "<!-- agent-diff-approval sha=$sha -->" && appr=true
           printf 'next=go\nsha=%s\nbranch=%s\npr=%s\nneeds_hwtest=%s\ndiff_approved=%s\n' "$sha" "$b" "$pr" "${hw:-true}" "$appr" >> "$GITHUB_OUTPUT"
 
   gate:
@@ -406,8 +420,7 @@ jobs:
       # Athom personal access token (environment secret): the Homey CLI's cloud paths use it instead of the OAuth login.
       HOMEY_PAT: ${{ secrets.HOMEY_PAT }}
     permissions:
-      contents: read
-      issues: write
+      contents: read # the pairing comment uses the bot token
     concurrency:
       group: hardware
       cancel-in-progress: false
@@ -447,13 +460,27 @@ jobs:
           scripts/homey-run.sh start 300 >/dev/null 2>&1 || { echo "dev run did not start"; exit 1; }
           scripts/homey-run.sh wait 'Running .com\.habbo656' 240 >/dev/null 2>&1 || { echo "app did not reach Running"; exit 1; }
           echo "dev run started"
+      # The pairing request is a bot comment, so it needs the bot token; it is revoked right after the wait, before
+      # the tester (a model with Bash on this Mac) starts.
+      - id: bot
+        if: steps.rc.outputs.ready == 'true'
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          skip-revoke: "true"
       - name: TimeBox paired and available
         id: pair
         if: steps.rc.outputs.ready == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ needs.pick.outputs.issue }}
         run: bash scripts/agent/await-device.sh "$N" 30
+      - name: Revoke the bot token
+        if: always() && steps.bot.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: gh api -X DELETE installation/token >/dev/null && echo "bot token revoked"
       - name: Trusted context
         if: steps.pair.outcome == 'success'
         env:
@@ -499,21 +526,24 @@ jobs:
     if: always() && needs.publish.outputs.next == 'go'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: bot
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      actions: write
+      contents: read # writes use the bot token
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
       - uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/a
         continue-on-error: true
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ needs.pick.outputs.issue }}
           KIND: ${{ needs.pick.outputs.kind }}
           ROUND: ${{ needs.pick.outputs.round }}
@@ -583,7 +613,7 @@ jobs:
                 --body "Found by the pipeline's hardware pre-check of the [auto] UAT cases (#$N, PR #$PR).
 
           $(jf "$A/hwtest/hwtest.json" report)")
-              bash scripts/agent/issue.sh approve "${url##*/}" "github-actions[bot]" >/dev/null
+              bash scripts/agent/issue.sh approve "${url##*/}" "$BOT" >/dev/null
               gh issue comment "$N" --body "Pre-check of the [auto] cases failed; fixing ${url##*/} first, then a new round.
           <!-- agent-uat-rejected round=$ROUND -->" >/dev/null
               gh workflow run agent-pipeline.yml -f from="$N"

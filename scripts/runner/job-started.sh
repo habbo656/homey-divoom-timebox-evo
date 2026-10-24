@@ -6,10 +6,11 @@
 #   - repository is the configured one (RUNNER_GUARD_REPO, written by install-hook.sh from the runner registration)
 #   - the workflow file comes from main (GITHUB_WORKFLOW_REF ends in @refs/heads/main)
 #   - the event is workflow_dispatch, schedule or a push to main (never pull_request*, issues, comments)
-#   - the triggering actor is the owner (RUNNER_GUARD_OWNER) or the pipeline bot
+#   - the triggering actor is the owner (RUNNER_GUARD_OWNER) or the pipeline's GitHub App (RUNNER_GUARD_BOT)
 set -u
 repo=${RUNNER_GUARD_REPO:?RUNNER_GUARD_REPO not set (scripts/runner/install-hook.sh writes it)}
 owner=${RUNNER_GUARD_OWNER:-${repo%%/*}}
+bot=${RUNNER_GUARD_BOT:?RUNNER_GUARD_BOT not set (scripts/runner/install-hook.sh writes it)}
 deny() { echo "::error title=Runner guard::job refused on this runner: $1"; echo "RUNNER-GUARD: refused: $1" >&2; exit 1; }
 
 [ "${GITHUB_REPOSITORY:-}" = "$repo" ] || deny "repository ${GITHUB_REPOSITORY:-?}"
@@ -20,5 +21,5 @@ case "${GITHUB_EVENT_NAME:-}" in
   *) deny "event ${GITHUB_EVENT_NAME:-?}" ;;
 esac
 actor=${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}
-[ "$actor" = "$owner" ] || [ "$actor" = "github-actions[bot]" ] || deny "triggered by ${actor:-?}"
+[ "$actor" = "$owner" ] || [ "$actor" = "$bot" ] || deny "triggered by ${actor:-?}"
 echo "RUNNER-GUARD: accepted ${GITHUB_WORKFLOW_REF##*/} ($GITHUB_EVENT_NAME by $actor)"

@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: false
 env:
   OWNER: ${{ github.repository_owner }}
+  BOT: ${{ vars.AGENT_BOT_SLUG }}[bot]
 
 jobs:
   verdict:
@@ -65,9 +66,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci >/dev/null && npm install -g homey >/dev/null
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - env:
+          NAME: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          EMAIL: ${{ vars.AGENT_BOT_EMAIL }}
+        run: git config user.name "$NAME" && git config user.email "$EMAIL"
       - uses: actions/download-artifact@v4
         with:
           name: context
@@ -100,10 +102,9 @@ jobs:
   publish:
     needs: [verdict, agent]
     runs-on: ubuntu-latest
+    environment: bot
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read # writes use the bot token
     outputs:
       sha: ${{ steps.p.outputs.sha }}
       pr: ${{ steps.p.outputs.pr }}
@@ -111,20 +112,27 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          name: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          email: ${{ vars.AGENT_BOT_EMAIL }}
+          git: "true"
       - uses: actions/download-artifact@v4
         with:
           name: uat
           path: ${{ runner.temp }}/out
       - id: p
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ inputs.issue }}
           V: ${{ needs.verdict.outputs.version }}
           VERDICT: ${{ needs.verdict.outputs.verdict }}
           OUT: ${{ runner.temp }}/out
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           status=$(python3 -c 'import json,os; print(json.load(open(os.environ["OUT"]+"/result.json")).get("status",""))')
           if [ "$status" != ready ]; then
             bash scripts/agent/issue.sh say "$N" "could not process the UAT verdict: $(python3 -c 'import json,os; print(json.load(open(os.environ["OUT"]+"/result.json")).get("summary","no result"))' | head -c 1500)"
@@ -143,7 +151,7 @@ jobs:
             for t in "$OUT"/bug*.title; do
               [ -e "$t" ] || continue
               url=$(gh issue create --title "$(cat "$t")" --label type:bug --label uat-finding ${ms:+--milestone "$ms"} --body-file "${t%.title}.md")
-              bash scripts/agent/issue.sh approve "${url##*/}" "github-actions[bot]" >/dev/null
+              bash scripts/agent/issue.sh approve "${url##*/}" "$BOT" >/dev/null
               list="$list #${url##*/}"
             done
             gh issue comment "$N" --body "Rejected cases filed as approved \`uat-finding\` bugs:$list. The pipeline fixes them, then prepares a new round here.
@@ -175,17 +183,24 @@ jobs:
     needs: [verdict, publish, gate]
     if: always() && needs.publish.result == 'success'
     runs-on: ubuntu-latest
+    environment: bot
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      actions: write
+      contents: read # writes use the bot token
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          name: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          email: ${{ vars.AGENT_BOT_EMAIL }}
+          git: "true"
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ inputs.issue }}
           V: ${{ needs.verdict.outputs.version }}
           PR: ${{ needs.publish.outputs.pr }}

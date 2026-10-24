@@ -1,0 +1,52 @@
+name: bot-token
+description: >
+  Mint a short-lived installation token of the pipeline's GitHub App, so every write the pipeline makes (commits,
+  pushes, PRs, comments, labels, merges, dispatches) shows the agent's own identity instead of the owner's or the
+  generic github-actions[bot]. Optionally sets the git author/committer to the bot and makes `git push` use the token.
+  Use after actions/checkout with `persist-credentials: false`, only in deterministic steps, never in a model job.
+inputs:
+  app-id:
+    description: GitHub App ID (repository variable AGENT_APP_ID)
+    required: true
+  private-key:
+    description: GitHub App private key (secret AGENT_APP_PRIVATE_KEY of the environment the job runs in)
+    required: true
+  name:
+    description: Bot git name, "<app-slug>[bot]" (from the repository variable AGENT_BOT_SLUG; required with git)
+    default: ""
+  email:
+    description: Bot git email, "<bot-user-id>+<app-slug>[bot]@users.noreply.github.com" (variable AGENT_BOT_EMAIL)
+    default: ""
+  git:
+    description: '"true" also configures the git identity and push credentials for the checkout in the working directory'
+    default: "false"
+  skip-revoke:
+    description: '"true" leaves revoking to the caller (the hardware job revokes it before the tester starts)'
+    default: "false"
+outputs:
+  token:
+    description: Installation token (masked; expires after one hour, revoked at the end of the job)
+    value: ${{ steps.app.outputs.token }}
+runs:
+  using: composite
+  steps:
+    - id: app
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        skip-token-revoke: ${{ inputs.skip-revoke }}
+    - if: inputs.git == 'true'
+      shell: bash
+      env:
+        TOKEN: ${{ steps.app.outputs.token }}
+        NAME: ${{ inputs.name }}
+        EMAIL: ${{ inputs.email }}
+      run: |
+        [ -n "${NAME%\[bot\]}" ] || { echo "::error::repository variable AGENT_BOT_SLUG not set"; exit 1; }
+        [ -n "$EMAIL" ] || { echo "::error::repository variable AGENT_BOT_EMAIL not set"; exit 1; }
+        git config user.name "$NAME"
+        git config user.email "$EMAIL"
+        auth=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
+        echo "::add-mask::$auth"
+        git config http.https://github.com/.extraheader "AUTHORIZATION: basic $auth"

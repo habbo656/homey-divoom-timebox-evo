@@ -7,7 +7,7 @@ set -uo pipefail
 repo=${1:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}
 fails=0
 say() { echo "REPO-CHECK $1 $2: $3"; [ "$1" = FAIL ] && fails=$((fails + 1)); return 0; }
-api() { gh api "repos/$repo$1" "${@:2}" 2>/dev/null; }
+api() { local o; o=$(gh api "repos/$repo$1" "${@:2}" 2>/dev/null) || return 1; printf '%s\n' "$o"; }
 
 vis=$(api "" --jq '.visibility + " " + (.archived|tostring) + " " + .default_branch')
 read -r visibility archived branch <<<"$vis"
@@ -18,7 +18,8 @@ read -r visibility archived branch <<<"$vis"
 perm=$(api /actions/permissions/workflow --jq '.default_workflow_permissions + " " + (.can_approve_pull_request_reviews|tostring)')
 read -r wfperm canpr <<<"$perm"
 [ "$wfperm" = read ] && say OK token-default "read" || say FAIL token-default "${wfperm:-unknown} (Settings → Actions → Workflow permissions: read)"
-[ "$canpr" = true ] && say OK actions-create-prs "allowed" || say FAIL actions-create-prs "${canpr:-unknown} (allow GitHub Actions to create and approve pull requests)"
+# PRs are opened and merged with the bot app's token, so GITHUB_TOKEN no longer needs to create pull requests.
+[ "$canpr" = false ] && say OK actions-create-prs "not allowed (not needed)" || say INFO actions-create-prs "${canpr:-unknown} (not needed any more: the bot app opens the PRs; can be switched off)"
 fork=$(api /actions/permissions/fork-pr-contributor-approval --jq .approval_policy)
 case "$fork" in
   all_external_contributors) say OK fork-pr-approval "all external contributors" ;;
@@ -26,7 +27,7 @@ case "$fork" in
   *) say FAIL fork-pr-approval "$fork (set: require approval for all external contributors)" ;;
 esac
 
-for env in agents hardware; do
+for env in agents hardware bot; do
   e=$(api "/environments/$env" --jq '.deployment_branch_policy | if . == null then "any" elif .custom_branch_policies then "custom" else "protected" end')
   if [ -z "$e" ]; then say FAIL "env-$env" "missing"; continue; fi
   if [ "$e" = custom ]; then
@@ -34,11 +35,29 @@ for env in agents hardware; do
     [ "$b" = main ] && say OK "env-$env" "deployment branch main" || say FAIL "env-$env" "deployment branches: ${b:-none} (only main)"
   else say FAIL "env-$env" "deployment branches: $e (restrict to main)"; fi
   s=$(api "/environments/$env/secrets" --jq '[.secrets[].name] | join(",")')
-  [[ ",$s," == *",CLAUDE_CODE_OAUTH_TOKEN,"* ]] && say OK "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN set" || say FAIL "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN missing"
+  if [ "$env" != bot ]; then
+    [[ ",$s," == *",CLAUDE_CODE_OAUTH_TOKEN,"* ]] && say OK "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN set" || say FAIL "env-$env-secret" "CLAUDE_CODE_OAUTH_TOKEN missing"
+  fi
+  if [ "$env" != agents ]; then
+    [[ ",$s," == *",AGENT_APP_PRIVATE_KEY,"* ]] && say OK "env-$env-app-key" "AGENT_APP_PRIVATE_KEY set" || say FAIL "env-$env-app-key" "AGENT_APP_PRIVATE_KEY missing (bot app private key)"
+  fi
   if [ "$env" = hardware ]; then
     [[ ",$s," == *",HOMEY_PAT,"* ]] && say OK env-hardware-pat "HOMEY_PAT set" || say FAIL env-hardware-pat "HOMEY_PAT missing (Homey CLI cloud paths would use the OAuth login)"
   fi
 done
+vars=$(api /actions/variables --jq '[.variables[] | "\(.name)=\(.value)"] | join(" ")')
+var() { tr ' ' '\n' <<<"$vars" | sed -n "s/^$1=//p"; }
+app_id=$(var AGENT_APP_ID); slug=$(var AGENT_BOT_SLUG); email=$(var AGENT_BOT_EMAIL)
+[[ "$app_id" =~ ^[0-9]+$ ]] && say OK var-app-id "AGENT_APP_ID set" || say FAIL var-app-id "AGENT_APP_ID missing (the bot app's App ID)"
+if [ -n "$slug" ] && bid=$(gh api "users/$slug%5Bbot%5D" --jq .id 2>/dev/null); then
+  say OK var-bot-slug "$slug[bot] exists"
+  [ "$email" = "$bid+$slug[bot]@users.noreply.github.com" ] && say OK var-bot-email "matches the bot user" || say FAIL var-bot-email "AGENT_BOT_EMAIL must be $bid+$slug[bot]@users.noreply.github.com"
+  inst=$(api /installation --jq .app_slug 2>/dev/null) || inst=""
+  [ -z "$inst" ] && say INFO bot-installed "not readable with a user token (check Settings → GitHub Apps)" || say OK bot-installed "$inst"
+else
+  say FAIL var-bot-slug "AGENT_BOT_SLUG ${slug:-missing} (the bot app's slug; no such bot user)"
+fi
+
 rs=$(api /secrets --jq '[.secrets[].name] | join(",")')
 [ -z "$rs" ] && say OK repo-secrets "none (secrets live in the environments)" || say INFO repo-secrets "repository-level secrets: $rs (visible to every workflow; prefer environments)"
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Decide what an issue/comment event means for the agent pipeline (deterministic, no model, no network).
-# Input (env): EVENT ACTION SENDER OWNER LABEL ISSUE IS_PR LABELS(comma list) BODY(comment body; untrusted).
+# Input (env): EVENT ACTION SENDER OWNER BOT(the pipeline app's "<slug>[bot]" login) LABEL ISSUE IS_PR LABELS(comma list) BODY(comment body; untrusted).
 # Output: "do=<action>" and "reason=<text>" lines (to $GITHUB_OUTPUT if set, else stdout).
 #   none | screen (owner approved → screen + record) | override (owner approves despite a screen flag)
 #   revoke (someone else edited an approved issue / set the label) | resume (owner answered or said retry)
@@ -11,7 +11,7 @@ set -uo pipefail
 out() { if [ -n "${GITHUB_OUTPUT:-}" ]; then printf 'do=%s\nreason=%s\n' "$1" "$2" >>"$GITHUB_OUTPUT"; else printf 'do=%s\nreason=%s\n' "$1" "$2"; fi; exit 0; }
 labels=",${LABELS:-},"
 owner=0; [ "${SENDER:-}" = "${OWNER:?}" ] && owner=1
-bot=0; [ "${SENDER:-}" = "github-actions[bot]" ] && bot=1
+bot=0; [ -n "${BOT:-}" ] && [ "${BOT%\[bot\]}" != "" ] && [ "${SENDER:-}" = "$BOT" ] && bot=1
 
 case "${EVENT:-}/${ACTION:-}" in
   issues/labeled)

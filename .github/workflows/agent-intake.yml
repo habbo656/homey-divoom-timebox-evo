@@ -7,11 +7,16 @@ on:
   issue_comment:
     types: [created]
 permissions: {}
+env:
+  OWNER: ${{ github.repository_owner }}
+  BOT: ${{ vars.AGENT_BOT_SLUG }}[bot]
 concurrency:
   group: intake-${{ github.event.issue.number }}
   cancel-in-progress: false
 jobs:
   route:
+    # The pipeline's own comments, labels and edits (GitHub App token, so they do trigger workflows) never start anything.
+    if: github.event.sender.login != format('{0}[bot]', vars.AGENT_BOT_SLUG)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -42,15 +47,20 @@ jobs:
     needs: route
     if: needs.route.outputs.do == 'revoke'
     runs-on: ubuntu-latest
+    environment: bot
     permissions:
-      contents: read
-      issues: write
+      contents: read # writes use the bot token
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ github.event.issue.number }}
           REASON: ${{ needs.route.outputs.reason }}
         run: bash scripts/agent/issue.sh revoke "$N" "$REASON"
@@ -124,20 +134,24 @@ jobs:
     needs: [route, screen]
     if: always() && needs.screen.result == 'success'
     runs-on: ubuntu-latest
+    environment: bot
     permissions:
-      contents: read
-      issues: write
-      actions: write
+      contents: read # writes use the bot token
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
       - uses: actions/download-artifact@v4
         with:
           name: screen
           path: ${{ runner.temp }}
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ github.event.issue.number }}
           DO: ${{ needs.route.outputs.do }}
           VERDICT: ${{ needs.screen.outputs.verdict }}
@@ -158,17 +172,20 @@ jobs:
     needs: route
     if: contains(fromJSON('["resume","approve-diff","stop","next","uat-check"]'), needs.route.outputs.do)
     runs-on: ubuntu-latest
+    environment: bot
     permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-      actions: write
+      contents: read # writes use the bot token
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
       - env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
           DO: ${{ needs.route.outputs.do }}
           N: ${{ github.event.issue.number }}
           IS_PR: ${{ github.event.issue.pull_request != null }}

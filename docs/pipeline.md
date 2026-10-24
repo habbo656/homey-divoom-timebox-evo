@@ -81,6 +81,28 @@ State lives in GitHub, written only by deterministic steps: labels (`agent:appro
 bot comments (`agent-approval`, `agent-plan`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
 `agent-diff-approval`, `agent-pairing`, `agent-uat-ready`, `agent-uat-rejected`).
 
+## Bot identity
+Everything the pipeline writes to GitHub — commits, pushes, PRs, comments, labels, merges, tags, dispatches — comes from
+the pipeline's own **GitHub App** (`<slug>[bot]`), never from the owner's account or the generic `github-actions[bot]`
+(ADR 0012). The history and the PR list therefore show at a glance what the owner did and what the agents did.
+- `.github/actions/bot-token` mints a short-lived installation token (`actions/create-github-app-token`, one hour,
+  revoked when the job ends) in deterministic write jobs only; with `git: "true"` it also sets the git author/committer
+  and makes `git push` use the token. These jobs run in the environment `bot` (deployment branch `main`, secret
+  `AGENT_APP_PRIVATE_KEY`); their own `GITHUB_TOKEN` is `contents: read`. Model jobs never see the key or a write token;
+  they only commit locally with the bot's name and email.
+- The hardware job (environment `hardware`, Mac) needs the token only for the pairing comment: it mints it right before
+  `await-device.sh` and revokes it (`DELETE installation/token`) before the tester starts.
+- Repository variables: `AGENT_APP_ID`, `AGENT_BOT_SLUG` (the app slug; workflows use `<slug>[bot]` as `BOT` for REST
+  and event logins and the bare slug for GraphQL `author.login`), `AGENT_BOT_EMAIL`
+  (`<bot user id>+<slug>[bot]@users.noreply.github.com`, so GitHub links the commits to the bot).
+- App permissions (repository, installed on this repository only): Contents, Issues, Pull requests and Actions
+  read/write, Metadata read. **No Workflows permission**, so the bot cannot push `.github/workflows/**`.
+- Events made with an app token, unlike `GITHUB_TOKEN`, trigger workflows: `ci.yml` now runs on agent PRs, and
+  `agent-intake` skips every event sent by the bot.
+- Local Claude Code sessions commit as the bot too: `.claude/settings.json` sets `GIT_AUTHOR_*`/`GIT_COMMITTER_*` to the
+  bot's name and email, so a commit made by an agent locally is the bot's even though the owner pushes it. Commits
+  from the owner's own terminal keep the owner's identity.
+
 ## Security model (public repository)
 The repository is public: anyone can open issues, comment and send fork PRs, and every Actions log and artifact is
 public. Layers, from the outside in:
@@ -99,14 +121,14 @@ public. Layers, from the outside in:
    new dependencies, edits to tooling) as blockers; deterministic merge rules on top.
 5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute (including `homey-env.sh` and `homey-dev-run.mjs`),
    `scripts/probe/`, `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.homeyignore`, lint/TS config): such a PR
-   is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. `GITHUB_TOKEN` cannot
-   push `.github/workflows/**` at all.
+   is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. The bot app has no
+   Workflows permission, so it cannot push `.github/workflows/**` at all.
 6. **Self-hosted runner guard.** `scripts/runner/job-started.sh`, installed outside the checkout as the runner's
    `ACTIONS_RUNNER_HOOK_JOB_STARTED`, refuses every job whose workflow is not from `main`, whose event is not
-   `workflow_dispatch`/`schedule`/push to `main`, or whose triggering actor is not the owner or the bot — so a fork PR or a
+   `workflow_dispatch`/`schedule`/push to `main`, or whose triggering actor is not the owner or the bot app (`RUNNER_GUARD_BOT`) — so a fork PR or a
    branch that edits a workflow to `runs-on: self-hosted` cannot execute on the Mac. CI never uses the self-hosted runner.
-7. **Secrets.** `CLAUDE_CODE_OAUTH_TOKEN` lives in the environments `agents` and `hardware` (deployment branch: `main`
-   only). The Homey key never goes to GitHub: it stays on the Mac in `~/.config/divoom-timebox/homey-api.env`
+7. **Secrets.** `CLAUDE_CODE_OAUTH_TOKEN` lives in the environments `agents` and `hardware`, the bot app's
+   `AGENT_APP_PRIVATE_KEY` in `bot` and `hardware` (deployment branch: `main` only), never in `agents`. The Homey key never goes to GitHub: it stays on the Mac in `~/.config/divoom-timebox/homey-api.env`
    (`chmod 600`), read by `scripts/homey-api.sh`. Webcam photos stay in `.hwtest/` on the Mac and are never uploaded;
    reports and the runner check leave out host names and device ids.
 8. **Owner verification.** Features and bugs are verified twice by the owner: before work (approval) and per milestone
@@ -114,27 +136,33 @@ public. Layers, from the outside in:
 
 ## Owner setup (once)
 On the GitHub Free plan, rulesets/branch protection and environments (with environment secrets and deployment branch
-rules) work only in **public** repositories. Steps 2 and 3 are therefore done right after the repository is made public;
+rules) work only in **public** repositories. Steps 3 and 4 are therefore done right after the repository is made public;
 while it is private, the pipeline cannot start (its model jobs need the `agents` environment).
 
 1. Repository settings → Actions → General: "Require approval for all external contributors" (fork PR runs), workflow
-   permissions "Read repository contents" (jobs request more explicitly), allow GitHub Actions to create and approve pull
-   requests (the pipeline opens and merges PRs).
-2. Environments `agents` and `hardware`: deployment branches `main` only; secret `CLAUDE_CODE_OAUTH_TOKEN` (from
-   `claude setup-token`, billed to the Claude plan) in both; `hardware` also holds `HOMEY_PAT` (Homey Developer Tools
-   personal access token, see "Homey without the cloud").
-3. Branch protection / ruleset on `main`: pull request required, no force pushes, no deletions. Do not require status
-   checks from `ci.yml`: PRs opened with `GITHUB_TOKEN` do not trigger other workflows, so the pipeline runs `gate.yml`
-   itself.
-4. Labels: `agent:approved`, `agent:needs-owner`, `security:flagged`, `owner:review` (plus the existing ones).
-5. Runner (Mac, interactive session so that Bluetooth and camera permissions apply): register it with a neutral name and a
+   permissions "Read repository contents" (jobs request more explicitly). "Allow GitHub Actions to create and approve
+   pull requests" is not needed (the bot app opens and merges the PRs) and can stay off.
+2. Bot app (see "Bot identity"): Settings → Developer settings → GitHub Apps → New GitHub App; name e.g.
+   `timebox-agent` (becomes the slug), homepage = the repository URL, webhook off, the repository permissions listed
+   above, "Only on this account"; generate a private key, then install the app on this repository only. Repository
+   variables `AGENT_APP_ID`, `AGENT_BOT_SLUG`, `AGENT_BOT_EMAIL` (the user id from
+   `gh api 'users/<slug>%5Bbot%5D' --jq .id`).
+3. Environments `agents`, `hardware` and `bot`: deployment branches `main` only; secret `CLAUDE_CODE_OAUTH_TOKEN` (from
+   `claude setup-token`, billed to the Claude plan) in `agents` and `hardware`; `AGENT_APP_PRIVATE_KEY` (the app's
+   `.pem`) in `bot` and `hardware`; `hardware` also holds `HOMEY_PAT` (Homey Developer Tools personal access token, see
+   "Homey without the cloud").
+4. Branch protection / ruleset on `main`: pull request required, no force pushes, no deletions. The pipeline merges
+   without an approving review (autonomous merge, ADR 0006/0011); it runs `gate.yml` itself, so `ci.yml` (which now also
+   runs on agent PRs) need not be a required check.
+5. Labels: `agent:approved`, `agent:needs-owner`, `security:flagged`, `owner:review` (plus the existing ones).
+6. Runner (Mac, interactive session so that Bluetooth and camera permissions apply): register it with a neutral name and a
    work folder outside the home directory (`./config.sh --name hw-runner --work /Users/Shared/hw-runner/_work …`; quote nothing
    with `$HOME`, which `config.sh` stores literally; an existing registration can change `workFolder` in the runner's
-   `.runner` file), `scripts/runner/install-hook.sh <runner dir>`, restart the runner, Homey key
+   `.runner` file), `scripts/runner/install-hook.sh <runner dir> <app slug>`, restart the runner, Homey key
    in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
 
 Check the whole setup with `scripts/repo-check.sh` (read-only, uses `gh api`, so the owner runs it): visibility,
-default token, PR creation by Actions, fork PR approval, both environments with their branch policy and secret, an
+default token, fork PR approval, the three environments with their branch policy and secrets, the bot variables, an
 *active* ruleset on `main`, labels, an online macOS runner and the workflows. A ruleset left at enforcement
 "Disabled" protects nothing.
 
@@ -157,6 +185,7 @@ Pro and is not used). A run that hits the limit says so on the issue and the sch
 ## Local use
 The agents still work in a local Claude Code session: `/review [PR#]`, `/hwtest [scenario]`, `/docs`, and the
 `brainstormer` for new issues. Local sessions never push to `main`, never merge, and leave pipeline work to Actions.
+Their commits carry the bot identity (`.claude/settings.json` `env`, see "Bot identity").
 `scripts/runner-check.sh` and `scripts/hw-preflight.sh` check the bench locally.
 
 ## Safety (agent permissions)

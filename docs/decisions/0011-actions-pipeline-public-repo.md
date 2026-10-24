@@ -1,6 +1,6 @@
 # ADR 0011: Agent pipeline in GitHub Actions for a public repository
 
-**Status:** accepted · **Date:** 2026-10-24 · **Supersedes:** 0003 · **Amends:** 0006 (where agents run, owner channel)
+**Status:** accepted, amended by 0012 · **Date:** 2026-10-24 · **Supersedes:** 0003 · **Amends:** 0006 (where agents run, owner channel)
 
 **Context:** The local pipeline (ADR 0003, 0006) works only while the owner's session runs, needs a terminal with
 `/autopilot`, and reaches the owner through ntfy. The owner wants the agents to run in GitHub Actions with as few manual
