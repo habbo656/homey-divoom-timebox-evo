@@ -6,9 +6,11 @@ cd "$(dirname "$0")/.." || exit 1
 ok=1
 say() { echo "PREFLIGHT $1: $2"; [ "$1" = FAIL ] && ok=0; }
 
-# Local check only (`homey whoami` costs a cloud request and fails during the cloud rate limit).
-if homey select current >/dev/null 2>&1; then say OK "homey CLI configured, Homey selected"
-else say FAIL "homey CLI not logged in or no Homey selected (owner: homey login && homey select)"; fi
+# Dev runs: LAN token mode first (scripts/homey-dev-run.mjs: no cloud login, no rate limit); the cloud login is only the
+# fallback. Local check only (`homey whoami` costs a cloud request and fails during the cloud rate limit).
+if out=$(node scripts/homey-dev-run.mjs check 2>&1); then say OK "dev runs over the LAN (no cloud login)"
+elif homey select current >/dev/null 2>&1; then say INFO "dev runs fall back to the cloud login (${out##*HOMEY-DEV-RUN: })"
+else say FAIL "no LAN key for dev runs and no cloud login (see docs/pipeline.md, \"Homey without the cloud\")"; fi
 
 run=$(scripts/homey-run.sh status)
 case "$run" in

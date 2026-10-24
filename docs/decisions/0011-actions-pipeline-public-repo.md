@@ -13,7 +13,7 @@ machine and branch syncing.
 - Agents run in Actions: plan/implement/docs, review, UAT processing on GitHub-hosted runners; only the hardware test on
   the owner's Mac (self-hosted runner, interactive session for Bluetooth and camera permissions). A reusable
   runner check (`scripts/runner-check.sh`, `.github/actions/runner-check`) proves Bluetooth, BLE permission, webcam,
-  Homey CLI, Homey LAN API and an available TimeBox before every hardware job.
+  Homey LAN API, LAN dev runs (no cloud login) and an available TimeBox before every hardware job.
 - The owner starts and steers work only with the label `agent:approved` and `/agent …` comments; the UAT verdict stays an
   `ACCEPTED`/`REJECTED` comment. ntfy, `/autopilot`, `/implement`, `/uat` and `scripts/autopilot.sh` are removed.
 - Security for the public repository: owner-only triggers; an approval record with a content hash; only owner and bot

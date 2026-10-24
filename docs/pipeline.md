@@ -65,7 +65,7 @@ Pipeline jobs (`agent-pipeline.yml`):
 6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
 7. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
-   Homey CLI, Homey API, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start`, then
+   Homey LAN API, LAN dev run, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start` (`HOMEY_RUN_MODE=lan`: no cloud), then
    `scripts/agent/await-device.sh` (asks the owner to pair if no TimeBox is available, polls 30 min), then the tester
    (`.github/agent/hwtest.md`), finally `homey-run.sh stop` (`--uninstall` before a UAT).
 8. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
@@ -127,6 +127,11 @@ public. Layers, from the outside in:
    `./config.sh remove` and register again), `scripts/runner/install-hook.sh <runner dir>`, restart the runner, Homey key
    in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
 
+Check the whole setup with `scripts/repo-check.sh` (read-only, uses `gh api`, so the owner runs it): visibility,
+default token, PR creation by Actions, fork PR approval, both environments with their branch policy and secret, an
+*active* ruleset on `main`, labels, an online macOS runner and the workflows. A ruleset left at enforcement
+"Disabled" protects nothing.
+
 ## Roles and models
 The agents run on the owner's **Claude Pro** plan via `CLAUDE_CODE_OAUTH_TOKEN`: one usage pool shared with the Claude
 apps (5-hour window plus a weekly cap; Opus drains it about twice as fast as Sonnet; Fable is billed to extra usage on
@@ -167,7 +172,7 @@ The agents still work in a local Claude Code session: `/review [PR#]`, `/hwtest 
 `runner-check.yml`) prints `RUNNER-CHECK OK|FAIL|INFO <check>` lines, sets `ready` and per-check outputs and writes a step
 summary. Checks: `tools`, `bluetooth` (radio on, `blueutil -p`), `ble` (a 4 s bleak scan sees devices: proves the
 macOS Bluetooth permission of the process tree that started the runner), `camera` (`imagesnap -l`: webcam plugged in and
-camera permission), `homey-cli` (local `homey select current`), `homey-api` (token mode on the LAN), `device` (a TimeBox
+camera permission), `homey-cli` (local `homey select current`; INFO only, the cloud login is just the fallback), `homey-api` (token mode on the LAN), `homey-run` (`scripts/homey-dev-run.mjs check`: dev runs over the LAN possible), `device` (a TimeBox
 is paired on the Homey and `available`, i.e. on and connected), `lock`. The Evo does not advertise while the Homey holds
 its link, so `ble` does not require it.
 Verified on the hardware runner (2026-10-24): every check OK except `camera` (webcam unplugged at the time). The runner
@@ -188,7 +193,7 @@ Bench: a Homey, the Timebox Evo paired on it, and a webcam on the Mac pointed at
 | Script | Purpose |
 |---|---|
 | `scripts/hw-preflight.sh` | Homey CLI configured (local check), lock free or held by a kept dev build (INFO; only a lock without a live CLI fails), camera present, Timebox paired on the Homey; drops a Mac Classic link to the Evo (in that state the Evo ignores BLE) |
-| `scripts/homey-run.sh start` / `run [s]` / `wait REGEX [s]` / `log` / `stop [--uninstall]` / `status` | run the app with `homey app run --remote` in the background (never `--clean`). The dev build **stays installed** between test windows: `start` reuses it while the app sources are unchanged and reinstalls only when they changed (every install costs Athom cloud requests); `wait`/`log`/`stop` see only the current window's log, `wait --session`/`log --session` the whole log since the install (app init, first connect and poll of a reused build happened before the window; criteria about a fresh start need `stop --uninstall` + `start`, which costs an install). `stop` ends the window and keeps the build; `stop --uninstall` removes it and frees the BLE link and the lock; an idle build is uninstalled after 8 h without a `start` (`HOMEY_RUN_KEEP`). `run [s]` or a bare number = blocking window (default 60 s, max 300 s); no argument, `-h`/`--help`/`help` or an unknown argument print the usage and exit 2 (never start a run) |
+| `scripts/homey-run.sh start` / `run [s]` / `wait REGEX [s]` / `log` / `stop [--uninstall]` / `status` | run the app on the Homey in the background (remote dev run over the LAN via `scripts/homey-dev-run.mjs`, cloud `homey app run --remote` only as fallback; never `--clean`). The dev build **stays installed** between test windows: `start` reuses it while the app sources are unchanged and reinstalls only when they changed (every install costs Athom cloud requests); `wait`/`log`/`stop` see only the current window's log, `wait --session`/`log --session` the whole log since the install (app init, first connect and poll of a reused build happened before the window; criteria about a fresh start need `stop --uninstall` + `start`, which costs an install). `stop` ends the window and keeps the build; `stop --uninstall` removes it and frees the BLE link and the lock; an idle build is uninstalled after 8 h without a `start` (`HOMEY_RUN_KEEP`). `run [s]` or a bare number = blocking window (default 60 s, max 300 s); no argument, `-h`/`--help`/`help` or an unknown argument print the usage and exit 2 (never start a run) |
 | `scripts/homey-api.sh <manager> <operation> …` | `homey api` in token mode (LAN only, no Athom cloud, see below); refuses `raw` (and its aliases `call`/`request`) and `delete-*`; the deny list does not see calls inside repo scripts, so this refusal is the guard. Always use it instead of plain `homey api` |
 | `scripts/homey-api.sh devices set-capability-value --device-id <id> --capability-id <cap> --value <v>` / `scripts/homey-api.sh flow run-flow-card-action …` | drive the running app locally (no cloud) |
 | `scripts/homey-api.sh devices set-device-settings --id $D --body '{"clock_style":"boxed"}'` | change device settings (a flat, partial body works) |
@@ -196,17 +201,33 @@ Bench: a Homey, the Timebox Evo paired on it, and a webcam on the Mac pointed at
 | `scripts/soak.sh --device <id> --minutes <n> [--idle] [--every 300] [--label <name>]` | long-run driver (#36): rotates through dim, text, clock, lighting, countdown, 4K image URL, temperature and mode (or sends nothing with `--idle`), runs `mem` every 30 min and takes a photo every 60 min; log in `.hwtest/<branch>/soak-<label>.log`; see `docs/testing/stability.md` |
 | `scripts/hw-snap.sh NAME [delay]` | webcam photo to `.hwtest/<branch>/NN-NAME.jpg` (gitignored); the tester views it with Read |
 
-**Homey API without the cloud rate limit (#80).** Every plain `homey api …` call first makes ~3 Athom cloud requests
-(profile, Homey list, delegation token) before the local request; a hardware scenario with dozens of calls hits the
-cloud rate limit ("Too many requests", locked out for ~40 min). `scripts/homey-api.sh` passes `--token`/`--address`, the
-CLI's token mode, which talks only to the Homey on the LAN. Owner setup: create an API key in my.homey.app → Settings →
-API Keys (scopes: devices read + control, flows read + start, apps read + control) and set `HOMEY_TOKEN` and
-`HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`), preferably in the gitignored
-`.homey-api.env` (`KEY=VALUE` lines, `chmod 600`); the `env` of `.claude/settings.local.json` also works but exposes the
-key to every agent shell. Without a key the wrapper falls back to the cloud login and
-says so; `scripts/hw-preflight.sh` prints the active mode. `homey app run` still uses the cloud login (a few calls per
-install), which is why `scripts/homey-run.sh` keeps the build installed and reinstalls only after source changes; the
-scripts check the CLI with the local `homey select current`, not with `homey whoami` (a cloud call).
+**Homey without the cloud (#80, LAN dev runs 2026-10-24).** Every Homey CLI command that resolves "the selected
+Homey" first makes ~3 Athom cloud requests (profile, Homey list, delegation token) before it talks to the Homey on the
+LAN; a hardware scenario with dozens of calls, or several installs, hits the cloud rate limit ("Too many requests",
+locked out for ~40 min). Both Homey paths therefore use an owner **API key** on the LAN and make no cloud request:
+- `scripts/homey-api.sh` passes `--token`/`--address` to `homey api` (the CLI's own token mode).
+- `scripts/homey-run.sh` starts dev builds through `scripts/homey-dev-run.mjs`, which builds the same LAN-only Homey
+  object (`HomeyAPIV3Local` with the key) and hands it to the CLI's own `App.run` (remote mode) in place of
+  `AthomApi.getActiveHomey()`. Install, log stream, and the SIGTERM uninstall are the CLI's unchanged code; only the
+  cloud lookup is skipped, so no `homey login` is needed. `node scripts/homey-dev-run.mjs check` verifies reachability,
+  the key and its scope without installing anything (the probe: a non-existent devkit session answers 404 with the
+  scope `homey.app`, 403 "Missing Scopes" without it, 401 for a bad key; verified 2026-10-24).
+  `HOMEY_RUN_MODE=lan` (set by the pipeline's hardware job) requires this path; `auto` (default) falls back to
+  `homey app run --remote` with the cloud login and says so; `cloud` forces the fallback. The wrapper depends on the
+  CLI's internal module layout (`services/AthomApi.js`, `lib/AppFactory.js`; checked with homey 4.5.3): after a CLI
+  update, run `check` and one `start`.
+- Not used: the CLI's `HOMEY_PAT` (an Athom cloud personal access token) replaces only the interactive login; the cloud
+  lookups, and with them the rate limit, remain.
+
+Owner setup: create an API key in my.homey.app → Settings → API Keys with the scopes devices read + control, flows read
++ start, apps read + control, and the scope to **install and run apps** (`homey.app`, needed for dev runs), and set
+`HOMEY_TOKEN` and `HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`) in
+`~/.config/divoom-timebox/homey-api.env` (the runner and local sessions) or the gitignored `.homey-api.env` in the
+checkout (`KEY=VALUE` lines, `chmod 600`). `scripts/hw-preflight.sh` and `scripts/runner-check.sh` (check `homey-run`)
+print the active mode. Without a key both wrappers fall back to the cloud login, which the scripts check with the local
+`homey select current`, not with `homey whoami` (a cloud call). `scripts/homey-run.sh` still keeps the build installed
+between test windows and reinstalls only after source changes: an install takes about a minute and drops the devices
+paired with the dev build.
 
 Link tests (#21 and later): `DEBUG=1` is set by `homey app run`, which activates the dev harness (`src/dev`). Drive it by
 writing the app setting `devLink` (`scripts/homey-api.sh apps set-app-setting --id com.habbo656.divoom-timebox --name devLink

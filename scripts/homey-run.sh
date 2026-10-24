@@ -2,7 +2,12 @@
 # Run the app on the real Homey in dev mode (--remote: executes on the Homey) and capture its log.
 # Safe wrapper for agents: single hardware user (lock), never uses --clean (keeps paired devices).
 #
-# The installed dev build is KEPT between test windows: every install costs Athom cloud requests ("Too many requests").
+# Homey access: with an owner API key (HOMEY_TOKEN/HOMEY_ADDRESS, see scripts/homey-api.sh) the run goes through
+# scripts/homey-dev-run.mjs, which hands the CLI a LAN-only Homey: no cloud login, no cloud request, no rate limit.
+# HOMEY_RUN_MODE=lan (pipeline) requires that path, =cloud forces the plain `homey app run --remote` (Athom cloud login,
+# a few cloud requests per install), =auto (default) uses LAN when the key works and falls back to the cloud with a note.
+#
+# The installed dev build is KEPT between test windows (an install takes a minute and drops paired devices).
 # `start` reuses the running build when the app sources are unchanged and reinstalls only when they changed. The build
 # is uninstalled by `stop --uninstall` (e.g. before a Mac BLE probe, which needs the link) or after HOMEY_RUN_KEEP
 # seconds (default 28800 = 8 h) without a `start`.
@@ -21,7 +26,7 @@
 #   homey-run.sh status               installed build hash, idle deadline, alive or not
 #   homey-run.sh [-h|--help|help]     print this usage (exit 2); no argument or an unknown one never starts a run
 #
-# Exit codes: 2 = usage, 3 = hardware lock held by another process, 4 = Homey CLI not ready, 1 = other failure.
+# Exit codes: 2 = usage, 3 = hardware lock held by another process, 4 = Homey not reachable / CLI not ready, 1 = other.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 state=${TMPDIR:-/tmp}/divoom-hw
@@ -54,7 +59,7 @@ window() {
 # The CLI of the installed build is still running (checks the command too, so a reused PID does not count).
 alive() {
   local pid; pid=$(cat "$lock/app.pid" 2>/dev/null) || return 1
-  [ -n "$pid" ] && ps -p "$pid" -o command= 2>/dev/null | grep -q 'app run'
+  [ -n "$pid" ] && ps -p "$pid" -o command= 2>/dev/null | grep -qE 'app run|homey-dev-run\.mjs run'
 }
 # Hash of everything that goes into the build; docs, scripts, tests and pipeline files do not trigger a reinstall.
 build_hash() {
@@ -64,9 +69,16 @@ build_hash() {
     (cd "$root" && xargs -0 shasum 2>/dev/null) | shasum | cut -c1-12
 }
 
-preflight() {
+preflight() { # sets $runner: lan | cloud
+  local mode=${HOMEY_RUN_MODE:-auto} out
+  if [ "$mode" != cloud ]; then
+    if out=$(node "$root/scripts/homey-dev-run.mjs" check 2>&1); then runner=lan; return 0; fi
+    [ "$mode" = lan ] && { echo "$out"; echo "HOMEY-RUN: LAN token mode required (HOMEY_RUN_MODE=lan) but not available"; exit 4; }
+    echo "HOMEY-RUN: LAN token mode not available, falling back to the cloud login (${out##*HOMEY-DEV-RUN: })"
+  fi
   # Local check only: `homey whoami` would cost a cloud request; a missing login shows as the CLI's own error in the log.
   homey select current >/dev/null 2>&1 || { echo "HOMEY-RUN: no Homey selected (owner: homey login && homey select)"; exit 4; }
+  runner=cloud
 }
 take_lock() {
   if ! mkdir "$lock" 2>/dev/null; then
@@ -130,12 +142,13 @@ case "$cmd" in
       rm -rf "$lock"
     fi
     preflight; take_lock
-    echo "$hash" >"$lock/hash"; renew
+    echo "$hash" >"$lock/hash"; echo "$runner" >"$lock/runner"; renew
     : >"$log"; begin_window
     # Watchdog: runs the app until it exits or the idle deadline passes (renewed by every start), then uninstalls it.
     nohup bash -c '
       cd "$3" || exit 1
-      homey app run --remote >>"$1" 2>&1 & app=$!
+      if [ "$4" = lan ]; then node scripts/homey-dev-run.mjs run >>"$1" 2>&1 & app=$!
+      else homey app run --remote >>"$1" 2>&1 & app=$!; fi
       echo "$app" >"$2/app.pid"
       while kill -0 "$app" 2>/dev/null; do
         [ "$(date +%s)" -ge "$(cat "$2/deadline" 2>/dev/null || echo 0)" ] && break
@@ -147,9 +160,9 @@ case "$cmd" in
       else
         echo "HOMEY-RUN: process exited (build no longer running)" >>"$1"
       fi
-      [ "$(cat "$2/pid" 2>/dev/null)" = "$$" ] && rm -rf "$2"' _ "$log" "$lock" "$root" >/dev/null 2>&1 &
+      [ "$(cat "$2/pid" 2>/dev/null)" = "$$" ] && rm -rf "$2"' _ "$log" "$lock" "$root" "$runner" >/dev/null 2>&1 &
     echo $! >"$lock/pid"
-    echo "HOMEY-RUN: installing build $hash and running it in the background (kept installed; log: $log)"
+    echo "HOMEY-RUN: installing build $hash and running it in the background ($runner; kept installed; log: $log)"
     ;;
   wait)
     shift; [ "${1:-}" = "--session" ] && { session=1; shift; }
@@ -178,7 +191,7 @@ case "$cmd" in
     ;;
   status)
     if alive; then
-      echo "HOMEY-RUN: installed build $(cat "$lock/hash"), current sources $(build_hash), idle uninstall at $(date -r "$(cat "$lock/deadline")" '+%F %T')"
+      echo "HOMEY-RUN: installed build $(cat "$lock/hash") ($(cat "$lock/runner" 2>/dev/null || echo cloud)), current sources $(build_hash), idle uninstall at $(date -r "$(cat "$lock/deadline")" '+%F %T')"
     else
       echo "HOMEY-RUN: no build running"
     fi

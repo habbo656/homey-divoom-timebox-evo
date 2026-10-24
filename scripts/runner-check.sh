@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Check that this machine (the self-hosted runner or the owner's Mac) can do hardware work.
 # Usage: runner-check.sh [--require LIST] [--scan SECONDS]
-#   LIST: comma-separated checks that must be OK (default: bluetooth,homey-api,device); the others only inform.
+#   LIST: comma-separated checks that must be OK (default: bluetooth,homey-api,homey-run,device); the others only inform.
 # Checks: tools, bluetooth (radio on), ble (bleak scan works = macOS Bluetooth permission for this process tree),
-#         camera (webcam visible = camera permission), homey-cli (local login), homey-api (LAN token mode reaches the Homey),
+#         camera (webcam visible = camera permission), homey-cli (cloud login; only the fallback needs it), homey-api (LAN
+#         token mode reaches the Homey), homey-run (the key may run dev builds over the LAN: no cloud, no rate limit),
 #         device (a Timebox is paired on the Homey and available = on and connected), lock (no foreign hardware run).
 # Prints "RUNNER-CHECK OK|FAIL|INFO <check>: …" lines and "RUNNER-CHECK: ready|NOT ready"; exit 0 only if every
 # required check is OK. In GitHub Actions it also writes <check>=ok|fail outputs, ready=true|false and a step summary.
@@ -11,7 +12,7 @@
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root" || exit 1
-require="bluetooth,homey-api,device"; scan=4
+require="bluetooth,homey-api,homey-run,device"; scan=4
 while [ $# -gt 0 ]; do
   case "$1" in
     --require) require="${2:?--require LIST}"; shift 2 ;;
@@ -72,8 +73,12 @@ if command -v imagesnap >/dev/null && cam=$(imagesnap -l 2>/dev/null | grep '=>'
 else say FAIL camera "no video device (webcam unplugged, or no camera permission for this process tree)"; fi
 
 # homey CLI (local check only; `homey whoami` costs a cloud request)
-homey select current >/dev/null 2>&1 && say OK homey-cli "logged in, Homey selected" \
-  || say FAIL homey-cli "not logged in or no Homey selected (owner: homey login && homey select)"
+homey select current >/dev/null 2>&1 && say OK homey-cli "logged in, Homey selected (cloud fallback only)" \
+  || say INFO homey-cli "no cloud login (fine: dev runs use the LAN key)"
+
+# dev runs over the LAN (scripts/homey-dev-run.mjs): reachable, key accepted, scope homey.app
+if out=$(node scripts/homey-dev-run.mjs check 2>&1); then say OK homey-run "LAN dev run possible (no cloud login, no rate limit)"
+else say FAIL homey-run "${out##*HOMEY-DEV-RUN: }"; fi
 
 # homey API (token mode = LAN, no cloud rate limit) and the Timebox device
 mode=$(scripts/homey-api.sh --mode 2>/dev/null)

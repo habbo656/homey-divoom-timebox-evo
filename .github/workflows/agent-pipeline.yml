@@ -399,6 +399,9 @@ jobs:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 120
     environment: hardware
+    env:
+      # Dev runs go over the LAN with the owner's API key (scripts/homey-dev-run.mjs): no Athom cloud, no rate limit.
+      HOMEY_RUN_MODE: lan
     permissions:
       contents: read
       issues: write
@@ -430,7 +433,7 @@ jobs:
       - id: rc
         uses: ./.github/actions/runner-check
         with:
-          require: tools,bluetooth,ble,camera,homey-cli,homey-api,lock
+          require: tools,bluetooth,ble,camera,homey-api,homey-run,lock
           fail: "false"
       - name: Build and start the dev run
         if: steps.rc.outputs.ready == 'true'

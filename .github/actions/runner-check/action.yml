@@ -1,12 +1,12 @@
 name: runner-check
 description: >
   Verify that the self-hosted hardware runner can do hardware work: Bluetooth radio and BLE permission, webcam,
-  Homey CLI login, Homey API on the LAN, and a Timebox paired on the Homey that is available (on and connected).
+  Homey API on the LAN, dev runs over the LAN (no cloud), and a Timebox paired on the Homey that is available (on and connected).
   Wraps scripts/runner-check.sh; use after actions/checkout.
 inputs:
   require:
-    description: Comma-separated checks that must be OK (tools, bluetooth, ble, camera, homey-cli, homey-api, device, lock)
-    default: bluetooth,ble,homey-cli,homey-api,device
+    description: Comma-separated checks that must be OK (tools, bluetooth, ble, camera, homey-cli, homey-api, homey-run, device, lock)
+    default: bluetooth,ble,homey-api,homey-run,device
   scan-seconds:
     description: Length of the BLE scan
     default: "4"
