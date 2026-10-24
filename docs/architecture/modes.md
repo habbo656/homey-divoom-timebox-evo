@@ -76,6 +76,6 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
     - Limits: if the shadow equals a mode code (for example d0 `00`), a switch back to that mode at the device is not detected
       (d0 does not change); the tracking is in memory only, an app restart forgets it (the tile then follows d0); a text,
       image or countdown shown over the noise meter does not clear the tracking, and the end of an image or "Stop
-      countdown" re-sends `72 02 01`. Which d0 the device reports under the noise meter was measured in the #3 hardware test
+      countdown" re-sends `72 02 01`. Which d0 the device reports under the noise meter is recorded by the #3 hardware test
       ([status.md](../protocol/status.md)); `5f`, `26` and native text over it are still open
       ([open-questions](../protocol/open-questions.md)).
