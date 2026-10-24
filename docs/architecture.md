@@ -65,7 +65,7 @@ Each area file holds the verbatim text of its former section; code comments cite
 Protocol modules built so far: `errors.ts` (`ProtocolError`, `FrameError`), `hex.ts` (`fromHex`, `toHex`),
 `envelope.ts` (`envelope(payload, seq)`, `SequenceCounter` — one instance per connection, `reset()` on connect),
 `replies.ts` (`splitFrames`, `decodeSppFrame`, `parseReply`), `validate.ts` (argument checks: `intInRange`, `u8`, `le16`,
-`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`; return
+`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `startNoiseMeter`; return
 the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `DeviceStatus`, `decodeCustomPage(reply)` -> raw page byte of `bd 55 17 PP`, `isCountdownEnd(reply)` for the unsolicited `71 55 03 01 01 00`, `isCustomPageReply(reply)` as the `accept` filter of the `bd 17 ff` read).
 
 ## Module status
@@ -75,8 +75,8 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/app.ts` | App class, log only | #18 | done |
 | `src/device/TimeboxDriver.ts` | `onPair` wiring | #46 | done (pairing part of #22) |
 | `src/device/pairing.ts` | candidate selection, verify, pair session events | #46 | done (pairing part of #22) |
-| `src/device/TimeboxController.ts` | Homey-free device logic: `dim` (held while the panel is off and sent at power on, #62), power (`onoff`) and lighting colour, channel switching and sync, clock face (incl. the small clock re-send, `CLOCK_RESEND_DELAY_MS`), native text (`showText`, `stopText`), countdown (`startCountdown`, `stopCountdown`, the "countdown ended" report `countdownReport`, which also sets `onoff` true when the end display lights a panel that was off, #125), static image (`showImage`, `showImageFrom`), weather state (`setWeather`, hold/flush), status sync, availability with grace, fixed status poll, time sync | #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #62, #88, #101, #125, #141, #151 | done |
-| `src/device/channel.ts` | pure channel model: ids, `46` d0 codes, `channelCommand`, custom page ids, `otherModeName` | #24, #27, #68 | done |
+| `src/device/TimeboxController.ts` | Homey-free device logic: `dim` (held while the panel is off and sent at power on, #62), power (`onoff`) and lighting colour, channel switching and sync, noise meter tracking (#3, noise shadow), clock face (incl. the small clock re-send, `CLOCK_RESEND_DELAY_MS`), native text (`showText`, `stopText`), countdown (`startCountdown`, `stopCountdown`, the "countdown ended" report `countdownReport`, which also sets `onoff` true when the end display lights a panel that was off, #125), static image (`showImage`, `showImageFrom`), weather state (`setWeather`, hold/flush), status sync, availability with grace, fixed status poll, time sync | #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #62, #88, #101, #125, #141, #151 | done |
+| `src/device/channel.ts` | pure channel model: ids, `46` d0 codes (the noise meter has none), `channelCommand`, custom page ids, `otherModeName` | #24, #27, #68, #3 | done |
 | `src/device/lighting.ts` | pure lighting model: hue/saturation <-> RGB, `powerOffCommand` | #26 | done |
 | `src/device/clock.ts` | pure clock face model: style ids, hex colour parsing, `resolveClockSettings` (incl. `clock_animations`), `resolveStoredClockColor`, `resolveStoredShownStyle`, `CLOCK_HOUR24` | #25, #85 | done |
 | `src/device/timeSync.ts` | pure time sync helpers: local time in an IANA zone, UTC offset, `autoSyncReason` | #23 | done |
@@ -92,7 +92,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/protocol/envelope.ts` | `FE EF AA 55` envelope + sequence counter | #19 | done |
 | `src/protocol/replies.ts` | SPP frame splitting, reply/notification parsing | #19 | done |
 | `src/protocol/errors.ts`, `hex.ts` | error types, hex helpers | #19 | done |
-| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`), argument validation | #20, #28, #30, #31, #33, #106 | done |
+| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`, `startNoiseMeter`), argument validation | #20, #28, #30, #31, #33, #106, #3 | done |
 | `src/protocol/status.ts` | status `46` decoding, `bd 17` custom page decoding, `isCountdownEnd` (`71 55 03 01 01 00`) and `isCustomPageReply` | #20, #101 | done |
 | `src/transport/Transport.ts`, `errors.ts`, `chunk.ts` | transport interface + `TransportError`, manager errors, 20-byte chunking | #21 | done |
 | `src/transport/ConnectionManager.ts` | queue, request/reply (optional `accept` filter), polling, reconnect backoff, `connectFailed` event, timing option validation | #21, #22, #101, #48 | done |

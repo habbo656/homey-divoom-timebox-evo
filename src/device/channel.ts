@@ -2,28 +2,32 @@
 // codes of `46` d0 and the command that switches to a mode. Pure, no Homey and no link.
 import { ArgumentError, formatArgValue } from './argumentError';
 import type { ArgumentField } from './argumentError';
-import { setChannel, setClock, setLighting } from '../protocol/commands';
+import { setChannel, setClock, setLighting, startNoiseMeter } from '../protocol/commands';
 import type { DeviceStatus, Rgb } from '../protocol/status';
 import type { ClockFace } from './clock';
 
 /** The enum values of the capability (stable ids, never translated). */
-export const CHANNEL_IDS = ['clock', 'lighting', 'custom'] as const;
+export const CHANNEL_IDS = ['clock', 'lighting', 'custom', 'noise_meter'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
+/** A mode with a device code in `46` d0. The noise meter has none: the device reports no known code under it. */
+export type CodedChannelId = Exclude<ChannelId, 'noise_meter'>;
+
 /** Device codes of the modes (`45 NN`, `46` d0). */
-const CODES: Record<ChannelId, number> = {
+const CODES: Record<CodedChannelId, number> = {
   clock: 0x00,
   lighting: 0x01,
   custom: 0x05,
 };
 
-export function channelCode(id: ChannelId): number {
+export function channelCode(id: CodedChannelId): number {
   return CODES[id];
 }
 
-/** The mode of a `46` d0 code, or null for a code that is not one of the three (cloud, visualizer, text, games, alarms, ...). */
-export function channelFromCode(code: number): ChannelId | null {
-  return CHANNEL_IDS.find((id) => CODES[id] === code) ?? null;
+/** The mode of a `46` d0 code, or null for a code that is not one of the three coded modes (cloud, visualizer, text, games, alarms, ...). Never the noise meter. */
+export function channelFromCode(code: number): CodedChannelId | null {
+  const coded = Object.keys(CODES) as CodedChannelId[];
+  return coded.find((id) => CODES[id] === code) ?? null;
 }
 
 /** The name of a mode that the device can show but the app does not offer: `02` cloud, `04` visualizer; null for any other code. */
@@ -85,7 +89,8 @@ export interface ChannelOverride {
  *   `dim` does not jump; falls back to the status brightness, then 100), effect 0, power on (`45 01 RRGGBB BB 00 01 000000`);
  *   an `lighting` override replaces the colour (as given; #26);
  * - clock: the full form `45 00 HH TT 01 WW EE CC RR GG BB` built from `clock` (the clock face; #25);
- * - custom: `45 05` (the custom page is a second command, see `setCustomPage`).
+ * - custom: `45 05` (the custom page is a second command, see `setCustomPage`);
+ * - noise_meter: `72 02 01`.
  */
 export function channelCommand(
   id: ChannelId,
@@ -109,6 +114,8 @@ export function channelCommand(
     }
     case 'clock':
       return setClock(clock);
+    case 'noise_meter':
+      return startNoiseMeter();
     default:
       return setChannel(CODES[id]);
   }

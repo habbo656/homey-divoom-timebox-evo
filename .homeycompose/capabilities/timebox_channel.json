@@ -11,6 +11,7 @@
   "values": [
     { "id": "clock", "title": { "en": "Clock", "de": "Uhr" } },
     { "id": "lighting", "title": { "en": "Lighting", "de": "Beleuchtung" } },
-    { "id": "custom", "title": { "en": "Custom", "de": "Benutzerdefiniert" } }
+    { "id": "custom", "title": { "en": "Custom", "de": "Benutzerdefiniert" } },
+    { "id": "noise_meter", "title": { "en": "Noise meter", "de": "Lärmmesser" } }
   ]
 }

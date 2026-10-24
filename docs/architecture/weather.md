@@ -46,7 +46,7 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
       Timebox is on and connected together with the last weather (clear if never set) / last temperature (0 °C if never set), to turn off "Show weather" /
       "Show temperature" if that part is not set, and that the automatic weather from Open-Meteo overwrites temperature and weather at each update. The
       setting `clock_temperature` has a hint naming the Set temperature card and Open-Meteo (like `clock_weather` for Set weather).
-    - Log prefix `[device]`: `weather -> <t> °C <cond> (<label>): 5f TT WW` (the label says what triggered the send: `flow`, `flow temperature`, `flow condition`, `open-meteo`, `connect`, `held`; e.g. `weather -> 23 °C clear (flow temperature): 5f 17 01`), `weather held (<not connected|panel off|text running>): <label>`
+    - Log prefix `[device]`: `weather -> <t> °C <cond> (<label>): 5f TT WW` (the label says what triggered the send: `flow`, `flow temperature`, `flow condition`, `open-meteo`, `connect`, `held`; e.g. `weather -> 23 °C clear (flow temperature): 5f 17 01`), `weather held (<not connected|panel off|text running|image shown|noise meter shown>): <label>`
       (once, when `setWeather` could not send), `weather send failed: <msg>`. Log prefix `[weather]` (WeatherUpdater): `automatic weather on (every N min)`, `automatic weather off`,
       `open-meteo: <t> °C (raw <x>), code <c> -> <cond>`, `open-meteo: temperature <r> °C out of range, clamped to <c> °C`, `open-meteo failed: <msg>; retry in N min`,
       `open-meteo: Homey has no location`, `open-meteo: unknown weather code <c>, not sent`.

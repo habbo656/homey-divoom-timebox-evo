@@ -4,7 +4,7 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
 
   - Mode picker (#24, reduced in #68; `src/device/channel.ts` pure, `TimeboxController` logic): capability `timebox_channel`
     (title "Mode" / "Modus"; the id and all code identifiers keep the word "channel"; `.homeycompose/capabilities/timebox_channel.json`: enum + `picker`, en/de, driver capabilities `["onoff", "dim", "light_hue", "light_saturation", "timebox_channel"]`).
-    Three stable ids (`CHANNEL_IDS`, never translated) and `46` d0 codes: `clock` 00, `lighting` 01, `custom` 05. Cloud (`02`),
+    Four stable ids (`CHANNEL_IDS`, never translated); `clock` 00, `lighting` 01, `custom` 05 have `46` d0 codes, `noise_meter` (#3, `72 02 01`) has none. Cloud (`02`),
     visualizer (`04`) and scoreboard (`06`) are not offered since #68; `45 03` is never built. `setChannel(id)` (capability listener and Flow action share it)
     validates the id (`parseChannelId`, `ArgumentError`, a `RangeError`),
     validates and builds the command with `channelCommand(id, lastStatus, knownBrightness, clockFace, override?)` (`override` is a `ChannelOverride` = `{lighting?: {color}}`; the shared private `switchTo(id, face, override?)` (`override` there also carries `customPage?` and `keepTile?`, handled by the controller, not by `channelCommand`), which `setClockSettings`, `showClock`, power on, the tile colour path (`setTileColor`) and the custom page action also use) BEFORE the not-connected check and before it supersedes anything (an invalid request throws `RangeError` and leaves a pending switch alone); then throws `device.error.not_connected` without a live link (nothing queued), sends it bounded (`sendBounded`, 10 s) and
@@ -57,3 +57,25 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
     - Scoreboard limitation: the app no longer offers the scoreboard (`45 06`), and the scoreboard never changes `46` d0
       (protocol section 5.1), so a scoreboard shown on the device (for example via the Divoom app) is invisible to the app: the tile keeps the previous mode.
       The former scoreboard shadow logic was removed.
+
+  - Noise meter (#3; `startNoiseMeter()` = `72 02 01`, reply `72 55 02`): the id `noise_meter` ("Noise meter" / "Lärmmesser") is in the
+    capability enum and in the dropdowns of the mode condition and action. It is not a `45` mode and has no `46` d0 code
+    (`channelFromCode` never returns it), so the app tracks it itself, like the static image (B3 in [images](images.md)).
+    - Switch: `setChannel('noise_meter')` sends `72 02 01` (no `45`), then confirms with `46`: any d0 confirms
+      (`channel confirmed: noise_meter (device reports channel code 0x..)`, never a mismatch) and becomes the "noise shadow"
+      (`noiseShadow`); `noiseActive` is set. Any other mode change ends the tracking (`noise meter ended (mode change)`),
+      as do power off (`noise meter ended (power off)`; the mode from before off stays, so power on sends `72 02 01` again)
+      and a tile colour change (switches to lighting). An unconfirmed switch fails like other modes (#141) but keeps the
+      mode; the first later report becomes the shadow (`noise meter shadow: device reports channel code 0x..`).
+    - Noise shadow rule (like image B3): while tracked, reports equal to the shadow and codes that are neither a mode nor a
+      removed mode are ignored (no tile write, no trigger). A different known code is a mode change at the device: the
+      tracking ends (`noise meter ended (device mode change): channel code 0x.. -> 0x..`) and the report is handled normally
+      (this also holds for the first status of a new session; an equal first status keeps the noise meter across a reconnect).
+    - Weather is held while tracked (`weather held (noise meter shown)`, `weatherHold()` reason `noise meter shown`) and sent
+      by the 60 s check after it ended.
+    - Limits: if the shadow equals a mode code (for example d0 `00`), a switch back to that mode at the device is not detected
+      (d0 does not change); the tracking is in memory only, an app restart forgets it (the tile then follows d0); a text,
+      image or countdown shown over the noise meter does not clear the tracking, and the end of an image or "Stop
+      countdown" re-sends `72 02 01`. Which d0 the device reports under the noise meter is recorded by the #3 hardware test
+      ([status.md](../protocol/status.md)); `5f`, `26` and native text over it are still open
+      ([open-questions](../protocol/open-questions.md)).

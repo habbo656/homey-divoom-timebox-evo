@@ -78,8 +78,8 @@
         "de": "Modus !{{ist|ist nicht}} ..."
       },
       "hint": {
-        "en": "Checks which mode the TimeBox shows: clock, lighting or custom.",
-        "de": "Prüft, welchen Modus die TimeBox zeigt: Uhr, Beleuchtung oder Benutzerdefiniert."
+        "en": "Checks which mode the TimeBox shows: clock, lighting, custom or noise meter.",
+        "de": "Prüft, welchen Modus die TimeBox zeigt: Uhr, Beleuchtung, Benutzerdefiniert oder Lärmmesser."
       },
       "titleFormatted": {
         "en": "Mode !{{is|is not}} [[channel]]",
@@ -114,6 +114,13 @@
                 "en": "Custom",
                 "de": "Benutzerdefiniert"
               }
+            },
+            {
+              "id": "noise_meter",
+              "label": {
+                "en": "Noise meter",
+                "de": "Lärmmesser"
+              }
             }
           ]
         }
@@ -132,8 +139,8 @@
         "de": "Zu Modus [[channel]] wechseln"
       },
       "hint": {
-        "en": "Switches the TimeBox display to the chosen mode. Lighting uses the stored colour.",
-        "de": "Schaltet die Anzeige der TimeBox auf den gewählten Modus. Beleuchtung nutzt die gespeicherte Farbe."
+        "en": "Switches the TimeBox display to the chosen mode: clock, lighting (uses the stored colour), custom or noise meter.",
+        "de": "Schaltet die Anzeige der TimeBox auf den gewählten Modus: Uhr, Beleuchtung (nutzt die gespeicherte Farbe), Benutzerdefiniert oder Lärmmesser."
       },
       "args": [
         {
@@ -163,6 +170,13 @@
               "label": {
                 "en": "Custom",
                 "de": "Benutzerdefiniert"
+              }
+            },
+            {
+              "id": "noise_meter",
+              "label": {
+                "en": "Noise meter",
+                "de": "Lärmmesser"
               }
             }
           ]
