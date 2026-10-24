@@ -65,7 +65,7 @@ Pipeline jobs (`agent-pipeline.yml`):
 6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
 7. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
-   Homey LAN API, LAN dev run, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start` (`HOMEY_RUN_MODE=lan`: no cloud), then
+   Homey LAN API, LAN dev run, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start` (`HOMEY_RUN_MODE=auto`: LAN, else cloud with `HOMEY_PAT`), then
    `scripts/agent/await-device.sh` (asks the owner to pair if no TimeBox is available, polls 30 min), then the tester
    (`.github/agent/hwtest.md`), finally `homey-run.sh stop` (`--uninstall` before a UAT).
 8. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
@@ -97,7 +97,7 @@ public. Layers, from the outside in:
    validate and publish it.
 4. **Independent review** by a fresh reviewer that treats injection symptoms (unrelated code, network calls, env access,
    new dependencies, edits to tooling) as blockers; deterministic merge rules on top.
-5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute,
+5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute (including `homey-env.sh` and `homey-dev-run.mjs`),
    `scripts/probe/`, `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.homeyignore`, lint/TS config): such a PR
    is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. `GITHUB_TOKEN` cannot
    push `.github/workflows/**` at all.
@@ -212,23 +212,27 @@ locked out for ~40 min). Both Homey paths therefore use an owner **API key** on 
   cloud lookup is skipped, so no `homey login` is needed. `node scripts/homey-dev-run.mjs check` verifies reachability,
   the key and its scope without installing anything (the probe: a non-existent devkit session answers 404 with the
   scope `homey.app`, 403 "Missing Scopes" without it, 401 for a bad key; verified 2026-10-24).
-  `HOMEY_RUN_MODE=lan` (set by the pipeline's hardware job) requires this path; `auto` (default) falls back to
-  `homey app run --remote` with the cloud login and says so; `cloud` forces the fallback. The wrapper depends on the
+  `HOMEY_RUN_MODE=auto` (default, also set by the pipeline's hardware job) uses it when the key works and otherwise
+  falls back to `homey app run --remote` via the cloud, authenticated with `HOMEY_PAT`; `lan` requires the LAN path;
+  `cloud` forces the fallback. The wrapper depends on the
   CLI's internal module layout (`services/AthomApi.js`, `lib/AppFactory.js`; checked with homey 4.5.3): after a CLI
   update, run `check` and one `start`.
 - Verified on hardware 2026-10-24 (`HOMEY_RUN_MODE=lan`): install, "Running", device connect, poll and time sync, and
   `stop --uninstall` all ran over the LAN without a cloud login. The dev build took over the TimeBox already paired with
   the installed app (no re-pairing); `stop --uninstall` removed the app from the Homey, and the device stayed listed as
   unavailable until the app was installed again.
-- Not used: the CLI's `HOMEY_PAT` (an Athom cloud personal access token) replaces only the interactive login; the cloud
-  lookups, and with them the rate limit, remain.
+- **`HOMEY_PAT`** (personal access token from the Homey Developer Tools, read by the Homey CLI): every remaining cloud
+  path of the CLI (`homey app run` in cloud mode, `homey api` without a key, `homey select`, the owner's
+  `homey app install`) authenticates with it instead of the OAuth login, so the login and token refresh flow, which ran
+  into rate limits, never runs. `scripts/homey-env.sh` loads it with the other credentials and exports it; nothing
+  prints it.
 
-Owner setup: create an API key in my.homey.app → Settings → API Keys with the scopes devices read + control, flows read
+Owner setup: create a personal access token in the Homey Developer Tools (tools.developer.homey.app) and an API key in my.homey.app → Settings → API Keys with the scopes devices read + control, flows read
 + start, apps read + control, and the scope to **install and run apps** (`homey.app`, needed for dev runs), and set
-`HOMEY_TOKEN` and `HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`) in
+`HOMEY_PAT`, `HOMEY_TOKEN` and `HOMEY_ADDRESS` (e.g. `http://<homey-ip>` or `http://homey-<id>.local`) in
 `~/.config/divoom-timebox/homey-api.env` (the runner and local sessions) or the gitignored `.homey-api.env` in the
-checkout (`KEY=VALUE` lines, `chmod 600`). `scripts/hw-preflight.sh` and `scripts/runner-check.sh` (check `homey-run`)
-print the active mode. Without a key both wrappers fall back to the cloud login, which the scripts check with the local
+checkout (`KEY=VALUE` lines, `chmod 600`). `scripts/hw-preflight.sh` and `scripts/runner-check.sh` (checks `homey-pat`, `homey-run`)
+print the active mode. Without a key both wrappers fall back to the cloud (with `HOMEY_PAT`, else the OAuth login), which the scripts check with the local
 `homey select current`, not with `homey whoami` (a cloud call). `scripts/homey-run.sh` still keeps the build installed
 between test windows and reinstalls only after source changes: an install takes about a minute and drops the devices
 paired with the dev build.

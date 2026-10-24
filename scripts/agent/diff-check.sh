@@ -7,7 +7,7 @@
 # `/agent approve-diff` on the PR for that exact head commit.
 set -euo pipefail
 base=${1:?base}; head=${2:?head}
-protected_re='^(\.github/|\.claude/|CLAUDE\.md$|scripts/(agent|runner)/|scripts/(gate|homey-api|homey-run|hw-preflight|hw-snap|runner-check|soak)\.sh$|scripts/probe/|package\.json$|package-lock\.json$|\.npmrc$|\.nvmrc$|\.homeyignore$|eslint\.config\.mjs$|tsconfig\.json$)'
+protected_re='^(\.github/|\.claude/|CLAUDE\.md$|scripts/(agent|runner)/|scripts/(gate|homey-api|homey-env|homey-run|hw-preflight|hw-snap|repo-check|runner-check|soak)\.sh$|scripts/homey-dev-run\.mjs$|scripts/probe/|package\.json$|package-lock\.json$|\.npmrc$|\.nvmrc$|\.homeyignore$|eslint\.config\.mjs$|tsconfig\.json$)'
 files=$(git diff --name-only "$base...$head")
 prot=$(grep -E "$protected_re" <<<"$files" || true)
 docs=$(grep -vE '^(docs/|README\.md$)' <<<"$files" || true)

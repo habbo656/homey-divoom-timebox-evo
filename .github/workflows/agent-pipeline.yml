@@ -400,8 +400,9 @@ jobs:
     timeout-minutes: 120
     environment: hardware
     env:
-      # Dev runs go over the LAN with the owner's API key (scripts/homey-dev-run.mjs): no Athom cloud, no rate limit.
-      HOMEY_RUN_MODE: lan
+      # Dev runs: over the LAN with the owner's API key (scripts/homey-dev-run.mjs, no Athom cloud); if that is not
+      # available, via the cloud authenticated with HOMEY_PAT (no OAuth login). Both from the runner's key file.
+      HOMEY_RUN_MODE: auto
     permissions:
       contents: read
       issues: write

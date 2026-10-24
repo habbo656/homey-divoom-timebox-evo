@@ -9,7 +9,9 @@ say() { echo "PREFLIGHT $1: $2"; [ "$1" = FAIL ] && ok=0; }
 # Dev runs: LAN token mode first (scripts/homey-dev-run.mjs: no cloud login, no rate limit); the cloud login is only the
 # fallback. Local check only (`homey whoami` costs a cloud request and fails during the cloud rate limit).
 if out=$(node scripts/homey-dev-run.mjs check 2>&1); then say OK "dev runs over the LAN (no cloud login)"
-elif homey select current >/dev/null 2>&1; then say INFO "dev runs fall back to the cloud login (${out##*HOMEY-DEV-RUN: })"
+elif homey select current >/dev/null 2>&1; then
+  if ( source scripts/homey-env.sh; [ -n "${HOMEY_PAT:-}" ] ); then say INFO "dev runs fall back to the cloud with HOMEY_PAT (${out##*HOMEY-DEV-RUN: })"
+  else say INFO "dev runs fall back to the cloud OAuth login, rate limited (${out##*HOMEY-DEV-RUN: })"; fi
 else say FAIL "no LAN key for dev runs and no cloud login (see docs/pipeline.md, \"Homey without the cloud\")"; fi
 
 run=$(scripts/homey-run.sh status)

@@ -3,8 +3,9 @@
 # Usage: runner-check.sh [--require LIST] [--scan SECONDS]
 #   LIST: comma-separated checks that must be OK (default: bluetooth,homey-api,homey-run,device); the others only inform.
 # Checks: tools, bluetooth (radio on), ble (bleak scan works = macOS Bluetooth permission for this process tree),
-#         camera (webcam visible = camera permission), homey-cli (cloud login; only the fallback needs it), homey-api (LAN
-#         token mode reaches the Homey), homey-run (the key may run dev builds over the LAN: no cloud, no rate limit),
+#         camera (webcam visible = camera permission), homey-cli (selected Homey; only the cloud fallback needs it),
+#         homey-pat (HOMEY_PAT set: cloud paths without the OAuth login), homey-api (LAN
+#         token mode reaches the Homey), homey-run (dev runs possible: over the LAN, else via the cloud with HOMEY_PAT),
 #         device (a Timebox is paired on the Homey and available = on and connected), lock (no foreign hardware run).
 # Prints "RUNNER-CHECK OK|FAIL|INFO <check>: …" lines and "RUNNER-CHECK: ready|NOT ready"; exit 0 only if every
 # required check is OK. In GitHub Actions it also writes <check>=ok|fail outputs, ready=true|false and a step summary.
@@ -76,9 +77,16 @@ else say FAIL camera "no video device (webcam unplugged, or no camera permission
 homey select current >/dev/null 2>&1 && say OK homey-cli "logged in, Homey selected (cloud fallback only)" \
   || say INFO homey-cli "no cloud login (fine: dev runs use the LAN key)"
 
+# cloud paths of the Homey CLI authenticate with HOMEY_PAT instead of the OAuth login (presence only: no cloud call here)
+if ( source scripts/homey-env.sh; [ -n "${HOMEY_PAT:-}" ] ); then say OK homey-pat "set (cloud paths skip the OAuth login)"
+else say INFO homey-pat "not set (cloud fallback would use the OAuth login; Homey Developer Tools → personal access token)"; fi
+
 # dev runs over the LAN (scripts/homey-dev-run.mjs): reachable, key accepted, scope homey.app
-if out=$(node scripts/homey-dev-run.mjs check 2>&1); then say OK homey-run "LAN dev run possible (no cloud login, no rate limit)"
-else say FAIL homey-run "${out##*HOMEY-DEV-RUN: }"; fi
+# dev runs (scripts/homey-run.sh, HOMEY_RUN_MODE=auto): LAN first; else the cloud with HOMEY_PAT (no OAuth login)
+if out=$(node scripts/homey-dev-run.mjs check 2>&1); then say OK homey-run "LAN dev run possible (no cloud at all)"
+elif ( source scripts/homey-env.sh; [ -n "${HOMEY_PAT:-}" ] ) && homey select current >/dev/null 2>&1; then
+  say OK homey-run "cloud dev run with HOMEY_PAT (LAN not available: ${out##*HOMEY-DEV-RUN: })"
+else say FAIL homey-run "no LAN dev run (${out##*HOMEY-DEV-RUN: }) and no HOMEY_PAT + selected Homey for the cloud"; fi
 
 # homey API (token mode = LAN, no cloud rate limit) and the Timebox device
 mode=$(scripts/homey-api.sh --mode 2>/dev/null)

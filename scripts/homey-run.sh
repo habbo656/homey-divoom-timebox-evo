@@ -4,8 +4,9 @@
 #
 # Homey access: with an owner API key (HOMEY_TOKEN/HOMEY_ADDRESS, see scripts/homey-api.sh) the run goes through
 # scripts/homey-dev-run.mjs, which hands the CLI a LAN-only Homey: no cloud login, no cloud request, no rate limit.
-# HOMEY_RUN_MODE=lan (pipeline) requires that path, =cloud forces the plain `homey app run --remote` (Athom cloud login,
-# a few cloud requests per install), =auto (default) uses LAN when the key works and falls back to the cloud with a note.
+# HOMEY_RUN_MODE=lan (pipeline) requires that path, =cloud forces the plain `homey app run --remote` (Athom cloud, a few
+# requests per install), =auto (default) uses LAN when the key works and falls back to the cloud with a note. The cloud
+# path authenticates with HOMEY_PAT (Homey Developer Tools personal access token) when set, never the OAuth login flow.
 #
 # The installed dev build is KEPT between test windows (an install takes a minute and drops paired devices).
 # `start` reuses the running build when the app sources are unchanged and reinstalls only when they changed. The build
@@ -29,6 +30,9 @@
 # Exit codes: 2 = usage, 3 = hardware lock held by another process, 4 = Homey not reachable / CLI not ready, 1 = other.
 set -uo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
+# HOMEY_TOKEN/HOMEY_ADDRESS for LAN runs, HOMEY_PAT (exported) for every cloud call of the CLI.
+# shellcheck source=scripts/homey-env.sh
+source "$root/scripts/homey-env.sh"
 state=${TMPDIR:-/tmp}/divoom-hw
 lock=$state/lock
 log=$state/homey-run.log
@@ -77,7 +81,8 @@ preflight() { # sets $runner: lan | cloud
     echo "HOMEY-RUN: LAN token mode not available, falling back to the cloud login (${out##*HOMEY-DEV-RUN: })"
   fi
   # Local check only: `homey whoami` would cost a cloud request; a missing login shows as the CLI's own error in the log.
-  homey select current >/dev/null 2>&1 || { echo "HOMEY-RUN: no Homey selected (owner: homey login && homey select)"; exit 4; }
+  homey select current >/dev/null 2>&1 || { echo "HOMEY-RUN: no Homey selected (owner: homey select; with HOMEY_PAT set no login is needed)"; exit 4; }
+  [ -n "${HOMEY_PAT:-}" ] || echo "HOMEY-RUN: no HOMEY_PAT; the cloud run uses the CLI's OAuth login (rate limited)"
   runner=cloud
 }
 take_lock() {
