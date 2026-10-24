@@ -58,9 +58,14 @@ Pipeline jobs (`agent-pipeline.yml`):
    `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
 3. **develop** (ubuntu, read-only token) — `.github/agent/develop.md`: planner → developer (round 3: Opus) → doc-keeper →
    `scripts/gate.sh`; returns JSON (`develop.schema.json`) and the branch as a git bundle. Questions end the run with
-   `agent:needs-owner`.
-4. **publish** (deterministic) — validates the branch name, pushes fast-forward only, posts the plan once
-   (`<!-- agent-plan hw=… -->`), opens a draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`).
+   `agent:needs-owner`. The agents commit after every finished step; the bundle and upload steps run also after a failed,
+   cancelled or timed-out session (the model step has its own timeout below the job's), from `$RUNNER_TEMP/develop-out`
+   (outside the checkout, so the commit of leftover changes never picks up the result file).
+4. **publish** (deterministic) — **checkpoint first, whatever the outcome** (`ready`, `blocked`, `needs_owner`, no
+   result, usage limit): posts a new plan once (`<!-- agent-plan hw=… -->`) and pushes the branch's commits
+   (fast-forward only, no PR yet), so the next run reuses the plan and continues the branch instead of redoing the
+   work; the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
+   draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`).
 5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; `.github/agent/review.md`, fresh `reviewer`) in parallel.
 6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
