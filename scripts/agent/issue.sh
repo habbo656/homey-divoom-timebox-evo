@@ -16,7 +16,9 @@
 set -euo pipefail
 : "${GITHUB_REPOSITORY:?}"
 OWNER=${OWNER:-${GITHUB_REPOSITORY%%/*}}
-BOT='github-actions[bot]'
+# The pipeline's GitHub App login, "<app-slug>[bot]" (workflow env BOT from the variable AGENT_BOT_SLUG).
+BOT=${BOT:-}
+[ -n "${BOT%\[bot\]}" ] || { echo "issue.sh: BOT (the pipeline app's \"<slug>[bot]\" login) not set" >&2; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
 cmd=${1:?command}; n=${2:?issue number}
 [[ "$n" =~ ^[0-9]+$ ]] || { echo "issue.sh: bad issue number" >&2; exit 2; }

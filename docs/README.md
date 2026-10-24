@@ -36,4 +36,5 @@
 | [0008](decisions/0008-native-text-overlay.md) | Native text as an overlay, not a mode | accepted |
 | [0009](decisions/0009-pure-js-image-decoding.md) | Pure-JS image decoding for the Show image actions | accepted, amended by 0010 |
 | [0010](decisions/0010-bounded-memory-image-decoding.md) | Bounded-memory image decoding | accepted |
-| [0011](decisions/0011-actions-pipeline-public-repo.md) | Agent pipeline in GitHub Actions for a public repository | accepted |
+| [0011](decisions/0011-actions-pipeline-public-repo.md) | Agent pipeline in GitHub Actions for a public repository | accepted, amended by 0012 |
+| [0012](decisions/0012-bot-identity.md) | The pipeline writes to GitHub as its own GitHub App | accepted |

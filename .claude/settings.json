@@ -1,4 +1,10 @@
 {
+  "env": {
+    "GIT_AUTHOR_NAME": "timebox-agent[bot]",
+    "GIT_AUTHOR_EMAIL": "347505997+timebox-agent[bot]@users.noreply.github.com",
+    "GIT_COMMITTER_NAME": "timebox-agent[bot]",
+    "GIT_COMMITTER_EMAIL": "347505997+timebox-agent[bot]@users.noreply.github.com"
+  },
   "permissions": {
     "allow": ["Bash", "Read(.hwtest/**)"],
     "deny": [
