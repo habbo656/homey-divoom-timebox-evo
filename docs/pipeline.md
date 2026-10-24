@@ -216,6 +216,10 @@ locked out for ~40 min). Both Homey paths therefore use an owner **API key** on 
   `homey app run --remote` with the cloud login and says so; `cloud` forces the fallback. The wrapper depends on the
   CLI's internal module layout (`services/AthomApi.js`, `lib/AppFactory.js`; checked with homey 4.5.3): after a CLI
   update, run `check` and one `start`.
+- Verified on hardware 2026-10-24 (`HOMEY_RUN_MODE=lan`): install, "Running", device connect, poll and time sync, and
+  `stop --uninstall` all ran over the LAN without a cloud login. The dev build took over the TimeBox already paired with
+  the installed app (no re-pairing); `stop --uninstall` removed the app from the Homey, and the device stayed listed as
+  unavailable until the app was installed again.
 - Not used: the CLI's `HOMEY_PAT` (an Athom cloud personal access token) replaces only the interactive login; the cloud
   lookups, and with them the rate limit, remain.
 
