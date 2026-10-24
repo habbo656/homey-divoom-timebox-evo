@@ -9,11 +9,18 @@ subagents have **no GitHub access**: never run `gh` or `git push`; tell every su
 file path instead of an issue number to look up. Workflow steps publish your result.
 
 **Branch.** Current branch: `{{BRANCH}}`. If it is `main`, create `agent/issue-{{ISSUE}}-<short-slug>` from it; otherwise
-continue the existing branch (it may already contain earlier rounds). Commit everything; leave the working tree clean.
+continue the existing branch (it may already contain earlier rounds or the progress of a run that stopped early).
+Commit everything; leave the working tree clean.
+
+**Checkpoints.** A run can stop at any point (usage limit, timeout, a blocker). Whatever the status, the pipeline posts a
+new plan on the issue and pushes the branch's commits, and the next run starts from both. So: commit after every finished
+step (tell the developer and the doc-keeper to commit each commit-sized item as soon as it is done, not at the end), and
+always return `branch` and `plan` once you have them, also with `status: blocked` or `needs_owner`. On an existing branch,
+read `git log --oneline main..HEAD` and the plan first and continue where the work stopped; never redo committed steps.
 
 **Stages** (one status line each):
 1. **Plan.** If the context holds a pipeline plan (`<!-- agent-plan`) and no owner answer or finding after it changes
-   it, reuse it (`plan_is_new: false`). Otherwise spawn the `planner` with the context file path. If it returns blocking
+   it, reuse it (`plan_is_new: false`); a plan posted by a run that stopped early counts. Otherwise spawn the `planner` with the context file path. If it returns blocking
    questions that the docs, the code or a sensible default cannot answer, stop and return `status: needs_owner` with
    the questions (each answerable in one short reply, with a proposed default). An owner reply `/agent answer …` in the
    context answers earlier questions.
