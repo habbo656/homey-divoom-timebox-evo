@@ -288,14 +288,20 @@ jobs:
                 push_err="develop returned an invalid branch name; nothing pushed."
               else
                 git fetch -q "$OUT/branch.bundle" "refs/heads/$b:refs/heads/$b"
-                if git ls-remote --exit-code --heads origin "$b" >/dev/null \
-                   && { git fetch -q origin "$b:refs/remotes/origin/$b"; ! git merge-base --is-ancestor "origin/$b" "$b"; }; then
-                  push_err="the new commits do not extend \`$b\` (no force pushes)."
-                # The bot app has no "Workflows" permission, so it cannot push .github/workflows changes; such a push fails here.
-                elif git push -q origin "refs/heads/$b:refs/heads/$b"; then
-                  pushed=true
-                else
-                  push_err="push of \`$b\` was rejected (workflow files cannot be pushed by the pipeline)."
+                git fetch -q origin main
+                if git ls-remote --exit-code --heads origin "$b" >/dev/null; then
+                  git fetch -q origin "$b:refs/remotes/origin/$b"
+                  git merge-base --is-ancestor "origin/$b" "$b" || push_err="the new commits do not extend \`$b\` (no force pushes)."
+                elif ! git merge-base --is-ancestor origin/main "$b"; then
+                  # main moved during the run. GitHub compares a new branch with the current main, so the app's push would
+                  # look like it reverts main's workflow changes and be refused: rebase the (unpublished) branch first.
+                  git rebase -q origin/main "$b" >/dev/null 2>&1 \
+                    || { git rebase --abort >/dev/null 2>&1; push_err="\`$b\` does not rebase cleanly onto the current main; nothing pushed."; }
+                fi
+                if [ -z "$push_err" ]; then
+                  # The bot app has no "Workflows" permission, so it cannot push .github/workflows changes.
+                  if err=$(git push -q origin "refs/heads/$b:refs/heads/$b" 2>&1); then pushed=true
+                  else push_err="push of \`$b\` was rejected: $(printf '%s' "$err" | grep -m1 -oE 'remote rejected.*|error: .*' | head -c 300)"; fi
                 fi
               fi
             fi
