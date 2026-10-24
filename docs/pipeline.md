@@ -117,7 +117,10 @@ public. Layers, from the outside in:
 3. **Models cannot write to GitHub.** Model jobs get `contents: read` (and `issues: read`), checkouts without persisted
    credentials, `GH_TOKEN` unset, and `.github/agent/ci-settings.json` (no `gh`, `git push`, `curl`, `env`, web tools,
    `npm install`, edits of `.github/`, `.claude/`, `CLAUDE.md`). Their output is JSON and a git bundle; deterministic jobs
-   validate and publish it.
+   validate and publish it. Their input (issue context) lies in `$RUNNER_TEMP/ctx/`, outside the checkout so that it is
+   never committed; headless Claude Code refuses reads outside its working directory, so `.github/actions/claude`
+   passes the folder of every `VAR_*` file with `--add-dir` (only folders below `$RUNNER_TEMP`, never `$RUNNER_TEMP`
+   itself).
 4. **Independent review** by a fresh reviewer that treats injection symptoms (unrelated code, network calls, env access,
    new dependencies, edits to tooling) as blockers; deterministic merge rules on top.
 5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute (including `homey-env.sh` and `homey-dev-run.mjs`),
