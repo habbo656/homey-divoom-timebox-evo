@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { ARGUMENT_ERROR_KINDS, ARGUMENT_FIELDS } from './device/argumentError';
 import { IMAGE_FIT_IDS } from './device/image';
 import { IMAGE_ERROR_KINDS } from './device/imageError';
+import { NOTIFICATION_ICON_IDS } from './device/notification';
 import type { ArgumentField } from './device/argumentError';
 import { TEXT_SPEED_IDS } from './device/scrollText';
 import { COUNTDOWN_MAX_MINUTES } from './protocol/commands';
@@ -412,6 +413,63 @@ describe('countdown cards (#33)', () => {
   });
 });
 
+describe('Show notification icon card (#5)', () => {
+  interface Value {
+    id: string;
+    label: Record<string, string>;
+  }
+  interface ActionNode {
+    id: string;
+    title: Record<string, string>;
+    titleFormatted?: Record<string, string>;
+    hint?: Record<string, string>;
+    args?: { type: string; name: string; title?: Record<string, string>; values?: Value[] }[];
+  }
+  const actions = readJson<{ actions: ActionNode[] }>('driver.flow.compose.json').actions;
+  const card = actions.find((a) => a.id === 'timebox_show_notification_icon');
+
+  it('declares the icon dropdown with the 24 ids of the code, in code order', () => {
+    expect(card).toBeDefined();
+    expect(card!.args!.map((a) => [a.name, a.type])).toEqual([['icon', 'dropdown']]);
+    const values = card!.args![0].values!;
+    expect(values).toHaveLength(24);
+    expect(values.map((v) => v.id)).toEqual(NOTIFICATION_ICON_IDS);
+  });
+
+  it('labels every icon in English and German; brand names stay, the generic ones are translated', () => {
+    const values = card!.args![0].values!;
+    for (const value of values) {
+      expect(value.label.en, value.id).toBeTruthy();
+      expect(value.label.de, value.id).toBeTruthy();
+    }
+    const label = (id: string) => values.find((v) => v.id === id)!.label;
+    expect(label('telegram')).toEqual({ en: 'Telegram', de: 'Telegram' });
+    expect(label('sms')).toEqual({ en: 'SMS', de: 'SMS' });
+    expect(label('incoming_call')).toEqual({ en: 'Incoming call', de: 'Eingehender Anruf' });
+    expect(label('missed_call')).toEqual({ en: 'Missed call', de: 'Verpasster Anruf' });
+  });
+
+  it('has the title, the formatted title with [[icon]] and the hint in English and German', () => {
+    expect(card!.title).toEqual({ en: 'Show notification icon', de: 'Benachrichtigungssymbol anzeigen' });
+    for (const lang of ['en', 'de']) {
+      expect(card!.titleFormatted![lang]).toContain('[[icon]]');
+      expect(card!.hint![lang]).toBeTruthy();
+    }
+    expect(card!.hint!.en).toContain('about 2 seconds');
+    expect(card!.hint!.en).toContain('previous view returns');
+    expect(card!.hint!.de).toContain('etwa 2 Sekunden');
+  });
+
+  it('is part of the built manifest', () => {
+    const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8')) as {
+      flow: { actions: ActionNode[] };
+    };
+    const built = manifest.flow.actions.find((a) => a.id === 'timebox_show_notification_icon')!;
+    expect(built.args!.map((a) => a.name)).toEqual(['device', 'icon']);
+    expect(built.args![1].values!.map((v) => v.id)).toEqual(NOTIFICATION_ICON_IDS);
+  });
+});
+
 // Settings and Flow cards removed in #70 must not survive in any text the user can see (hints, titles, locales, manifest).
 describe('user-visible text (#78)', () => {
   const root = join(__dirname, '..');
@@ -522,6 +580,7 @@ describe('locales and argument errors (#108)', () => {
     'timebox_start_countdown.seconds': 'seconds',
     'timebox_set_temperature.temperature': 'temperature',
     'timebox_set_weather.condition': 'condition',
+    'timebox_show_notification_icon.icon': 'icon',
   };
 
   it('labels every field like the card argument title (en, de)', () => {

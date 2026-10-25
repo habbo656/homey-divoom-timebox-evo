@@ -730,6 +730,201 @@
           ]
         }
       ]
+    },
+    {
+      "id": "timebox_show_notification_icon",
+      "title": {
+        "en": "Show notification icon",
+        "de": "Benachrichtigungssymbol anzeigen"
+      },
+      "titleFormatted": {
+        "en": "Show notification icon [[icon]]",
+        "de": "Benachrichtigungssymbol [[icon]] anzeigen"
+      },
+      "hint": {
+        "en": "Shows the built-in icon of an app on the TimeBox for about 2 seconds as a short attention signal; then the previous view returns by itself. A TimeBox that is off is turned on first.",
+        "de": "Zeigt das eingebaute Symbol einer App für etwa 2 Sekunden auf der TimeBox als kurzes Signal; danach erscheint von selbst wieder die vorherige Anzeige. Eine ausgeschaltete TimeBox wird zuerst eingeschaltet."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "icon",
+          "title": {
+            "en": "Icon",
+            "de": "Symbol"
+          },
+          "values": [
+            {
+              "id": "kakaotalk",
+              "label": {
+                "en": "KakaoTalk",
+                "de": "KakaoTalk"
+              }
+            },
+            {
+              "id": "instagram",
+              "label": {
+                "en": "Instagram",
+                "de": "Instagram"
+              }
+            },
+            {
+              "id": "snapchat",
+              "label": {
+                "en": "Snapchat",
+                "de": "Snapchat"
+              }
+            },
+            {
+              "id": "facebook",
+              "label": {
+                "en": "Facebook",
+                "de": "Facebook"
+              }
+            },
+            {
+              "id": "twitter",
+              "label": {
+                "en": "Twitter",
+                "de": "Twitter"
+              }
+            },
+            {
+              "id": "incoming_call",
+              "label": {
+                "en": "Incoming call",
+                "de": "Eingehender Anruf"
+              }
+            },
+            {
+              "id": "missed_call",
+              "label": {
+                "en": "Missed call",
+                "de": "Verpasster Anruf"
+              }
+            },
+            {
+              "id": "whatsapp",
+              "label": {
+                "en": "WhatsApp",
+                "de": "WhatsApp"
+              }
+            },
+            {
+              "id": "sms",
+              "label": {
+                "en": "SMS",
+                "de": "SMS"
+              }
+            },
+            {
+              "id": "skype",
+              "label": {
+                "en": "Skype",
+                "de": "Skype"
+              }
+            },
+            {
+              "id": "line",
+              "label": {
+                "en": "LINE",
+                "de": "LINE"
+              }
+            },
+            {
+              "id": "wechat",
+              "label": {
+                "en": "WeChat",
+                "de": "WeChat"
+              }
+            },
+            {
+              "id": "qq",
+              "label": {
+                "en": "QQ",
+                "de": "QQ"
+              }
+            },
+            {
+              "id": "divoom",
+              "label": {
+                "en": "Divoom",
+                "de": "Divoom"
+              }
+            },
+            {
+              "id": "viber",
+              "label": {
+                "en": "Viber",
+                "de": "Viber"
+              }
+            },
+            {
+              "id": "messenger",
+              "label": {
+                "en": "Messenger",
+                "de": "Messenger"
+              }
+            },
+            {
+              "id": "ok_ru",
+              "label": {
+                "en": "OK.ru",
+                "de": "OK.ru"
+              }
+            },
+            {
+              "id": "vk",
+              "label": {
+                "en": "VK",
+                "de": "VK"
+              }
+            },
+            {
+              "id": "telegram",
+              "label": {
+                "en": "Telegram",
+                "de": "Telegram"
+              }
+            },
+            {
+              "id": "tiktok",
+              "label": {
+                "en": "TikTok",
+                "de": "TikTok"
+              }
+            },
+            {
+              "id": "discord",
+              "label": {
+                "en": "Discord",
+                "de": "Discord"
+              }
+            },
+            {
+              "id": "groupme",
+              "label": {
+                "en": "GroupMe",
+                "de": "GroupMe"
+              }
+            },
+            {
+              "id": "douyin",
+              "label": {
+                "en": "Douyin",
+                "de": "Douyin"
+              }
+            },
+            {
+              "id": "tamtam",
+              "label": {
+                "en": "TamTam",
+                "de": "TamTam"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

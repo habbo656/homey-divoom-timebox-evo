@@ -11,6 +11,7 @@ import {
   FLOW_ACTION_SHOW_CUSTOM_PAGE,
   FLOW_ACTION_SHOW_IMAGE,
   FLOW_ACTION_SHOW_IMAGE_URL,
+  FLOW_ACTION_SHOW_NOTIFICATION_ICON,
   FLOW_ACTION_SHOW_TEXT,
   FLOW_ACTION_START_COUNTDOWN,
   FLOW_ACTION_STOP_COUNTDOWN,
@@ -72,6 +73,7 @@ describe('registerTimeboxFlowCards', () => {
       FLOW_ACTION_STOP_COUNTDOWN,
       FLOW_ACTION_SET_WEATHER,
       FLOW_ACTION_SET_TEMPERATURE,
+      FLOW_ACTION_SHOW_NOTIFICATION_ICON,
     ]);
   });
 
@@ -506,6 +508,42 @@ describe('registerTimeboxFlowCards', () => {
   });
 });
 
+describe('Show notification icon (#5)', () => {
+  it('registers the action, which passes the validated icon id on and passes the device rejection on', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const run = actions.get(FLOW_ACTION_SHOW_NOTIFICATION_ICON)!;
+    const seen: unknown[] = [];
+    const device = { showNotificationIcon: async (id: unknown) => void seen.push(id) };
+    await run({ device, icon: 'telegram' });
+    await run({ device, icon: 'incoming_call' });
+    expect(seen).toEqual(['telegram', 'incoming_call']);
+    await expect(
+      run({
+        device: {
+          showNotificationIcon: async () => {
+            throw new Error('not confirmed text');
+          },
+        },
+        icon: 'facebook',
+      }),
+    ).rejects.toThrow('not confirmed text');
+  });
+
+  it('rejects an unknown icon before the device is called', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    let calls = 0;
+    const device = { showNotificationIcon: async () => void calls++ };
+    for (const icon of ['nope', 'Telegram', '', 18, undefined]) {
+      await expect(
+        Promise.resolve().then(() => actions.get(FLOW_ACTION_SHOW_NOTIFICATION_ICON)!({ device, icon })),
+      ).rejects.toThrow(INVALID);
+    }
+    expect(calls).toBe(0);
+  });
+});
+
 // Localised validation errors (#108): the translator reads the real German locale like `homey.__` does.
 describe('localised argument errors', () => {
   const de = translator('de');
@@ -529,6 +567,7 @@ describe('localised argument errors', () => {
     setLighting: spy('setLighting'),
     showCustomPage: spy('showCustomPage'),
     switchChannel: spy('switchChannel'),
+    showNotificationIcon: spy('showNotificationIcon'),
     getChannel: () => 'clock',
   };
   const goodText = { text: 'a', color: '#ffffff', background: '#000000', speed: 'normal', duration: 5 };
@@ -636,6 +675,14 @@ describe('localised argument errors', () => {
       FLOW_ACTION_SET_CHANNEL,
       { channel: 'cloud' },
       'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter.',
+    ],
+    [
+      'show_notification_icon "nope"',
+      FLOW_ACTION_SHOW_NOTIFICATION_ICON,
+      { icon: 'nope' },
+      expect.stringMatching(
+        /^Symbol: "nope" ist keine gültige Auswahl\. Erlaubt sind: kakaotalk, instagram, .*, tamtam\.$/,
+      ),
     ],
   ];
 
