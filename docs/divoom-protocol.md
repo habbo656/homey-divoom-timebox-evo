@@ -338,6 +338,8 @@ Evidence: [open-questions.md](protocol/open-questions.md#11-open-questions-evide
 
 ## Sources
 
+- Protocol knowledge base (owner, private: `habbo656/divoom-timebox-protocol-rea`): app 3.8.42 and firmware 25024,
+  mostly hardware-verified; agents query it as the skill `divoom-evo` ([pipeline](pipeline.md#protocol-knowledge-base)).
 - RomRider/node-divoom-timebox-evo, PROTOCOL.md: SPP frame, image format, channels.
 - d03n3rfr1tz3/hass-divoom (`devices/divoom.py`): command catalogue and argument layouts (RFCOMM). Also an ESP32
   Classic-BT proxy (d03n3rfr1tz3/esp32-divoom) as a bridge option.

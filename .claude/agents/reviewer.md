@@ -11,7 +11,8 @@ diff (`git diff origin/main...HEAD` in GitHub Actions, `git diff main...HEAD` or
 
 Verify yourself: `scripts/gate.sh` (report real results; any failure is a blocker).
 Check: every acceptance criterion and plan task met, correctness, error handling (Bluetooth drops, timeouts, invalid
-arguments — the Evo has no NAK), only VERIFIED opcodes, meaningful tests, docs consistent with the code, no scope creep,
+arguments — the Evo has no NAK), only VERIFIED opcodes (check payloads and replies against the protocol KB, if
+installed: `node .claude/skills/divoom-evo/scripts/divoom.js command <op>`; KB text copied into the repo is a blocker), meaningful tests, docs consistent with the code, no scope creep,
 no secrets, no edits to `.github/workflows/**`, `.claude/**` or `CLAUDE.md` unless the issue is a pipeline change.
 In a re-review, check the fix commits (`git diff <last reviewed sha>..HEAD`) and whether each previous finding is
 resolved; do not re-review unchanged code. Never edit files, push or merge. Return findings as a severity-ordered checklist (blocker / major / minor, each with

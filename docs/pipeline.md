@@ -56,7 +56,7 @@ Pipeline jobs (`agent-pipeline.yml`):
 2. **guard** — `scripts/agent/issue.sh verify`: open, `agent:approved` set by the owner (or by the bot for issues it
    filed from an owner verdict), title + body unchanged since the approval (sha256 in the approval record), not
    `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
-3. **develop** (ubuntu, read-only token) — `.github/agent/develop.md`: planner → developer (round 3: Opus) → doc-keeper →
+3. **develop** (ubuntu, read-only token) — installs the protocol KB skill (below), then `.github/agent/develop.md`: planner → developer (round 3: Opus) → doc-keeper →
    `scripts/gate.sh`; returns JSON (`develop.schema.json`) and the branch as a git bundle. Questions end the run with
    `agent:needs-owner`. The agents commit after every finished step; the bundle and upload steps run also after a failed,
    cancelled or timed-out session (the model step has its own timeout below the job's), from `$RUNNER_TEMP/develop-out`
@@ -67,8 +67,9 @@ Pipeline jobs (`agent-pipeline.yml`):
    work. A branch that is not on GitHub yet is first rebased onto the current `main` if `main` moved during the run:
    GitHub compares a new branch with the current `main`, so the app's push would look like it reverts `main`'s workflow
    changes and is refused ("refusing to allow a GitHub App to create or update workflow", #3, 2026-10-24); the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
-   draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`).
-5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; `.github/agent/review.md`, fresh `reviewer`) in parallel.
+   draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`). A branch with any commit that touches
+   `.claude/skills/` is never pushed (the KB skill is private, see below).
+5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; KB skill, `.github/agent/review.md`, fresh `reviewer`) in parallel.
 6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
 7. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
@@ -111,6 +112,27 @@ the pipeline's own **GitHub App** (`<slug>[bot]`), never from the owner's accoun
   bot's name and email, so a commit made by an agent locally is the bot's even though the owner pushes it. Commits
   from the owner's own terminal keep the owner's identity.
 
+## Protocol knowledge base
+The reverse-engineered protocol of the TimeBox Evo (app 3.8.42 and firmware 25024, hardware-verified) lives in the
+owner's **private** repository `habbo656/divoom-timebox-protocol-rea` (ADR 0013). Its `agent/divoom-evo/` folder is an
+Agent Skill (and an MCP server with the same content); the pipeline uses the **skill**:
+- `.github/actions/kb` clones only `agent/divoom-evo/` (shallow, sparse, SSH with the read-only deploy key
+  `KB_DEPLOY_KEY`, GitHub's pinned host key) and copies it to `.claude/skills/divoom-evo` in the checkout, in the
+  develop and review jobs (ubuntu). Branch or tag: repository variable `KB_REF` (default `main`). Without the secret the
+  step warns and the agents work from `docs/` alone.
+- Agents ask it with `node .claude/skills/divoom-evo/scripts/divoom.js overview | recipe <task> | command <op> |
+  encode <builder> '<json>' | decode <hex…> | search <words> | section <id>` (subagents have no Skill tool, so they call
+  the CLI directly). Answers are small (one opcode card, one recipe), not the whole KB.
+- Trust: `docs/divoom-protocol.md` stays the project's reference and its status rules apply. A KB fact used in the app
+  is cited as "KB: <card or section id>" and is **SOURCE** until verified on the owner's Evo here; KB `[HW]` marks say
+  what is worth verifying first. `encode` refuses the dangerous commands; never bypass it.
+- Privacy: the folder is git-ignored, publish refuses branches that commit anything under `.claude/skills/`, the
+  reviewer treats KB text copied into the repository as a blocker, and the action never prints KB content (Actions logs
+  are public). Plans, reviews and docs may state the facts they need, never whole sections.
+- Locally: `ln -s "<path to the KB clone>/agent/divoom-evo" .claude/skills/divoom-evo` (or the MCP server:
+  `claude mcp add divoom-evo -- node "<path>/agent/divoom-evo/scripts/mcp-server.js"`).
+- Not in the hardware job: the Mac runner has no KB key; the tester judges photos and logs against the plan.
+
 ## Security model (public repository)
 The repository is public: anyone can open issues, comment and send fork PRs, and every Actions log and artifact is
 public. Layers, from the outside in:
@@ -139,7 +161,8 @@ public. Layers, from the outside in:
    `workflow_dispatch`/`schedule`/push to `main`, or whose triggering actor is not the owner or the bot app (`RUNNER_GUARD_BOT`) — so a fork PR or a
    branch that edits a workflow to `runs-on: self-hosted` cannot execute on the Mac. CI never uses the self-hosted runner.
 7. **Secrets.** `CLAUDE_CODE_OAUTH_TOKEN` lives in the environments `agents` and `hardware`, the bot app's
-   `AGENT_APP_PRIVATE_KEY` in `bot` and `hardware` (deployment branch: `main` only), never in `agents`. The Homey key never goes to GitHub: it stays on the Mac in `~/.config/divoom-timebox/homey-api.env`
+   `AGENT_APP_PRIVATE_KEY` in `bot` and `hardware` (deployment branch: `main` only), never in `agents`. `KB_DEPLOY_KEY`
+   (read-only deploy key of the private KB repository, nothing else) in `agents`. The Homey key never goes to GitHub: it stays on the Mac in `~/.config/divoom-timebox/homey-api.env`
    (`chmod 600`), read by `scripts/homey-api.sh`. Webcam photos stay in `.hwtest/` on the Mac and are never uploaded;
    reports and the runner check leave out host names and device ids.
 8. **Owner verification.** Features and bugs are verified twice by the owner: before work (approval) and per milestone
@@ -161,7 +184,9 @@ while it is private, the pipeline cannot start (its model jobs need the `agents`
 3. Environments `agents`, `hardware` and `bot`: deployment branches `main` only; secret `CLAUDE_CODE_OAUTH_TOKEN` (from
    `claude setup-token`, billed to the Claude plan) in `agents` and `hardware`; `AGENT_APP_PRIVATE_KEY` (the app's
    `.pem`) in `bot` and `hardware`; `hardware` also holds `HOMEY_PAT` (Homey Developer Tools personal access token, see
-   "Homey without the cloud").
+   "Homey without the cloud"). `agents` also holds `KB_DEPLOY_KEY` (see "Protocol knowledge base"): `ssh-keygen -t
+   ed25519 -N "" -C timebox-pipeline-kb -f kb_key`, add `kb_key.pub` to the KB repository as a deploy key **without**
+   write access, store `kb_key` as the secret, delete both files.
 4. Branch protection / ruleset on `main`: pull request required, no force pushes, no deletions. The pipeline merges
    without an approving review (autonomous merge, ADR 0006/0011); it runs `gate.yml` itself, so `ci.yml` (which now also
    runs on agent PRs) need not be a required check.

@@ -10,3 +10,4 @@ __pycache__/
 .hwtest/
 .homey-api.env
 ._*
+.claude/skills/divoom-evo

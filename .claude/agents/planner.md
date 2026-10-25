@@ -17,6 +17,8 @@ The plan is executed **without owner review**, so it must be decision-complete. 
 - **Approach** (alternatives in one line each, with the reason for the choice). Follow the roadmap design principles.
 - **Protocol**: list every opcode used and its status in `docs/divoom-protocol.md`. Only VERIFIED opcodes may ship. If an
   unverified one is needed, add a first task "verify on hardware with `scripts/probe/ble.py` + webcam, record evidence".
+  For payloads, replies and firmware behaviour ask the protocol KB (`docs/pipeline.md#protocol-knowledge-base`):
+  `node .claude/skills/divoom-evo/scripts/divoom.js command 0x45` (also `overview`, `recipe`, `search`), if installed.
 - **Tasks**: ordered checklist, each one commit; **files** touched; **tests** to add; **docs** to update.
 - **Hardware test scenario** (device-facing changes only): concrete steps the tester runs while the app is running —
   `scripts/homey-api.sh` commands (capability set / Flow card action run; never plain `homey api`), the expected display result as it would look on the

@@ -12,7 +12,8 @@ Read the overviews and indexes below, then open only the area or topic files the
 - `docs/architecture.md` — architecture overview: layers, data flow, module status and the `## Areas` index of
   `docs/architecture/*.md` (keep current!)
 - `docs/divoom-protocol.md` — protocol reference: frames, opcode tables with status, quirks (use only VERIFIED opcodes;
-  validate every argument); evidence and measurement logs in `docs/protocol/<topic>.md`
+  validate every argument); evidence and measurement logs in `docs/protocol/<topic>.md`. Payloads, replies and exact
+  frames: the protocol KB skill `.claude/skills/divoom-evo` (if installed; `docs/pipeline.md#protocol-knowledge-base`)
 - `docs/roadmap.md` — milestones, issue order and design principles (device first, Flow cards for actions/events)
 - `docs/versioning.md` — SemVer rules; milestones are named after the version they ship in
 - `docs/uat/README.md` — owner acceptance test per milestone (`agent-uat.yml`); accepted UAT docs in `docs/uat/archive/`
