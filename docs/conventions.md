@@ -10,6 +10,9 @@
   Markdown, JSON, YAML, HTML and generated files. Run `npm run format` before committing; `npm run format:check`
   (part of `scripts/gate.sh`) fails on unformatted code. A purely mechanical reformat is committed on its own as
   `style:` (output of `npm run format` only, no manual edits).
+- **Local scratch output:** `.hwtest/` is local hardware-test scratch output (gitignored) and is excluded from ESLint
+  (`eslint.config.mjs`) and Prettier (`.prettierignore`), so scratch scripts there never affect `scripts/gate.sh`. The
+  installed protocol KB skill `.claude/skills/divoom-evo/` (gitignored) is excluded from ESLint for the same reason.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `test:`, `style:`), reference `#<n>`.
 - **PRs:** one issue per PR, body contains `Closes #<n>`, summary, test evidence, doc changes.
 - **Tests:** unit tests for protocol encoding/decoding without hardware; hardware-dependent
