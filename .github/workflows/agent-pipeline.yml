@@ -161,6 +161,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm ci >/dev/null && npm install -g homey >/dev/null
+      - uses: ./.github/actions/kb
+        with:
+          ssh-key: ${{ secrets.KB_DEPLOY_KEY }}
+          ref: ${{ vars.KB_REF || 'main' }}
       - env:
           NAME: ${{ vars.AGENT_BOT_SLUG }}[bot]
           EMAIL: ${{ vars.AGENT_BOT_EMAIL }}
@@ -289,7 +293,10 @@ jobs:
               else
                 git fetch -q "$OUT/branch.bundle" "refs/heads/$b:refs/heads/$b"
                 git fetch -q origin main
-                if git ls-remote --exit-code --heads origin "$b" >/dev/null; then
+                if [ -n "$(git log --format= --name-only "origin/main..$b" -- .claude/skills)" ]; then
+                  # The protocol KB skill is private (ADR 0013): no commit of the branch may carry it to the public repo.
+                  push_err="\`$b\` commits files under \`.claude/skills/\` (the private KB skill); nothing pushed."
+                elif git ls-remote --exit-code --heads origin "$b" >/dev/null; then
                   git fetch -q origin "$b:refs/remotes/origin/$b"
                   git merge-base --is-ancestor "origin/$b" "$b" || push_err="the new commits do not extend \`$b\` (no force pushes)."
                 elif ! git merge-base --is-ancestor origin/main "$b"; then
@@ -383,6 +390,10 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm install -g homey >/dev/null
+      - uses: ./.github/actions/kb
+        with:
+          ssh-key: ${{ secrets.KB_DEPLOY_KEY }}
+          ref: ${{ vars.KB_REF || 'main' }}
       - env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ needs.pick.outputs.issue }}

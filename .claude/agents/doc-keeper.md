@@ -16,7 +16,9 @@ Check against the code and the diff (`git diff main...HEAD`), then fix what is w
   overview stays short (≤ ~150 lines). A new area gets a file and an Areas row.
 - `docs/divoom-protocol.md` (reference): every opcode used in `src/` has a row and is VERIFIED; section numbers stay
   stable. New findings carry evidence in `docs/protocol/<topic>.md`, linked from the row and listed under
-  `## Evidence files`; long measurement prose never goes into the reference.
+  `## Evidence files`; long measurement prose never goes into the reference. A fact taken from the protocol KB
+  (`docs/pipeline.md#protocol-knowledge-base`) cites it as "KB: <card or section id>" and stays **SOURCE** until verified
+  here; never copy KB text beyond the facts needed.
 - `docs/roadmap.md`: the status of the issue is current (done once merged, in progress on its branch).
 - `docs/README.md` indexes every doc; ADRs are numbered, linked and their status is right (superseded ones say so).
 - Durable learnings of the issue (quirks, gotchas, decisions) are written down, not only in the issue/PR.

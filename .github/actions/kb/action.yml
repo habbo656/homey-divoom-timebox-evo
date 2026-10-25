@@ -1,0 +1,49 @@
+name: kb
+description: >
+  Install the protocol knowledge base as the Claude Code skill `divoom-evo` (ADR 0013): a sparse, shallow clone of the
+  private KB repository's `agent/divoom-evo/` over SSH with a read-only deploy key, copied to
+  `.claude/skills/divoom-evo` in the checkout (git-ignored; publish refuses branches that add it). Without a key the
+  step warns and the agents work from `docs/` alone. Never prints KB content: Actions logs are public.
+inputs:
+  ssh-key:
+    description: Private half of the KB repository's read-only deploy key (secret KB_DEPLOY_KEY)
+    required: false
+    default: ""
+  repository:
+    description: KB repository (owner/name)
+    default: habbo656/divoom-timebox-protocol-rea
+  ref:
+    description: Branch or tag of the KB repository
+    default: main
+outputs:
+  ok:
+    description: '"true" when the skill is installed'
+    value: ${{ steps.kb.outputs.ok }}
+runs:
+  using: composite
+  steps:
+    - id: kb
+      shell: bash
+      env:
+        KEY: ${{ inputs.ssh-key }}
+        REPO: ${{ inputs.repository }}
+        REF: ${{ inputs.ref }}
+      run: |
+        dest=.claude/skills/divoom-evo
+        git check-ignore -q "$dest" || { echo "::error::$dest is not git-ignored"; exit 1; }
+        if [ -z "$KEY" ]; then
+          echo "::warning::KB_DEPLOY_KEY is not set: the agents run without the divoom-evo skill"; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        k="$RUNNER_TEMP/kb-key"; kh="$RUNNER_TEMP/kb-known-hosts"; src="$RUNNER_TEMP/kb-src"
+        trap 'rm -rf "$k" "$src"' EXIT
+        (umask 077; printf '%s\n' "$KEY" > "$k")
+        # GitHub's published ed25519 host key: no trust on first use.
+        echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$kh"
+        export GIT_SSH_COMMAND="ssh -i $k -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$kh"
+        git clone -q --depth 1 --branch "$REF" --filter=blob:none --sparse "git@github.com:$REPO.git" "$src"
+        git -C "$src" sparse-checkout set agent/divoom-evo
+        [ -f "$src/agent/divoom-evo/SKILL.md" ] || { echo "::error::the KB has no agent/divoom-evo/SKILL.md"; exit 1; }
+        rm -rf "$dest"; mkdir -p .claude/skills; cp -R "$src/agent/divoom-evo" "$dest"
+        node "$dest/scripts/divoom.js" overview >/dev/null
+        echo "divoom-evo skill installed from KB commit $(git -C "$src" rev-parse --short HEAD)"
+        echo "ok=true" >> "$GITHUB_OUTPUT"
