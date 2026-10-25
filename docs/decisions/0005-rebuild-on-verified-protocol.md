@@ -14,7 +14,7 @@ transport, text renderer, view tracker and diagnostics were built around the mis
 - State is read from the device (`46`) instead of tracked in the app.
 - Text uses the native text command (`6e`/`86`/`6c`); the software font renderer is dropped (ADR 0004 superseded).
 - Device-first Homey surface: capabilities and device settings for state, Flow cards for actions and events.
-  Device class `other`.
+  Device class `other` (changed to `light` in #19, owner decision 2026-10-25).
 - Only VERIFIED opcodes are used; every argument is validated before sending.
 
 **Consequences:** Work restarts at version 0.2.0 (`docs/versioning.md`); the plan is in `docs/roadmap.md`.

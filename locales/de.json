@@ -33,7 +33,6 @@
     },
     "error": {
       "not_connected": "Die TimeBox ist gerade nicht verbunden. Versuche es gleich noch einmal.",
-      "class_not_changed": "Homey konnte den Gerätetyp nicht ändern. Versuche es gleich noch einmal.",
       "not_confirmed": "Die TimeBox hat die Änderung nicht bestätigt. Prüfe die Anzeige und versuche es gleich noch einmal.",
       "text_empty": "Der Text ist leer, nachdem die Zeichen entfernt wurden, die die TimeBox nicht darstellen kann (zum Beispiel Emojis).",
       "text_too_long": "Der Text ist zu lang: {length} Zeichen. Die TimeBox zeigt höchstens {max} Zeichen (Emojis zählen nicht).",

@@ -3,10 +3,7 @@
 _Part of [architecture](../architecture.md); moved from "Power and lighting" (#120)._
 
   - Power and lighting (#26; `src/device/lighting.ts` pure, `TimeboxController` logic): capabilities `onoff`, `light_hue`,
-    `light_saturation` (Homey's own, no custom cards). The manifest class stays `other`: class `light` would put the
-    TimeBox into "all lights off" and voice light commands, which is wrong for a display by default. Opt-in (#19): the device
-    setting `use_as_light` (group "Light", checkbox, default off; `src/device/lightClass.ts`: `resolveUseAsLight`, only the
-    boolean `true` is on; `targetDeviceClass`) switches the class at runtime with `setClass('light'|'other')`, see "Use as a light". `capabilitiesOptions.onoff.setOnDim`
+    `light_saturation` (Homey's own, no custom cards). The driver class is `light` (#19, owner decision 2026-10-25: the TimeBox is only a light; before #19 it was `other` on purpose, so it stayed out of "all lights off" and voice light commands; see "Device class light"). `capabilitiesOptions.onoff.setOnDim`
     is `false`, so setting `dim` does not switch `onoff` on (`dim` keeps its `74` behaviour, #22). While the panel is off the app
     holds the `dim` value and sends it at the next power on, because a `74` would light the panel (#62, below).
     - Power is app state: no `46` field is a reliable power flag (d8 follows the last `45` command but not `74`, protocol
@@ -73,13 +70,15 @@ _Part of [architecture](../architecture.md); moved from "Power and lighting" (#1
       writes the hue/saturation tile (not for black) and `TimeboxDevice` writes `timebox_channel` = `lighting` (skipped when a newer change superseded it, #141).
     - "Turn everything off" (expected behaviour, the hardware test checks what it can): any Homey action that sets the device's
       `onoff` capability (the tile, the Flow card "Turn off", zone-wide or voice actions that address `onoff`) turns the panel off;
-      "all lights off" actions that address light-class devices do not include it while the class is `other` and do include it
-      when "Use as a light" is on (#19). Turning on returns to the last channel.
-    - Use as a light (#19): `TimeboxDevice.applyDeviceClass(useAsLight, 'init'|'setting')` compares `getClass()` with the target and
-      calls `setClass` only on a difference, logging `[device] device class -> <light|other> (<init|setting>)`. `onInit` runs it
-      after the capability migrations and before `setup()`; a failure only logs `[device] could not set the device class: <msg>`
-      and never stops the setup. `onSettings` awaits it when `use_as_light` changed; on failure it logs the same line and throws
-      the localised `device.error.class_not_changed`, so Homey shows the error and keeps the old setting. Moods: a mood sets
+      "all lights off" and voice commands for lights include it, because the device class is `light` (#19). Turning on returns to the last channel.
+    - Device class light (#19): the driver manifest class is `light` and there is no setting for it (the opt-in setting `use_as_light`
+      of the first #19 version is gone). Homey keeps the stored class of devices paired while the manifest said `other`, so
+      `TimeboxDevice.migrateDeviceClass()` (idempotent) runs in `onInit` after the capability migrations and before `setup()`:
+      when `getClass()` is not `light` it calls `setClass('light')` and logs `[device] device class -> light (migrated)`; nothing
+      happens when the class already is `light`. A failure only logs `[device] could not set the device class: <msg>` and never
+      stops the setup. Guarded by `src/device/TimeboxDevice.class.test.ts` and `src/manifest.test.ts`. Breaking change: "all lights
+      off" and voice commands for lights now switch the display off, and the TimeBox can be added to moods
+      ([roadmap](../roadmap.md#breaking-changes)). Moods: a mood sets
       `onoff`, `dim`, `light_hue` and `light_saturation` through the normal listeners, so the colour follows the #69 rule
       (it applies to the active mode: clock or lighting; another mode is switched to lighting by `setTileColor`). Limits: a mood
       cannot set the mode tile, the clock style or any card-only feature; a mood applied while the TimeBox is unreachable fails
