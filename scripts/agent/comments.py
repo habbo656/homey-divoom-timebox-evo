@@ -5,8 +5,11 @@
   comments.py others OWNER BOT        number of comments by anyone else
   comments.py marker OWNER BOT NAME   body of the newest bot comment containing "<!-- agent-NAME "
   comments.py markers OWNER BOT NAME  number of bot comments containing "<!-- agent-NAME "
+  comments.py plan-state OWNER BOT    what the pipeline does with the plan (refine, ready or wait), plus the newest
+                                      plan's hw/risk/size/gate attributes (docs/pipeline.md, refine)
 """
 import json
+import re
 import sys
 
 
@@ -40,8 +43,38 @@ def main():
         tag = f"<!-- agent-{sys.argv[4]} "
         hits = [c for c in cs if c["user"]["login"] == bot and tag in (c["body"] or "")]
         print(len(hits) if mode == "markers" else (hits[-1]["body"] if hits else ""))
+    elif mode == "plan-state":
+        plan_state(cs, owner, bot)
     else:
         sys.exit(f"comments.py: unknown mode {mode}")
+
+
+def plan_state(cs, owner, bot):
+    # Newest position of each event: plan, owner confirmation (/agent go), questions, owner answer.
+    last = {"plan": -1, "go": -1, "questions": -1, "answer": -1}
+    attrs = {}
+    for i, c in enumerate(cs):
+        body, login = c["body"] or "", c["user"]["login"]
+        if login == bot:
+            m = re.search(r"<!-- agent-plan ([^>]*)-->", body)
+            if m:
+                last["plan"], attrs = i, dict(re.findall(r"(\w+)=([\w.-]+)", m.group(1)))
+            if "<!-- agent-plan-go " in body:
+                last["go"] = i
+            if "<!-- agent-questions " in body:
+                last["questions"] = i
+        elif login == owner and body.lstrip().startswith("/agent answer"):
+            last["answer"] = i
+    if last["plan"] < 0 or max(last["answer"], last["questions"]) > last["plan"]:
+        # No plan yet, the owner answered after it, or questions came up after it: plan (again).
+        state = "refine"
+    elif attrs.get("gate") == "owner" and last["go"] < last["plan"]:
+        state = "wait"
+    else:
+        state = "ready"
+    print(f"state={state}")
+    for k in ("hw", "risk", "size", "gate"):
+        print(f"{k}={attrs.get(k, '')}")
 
 
 main()

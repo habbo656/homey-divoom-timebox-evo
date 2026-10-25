@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "status": { "enum": ["ready", "needs_owner", "split"] },
+    "risk": { "enum": ["low", "medium", "high"] },
+    "size": { "enum": ["S", "M", "L", "XL"] },
+    "rating_reason": { "type": "string" },
+    "questions": { "type": "array", "items": { "type": "string" } },
+    "split": { "type": "array", "items": { "type": "string" } },
+    "plan": { "type": "string" },
+    "needs_hwtest": { "type": "boolean" },
+    "hw_scenario": { "type": "string" }
+  },
+  "required": ["status", "risk", "size", "rating_reason", "questions", "split", "plan", "needs_hwtest", "hw_scenario"],
+  "additionalProperties": false
+}

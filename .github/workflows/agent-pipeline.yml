@@ -1,6 +1,6 @@
 name: agent-pipeline
-# One issue end to end: guard → develop (plan, implement, docs, gate) → publish → gate + independent review →
-# hardware test (self-hosted) → finish (merge or next fix round). Model jobs get read-only tokens and no GitHub access;
+# One issue end to end: guard → refine (rate, ask, plan) → record → develop (implement, docs, gate) → publish →
+# gate + independent review → hardware test (self-hosted) → finish (merge or next fix round). Model jobs get read-only tokens and no GitHub access;
 # deterministic jobs publish their results. Docs: docs/pipeline.md.
 on:
   workflow_dispatch:
@@ -107,17 +107,24 @@ jobs:
     permissions:
       contents: read
       issues: read
+    outputs:
+      plan: ${{ steps.ps.outputs.state }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - env:
+      - id: ps
+        env:
           GH_TOKEN: ${{ github.token }}
           N: ${{ needs.pick.outputs.issue }}
           KIND: ${{ needs.pick.outputs.kind }}
           VERSION: ${{ needs.pick.outputs.version }}
         run: |
           bash scripts/agent/issue.sh verify "$N" | tee -a "$GITHUB_STEP_SUMMARY"
+          # refine: no plan yet, or an owner answer / new questions after it; wait: the plan waits for /agent go.
+          state=ready
+          [ "$KIND" != issue ] || state=$(bash scripts/agent/issue.sh plan-state "$N" | sed -n 's/^state=//p')
+          echo "state=$state" | tee -a "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
           mkdir -p ctx
           bash scripts/agent/issue.sh context "$N" ctx/context.md
           : > ctx/milestone.md
@@ -136,14 +143,133 @@ jobs:
           path: ctx/
           retention-days: 3
 
-  develop:
+  refine:
+    # The planner alone: rates the issue (risk, size), turns every open requirement into a question for the owner
+    # instead of an assumption, and writes the implementation plan. Read-only; record publishes the result.
     needs: [pick, guard]
-    if: needs.pick.outputs.stage == 'develop'
+    if: needs.pick.outputs.stage == 'develop' && needs.guard.outputs.plan == 'refine'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: agents
+    permissions:
+      contents: read
+    outputs:
+      ok: ${{ steps.c.outputs.ok }}
+      limited: ${{ steps.c.outputs.limited }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Switch to the existing agent branch
+        if: needs.pick.outputs.branch != 'main'
+        env:
+          B: ${{ needs.pick.outputs.branch }}
+        run: git fetch -q origin "$B:$B" && git switch -q "$B"
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: ./.github/actions/kb
+        with:
+          ssh-key: ${{ secrets.KB_DEPLOY_KEY }}
+          ref: ${{ vars.KB_REF || 'main' }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: context
+          path: ${{ runner.temp }}/ctx
+      - id: c
+        timeout-minutes: 50
+        uses: ./.github/actions/claude
+        env:
+          VAR_ISSUE: ${{ needs.pick.outputs.issue }}
+          VAR_BRANCH: ${{ needs.pick.outputs.branch }}
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
+        with:
+          prompt-file: .github/agent/refine.md
+          schema-file: .github/agent/refine.schema.json
+          model: opus
+          tools: Read,Grep,Glob,Bash,Skill
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - if: always()
+        env:
+          RESULT: ${{ steps.c.outputs.result-file }}
+        run: mkdir -p "$RUNNER_TEMP/refine-out" && { [ -z "$RESULT" ] || ! [ -s "$RESULT" ] || cp "$RESULT" "$RUNNER_TEMP/refine-out/result.json"; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refine
+          path: ${{ runner.temp }}/refine-out/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  record:
+    # Deterministic: posts the rating with the plan, the questions or the proposed split, and decides whether develop
+    # runs now. Questions, a split, and plans rated risk high or size XL go to the owner first.
+    needs: [pick, guard, refine]
+    if: always() && needs.pick.outputs.stage == 'develop' && contains(fromJSON('["refine","wait"]'), needs.guard.outputs.plan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bot
+    permissions:
+      contents: read # writes use the bot token
+    outputs:
+      go: ${{ steps.r.outputs.go }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      - uses: actions/download-artifact@v4
+        if: needs.guard.outputs.plan == 'refine'
+        with:
+          name: refine
+          path: ${{ runner.temp }}/out
+        continue-on-error: true
+      - id: r
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          N: ${{ needs.pick.outputs.issue }}
+          PLAN: ${{ needs.guard.outputs.plan }}
+          OK: ${{ needs.refine.outputs.ok }}
+          LIMITED: ${{ needs.refine.outputs.limited }}
+          F: ${{ runner.temp }}/out/result.json
+        run: |
+          say() { bash scripts/agent/issue.sh say "$N" "$1"; }
+          hold() { echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          if [ "$PLAN" = wait ]; then
+            gh issue edit "$N" --add-label agent:needs-owner >/dev/null
+            say "the plan for #$N waits for your confirmation (its rating is in the plan comment): \`/agent go\` starts development, \`/agent answer <changes>\` makes a new plan."
+            hold
+          fi
+          if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit while planning. The scheduled run resumes this issue."; hold; fi
+          if [ "$OK" != true ] || ! [ -s "$F" ]; then
+            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N failed without a result (see the workflow run). \`/agent retry\` resumes."; hold
+          fi
+          out=$(python3 scripts/agent/refine-comment.py "$F" "$OWNER" "$N" comment.md)
+          status=$(sed -n 's/^status=//p' <<<"$out"); gate=$(sed -n 's/^gate=//p' <<<"$out")
+          echo "$out" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" = invalid ]; then
+            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N returned neither a plan nor questions. \`/agent retry\` plans again."; hold
+          fi
+          gh issue comment "$N" --body-file comment.md >/dev/null
+          if [ "$status" != ready ] || [ "$gate" = owner ]; then gh issue edit "$N" --add-label agent:needs-owner >/dev/null; hold; fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
+  develop:
+    needs: [pick, guard, refine, record]
+    if: >-
+      always() && needs.pick.outputs.stage == 'develop' && needs.guard.result == 'success'
+      && (needs.guard.outputs.plan == 'ready' || needs.record.outputs.go == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: agents
     permissions:
       contents: read
+      issues: read
     outputs:
       ok: ${{ steps.c.outputs.ok }}
       limited: ${{ steps.c.outputs.limited }}
@@ -173,6 +299,24 @@ jobs:
         with:
           name: context
           path: ${{ runner.temp }}/ctx
+      - name: Context with the plan, developer model
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ needs.pick.outputs.issue }}
+          KIND: ${{ needs.pick.outputs.kind }}
+          ROUND: ${{ needs.pick.outputs.round }}
+        run: |
+          # Again after record: the context must hold the plan it may just have posted.
+          bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/ctx/context.md"
+          m=sonnet
+          if [ "$KIND" = issue ]; then
+            ps=$(bash scripts/agent/issue.sh plan-state "$N")
+            risk=$(sed -n 's/^risk=//p' <<<"$ps"); size=$(sed -n 's/^size=//p' <<<"$ps")
+            if [ "$risk" = high ] || [ "$size" = L ] || [ "$size" = XL ]; then m=opus; fi
+          fi
+          [ "$ROUND" -lt 3 ] || m=opus # escalation round
+          echo "model=$m" | tee -a "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
       - id: c
         # Below the job timeout, so that a stuck session still leaves time to bundle and upload its progress.
         timeout-minutes: 165
@@ -183,6 +327,7 @@ jobs:
           VAR_ROUND: ${{ needs.pick.outputs.round }}
           VAR_VERSION: ${{ needs.pick.outputs.version }}
           VAR_BRANCH: ${{ needs.pick.outputs.branch }}
+          VAR_DEV_MODEL: ${{ steps.plan.outputs.model }}
           VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
           VAR_MILESTONE_CONTEXT: ${{ runner.temp }}/ctx/milestone.md
         with:
@@ -222,7 +367,8 @@ jobs:
 
   publish:
     needs: [pick, develop]
-    if: always() && needs.pick.outputs.go == 'true'
+    # Not when develop did not start (the plan waits for the owner, or the guard failed).
+    if: always() && needs.pick.outputs.go == 'true' && (needs.pick.outputs.stage != 'develop' || needs.develop.result != 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: bot
@@ -273,17 +419,18 @@ jobs:
           stop() { echo "next=stop" >> "$GITHUB_OUTPUT"; exit 0; }
           j() { python3 -c 'import json,os,sys; print(json.load(open(os.environ["OUT"]+"/result.json")).get(sys.argv[1], ""))' "$1"; }
           if [ "$STAGE" = develop ]; then
-            # Checkpoint first, whatever the outcome: post a new plan and push the branch's commits (fast-forward
-            # only, no PR), so that the next run reuses the plan and continues the branch instead of redoing the work.
+            # Checkpoint first, whatever the outcome: push the branch's commits (fast-forward only, no PR), so that
+            # the next run continues the branch instead of redoing the work. The plan is on the issue already (record).
             res=false; [ -s "$OUT/result.json" ] && res=true
-            hw=true; [ $res = true ] && hw=$(j needs_hwtest | tr 'TF' 'tf')
-            if [ $res = true ]; then
-              plan=$(j plan)
-              if [ -n "$plan" ] && [ "$plan" != none ] \
-                 && { [ "$(j plan_is_new)" = True ] || [ "$(bash scripts/agent/issue.sh markers "$N" plan)" -eq 0 ]; }; then
-                { echo "## Plan"; echo; printf '%s\n' "$plan"; echo; echo "## Hardware test scenario"; echo; j hw_scenario; echo; echo "<!-- agent-plan hw=$hw -->"; } > plan.md
-                gh issue comment "$N" --body-file plan.md >/dev/null
+            if [ "$KIND" = uat ]; then
+              # The [auto] UAT cases are the hardware test scenario; post them when they changed.
+              hw=true; [ $res = true ] && hw=$(j needs_hwtest | tr 'TF' 'tf')
+              if [ $res = true ] && [ -n "$(j hw_scenario)" ]; then
+                { echo "## Hardware test scenario (UAT pre-check)"; echo; j hw_scenario; echo; echo "<!-- agent-plan hw=$hw -->"; } > plan.md
+                [ "$(cat plan.md)" = "$(bash scripts/agent/issue.sh marker "$N" plan)" ] || gh issue comment "$N" --body-file plan.md >/dev/null
               fi
+            else
+              hw=$(bash scripts/agent/issue.sh plan-state "$N" | sed -n 's/^hw=//p')
             fi
             b=""; pushed=false; push_err=""
             [ -s "$OUT/branch.bundle" ] && b=$(git bundle list-heads "$OUT/branch.bundle" | sed -n 's|^[0-9a-f]* refs/heads/||p' | head -n 1)
@@ -323,10 +470,10 @@ jobs:
               needs_owner)
                 q=$(python3 -c 'import json,os; print("\n".join("- "+q for q in json.load(open(os.environ["OUT"]+"/result.json"))["questions"]))')
                 gh issue edit "$N" --add-label agent:needs-owner >/dev/null
-                gh issue comment "$N" --body "@$OWNER the planner needs a decision before implementing:
+                gh issue comment "$N" --body "@$OWNER the developer found a requirement that the plan leaves open (it does not assume requirements):
           $q
 
-          Answer with a comment that starts with \`/agent answer\`; the pipeline resumes by itself.
+          Answer with a comment that starts with \`/agent answer\`; the pipeline plans again with your answer.
           <!-- agent-questions -->" >/dev/null
                 stop ;;
               ready) ;;

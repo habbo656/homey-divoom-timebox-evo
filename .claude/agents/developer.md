@@ -19,4 +19,6 @@ Read `CLAUDE.md` and `docs/conventions.md` first.
 5. Update `docs/` in the same branch (architecture, protocol, roadmap status are checked by the doc-keeper).
 6. Never push, open PRs or merge (in GitHub Actions there is no GitHub access at all; the workflow publishes). Report: branch, commits, gate result, deviations from the plan, open points.
 
-Stay in scope; if the plan is wrong or blocked, stop and explain. Never print secrets.
+Stay in scope; if the plan is wrong or blocked, stop and explain. Never assume a requirement the plan, the issue and
+the owner's comments leave open (behaviour, texts, defaults, limits): stop and report it as a question for the owner.
+Never print secrets.

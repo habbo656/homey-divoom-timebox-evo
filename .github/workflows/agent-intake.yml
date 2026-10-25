@@ -170,7 +170,7 @@ jobs:
 
   dispatch:
     needs: route
-    if: contains(fromJSON('["resume","approve-diff","stop","next","uat-check"]'), needs.route.outputs.do)
+    if: contains(fromJSON('["resume","go","approve-diff","stop","next","uat-check"]'), needs.route.outputs.do)
     runs-on: ubuntu-latest
     environment: bot
     permissions:
@@ -199,6 +199,11 @@ jobs:
           case "$DO" in
             resume) gh issue edit "$issue" --remove-label agent:blocked --remove-label agent:needs-owner >/dev/null 2>&1 || true
                     gh workflow run agent-pipeline.yml -f issue="$issue" ;;
+            go) # Confirms the newest plan only: a later plan (after /agent answer) needs its own /agent go.
+                gh issue comment "$issue" --body "Owner confirmed the plan; development starts.
+          <!-- agent-plan-go -->" >/dev/null
+                gh issue edit "$issue" --remove-label agent:needs-owner >/dev/null 2>&1 || true
+                gh workflow run agent-pipeline.yml -f issue="$issue" ;;
             approve-diff)
               sha=$(gh pr view "$N" --json headRefOid --jq .headRefOid)
               gh pr comment "$N" --body "Owner approved the protected-path diff at \`$sha\`; hardware test and merge may proceed for exactly this commit.

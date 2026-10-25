@@ -3,8 +3,6 @@
   "properties": {
     "status": { "enum": ["ready", "needs_owner", "blocked"] },
     "branch": { "type": "string" },
-    "plan": { "type": "string" },
-    "plan_is_new": { "type": "boolean" },
     "questions": { "type": "array", "items": { "type": "string" } },
     "needs_hwtest": { "type": "boolean" },
     "hw_scenario": { "type": "string" },
@@ -14,6 +12,6 @@
     "uat_checklist": { "type": "string" },
     "notes": { "type": "string" }
   },
-  "required": ["status", "branch", "plan", "plan_is_new", "questions", "needs_hwtest", "hw_scenario", "summary", "docs_verdict", "pr_title", "notes"],
+  "required": ["status", "branch", "questions", "needs_hwtest", "hw_scenario", "summary", "docs_verdict", "pr_title", "notes"],
   "additionalProperties": false
 }
