@@ -52,6 +52,7 @@ Each area file holds the verbatim text of its former section; code comments cite
 | [architecture/custom-pages.md](architecture/custom-pages.md) | Custom pages | Custom page slots and Flow actions |
 | [architecture/text.md](architecture/text.md) | Native text (#28) | Scrolling text overlay: input mapping, speed, limits |
 | [architecture/countdown.md](architecture/countdown.md) | Countdown (#33) | Countdown display and Flow actions |
+| [architecture/notification.md](architecture/notification.md) | Notification icon (#5) | Notification icon overlay: icon ids and codes, Flow action, confirm |
 | [architecture/images.md](architecture/images.md) | Show image (#31) | Static image overlay: decoding, 16x16 scaling, sources, limits, branches |
 | [architecture/weather.md](architecture/weather.md) | Weather (#30) | Weather and temperature: Flow card, Open-Meteo client, caching |
 | [architecture/power-lighting.md](architecture/power-lighting.md) | Power and lighting; Active-mode colour | `onoff`, colour and lighting handling |
@@ -65,7 +66,7 @@ Each area file holds the verbatim text of its former section; code comments cite
 Protocol modules built so far: `errors.ts` (`ProtocolError`, `FrameError`), `hex.ts` (`fromHex`, `toHex`),
 `envelope.ts` (`envelope(payload, seq)`, `SequenceCounter` — one instance per connection, `reset()` on connect),
 `replies.ts` (`splitFrames`, `decodeSppFrame`, `parseReply`), `validate.ts` (argument checks: `intInRange`, `u8`, `le16`,
-`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `startNoiseMeter`; return
+`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `startNoiseMeter`, `notificationIcon`; return
 the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `DeviceStatus`, `decodeCustomPage(reply)` -> raw page byte of `bd 55 17 PP`, `isCountdownEnd(reply)` for the unsolicited `71 55 03 01 01 00`, `isCustomPageReply(reply)` as the `accept` filter of the `bd 17 ff` read).
 
 ## Module status
@@ -75,7 +76,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/app.ts` | App class, log only | #18 | done |
 | `src/device/TimeboxDriver.ts` | `onPair` wiring | #46 | done (pairing part of #22) |
 | `src/device/pairing.ts` | candidate selection, verify, pair session events | #46 | done (pairing part of #22) |
-| `src/device/TimeboxController.ts` | Homey-free device logic: `dim` (held while the panel is off and sent at power on, #62), power (`onoff`) and lighting colour, channel switching and sync, noise meter tracking (#3, noise shadow), clock face (incl. the small clock re-send, `CLOCK_RESEND_DELAY_MS`), native text (`showText`, `stopText`), countdown (`startCountdown`, `stopCountdown`, the "countdown ended" report `countdownReport`, which also sets `onoff` true when the end display lights a panel that was off, #125), static image (`showImage`, `showImageFrom`), weather state (`setWeather`, hold/flush), status sync, availability with grace, fixed status poll, time sync | #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #62, #88, #101, #125, #141, #151 | done |
+| `src/device/TimeboxController.ts` | Homey-free device logic: `dim` (held while the panel is off and sent at power on, #62), power (`onoff`) and lighting colour, channel switching and sync, noise meter tracking (#3, noise shadow), clock face (incl. the small clock re-send, `CLOCK_RESEND_DELAY_MS`), native text (`showText`, `stopText`), countdown (`startCountdown`, `stopCountdown`, the "countdown ended" report `countdownReport`, which also sets `onoff` true when the end display lights a panel that was off, #125), static image (`showImage`, `showImageFrom`), notification icon (`showNotificationIcon`, #5), weather state (`setWeather`, hold/flush), status sync, availability with grace, fixed status poll, time sync | #5, #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #62, #88, #101, #125, #141, #151 | done |
 | `src/device/channel.ts` | pure channel model: ids, `46` d0 codes (the noise meter has none), `channelCommand`, custom page ids, `otherModeName` | #24, #27, #68, #3 | done |
 | `src/device/lighting.ts` | pure lighting model: hue/saturation <-> RGB, `powerOffCommand` | #26 | done |
 | `src/device/clock.ts` | pure clock face model: style ids, hex colour parsing, `resolveClockSettings` (incl. `clock_animations`), `resolveStoredClockColor`, `resolveStoredShownStyle`, `CLOCK_HOUR24` | #25, #85 | done |
@@ -83,16 +84,17 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/device/argumentError.ts` | Homey-free `ArgumentError` (kind, field, params), `formatArgValue`, `localiseError` (user-facing validation errors) | #108 | done |
 | `src/device/scrollText.ts` | pure native text input: speed ids and levels, `prepareText` (NFC, strip, controls; reports the length, never cuts), duration parsing | #28, #107 | done |
 | `src/device/countdown.ts` | pure countdown input: `parseCountdownArgs` (round, range check), `formatCountdown` | #33 | done |
+| `src/device/notification.ts` | pure notification icon model: `NOTIFICATION_ICONS` (24 ids -> codes 0..23), `parseNotificationIconId`, `notificationIconCode`, `notificationIconCommand` | #5 | done |
 | `src/device/image.ts`, `imageError.ts`, `imageLimits.ts`, `imageScale.ts`, `imagePng.ts`, `imageJpeg.ts`, `imageGif.ts` | pure image model: `detectImageFormat`, `scaleImage` (bounded-memory decoders straight to 16x16: streamed PNG, DC-only JPEG over 512x512 else jpeg-js, row-wise GIF LZW with omggif parsing; ADR 0010), `AreaScaler` / `scaleTo16` (cover/contain, area average), `toPalette`, `buildImageCommand` (256-entry 8 bpp `44` payload), `runImageJob` (one image at a time), `parseImageFitId`, limits, `ImageError` | #31 | done |
 | `src/device/imageSource.ts` | image sources: `parseImageUrl`, `downloadImage` (10 s, 5 MiB), `readImageStream` / `loadImageToken` (Flow image token), `urlForLog` | #31 | done |
 | `src/device/weather.ts` | pure weather model: condition ids, `parseTemperatureArg`, `clampTemperature`, `weatherCommand`, `WeatherUpdate` / `mergeWeather` (partial updates with defaults), `wmoToCondition`, `resolveWeatherSettings` | #30, #98 | done |
 | `src/device/openMeteo.ts` | Open-Meteo client (`fetchCurrentWeather`, `OpenMeteoError`) and the Homey-free `WeatherUpdater` (schedule, retry, abort) | #30 | done |
 | `src/device/text.ts` | Homey-free `fillPlaceholders` for `{name}` tokens in locale strings; used for `text_too_long` and the argument errors (#108) | #21, #108 | done |
-| `src/device/TimeboxDevice.ts` | glue: capability listeners (`dim`, `onoff`, colour, channel), link setup, settings, triggers (connected, disconnected, mode changed, countdown ended), `DEBUG` device link | #22, #24, #25, #26, #27, #101 | done |
+| `src/device/TimeboxDevice.ts` | glue: capability listeners (`dim`, `onoff`, colour, channel), link setup, settings, triggers (connected, disconnected, mode changed, countdown ended), Flow action glue (incl. `showNotificationIcon`, #5), `DEBUG` device link | #5, #22, #24, #25, #26, #27, #101 | done |
 | `src/protocol/envelope.ts` | `FE EF AA 55` envelope + sequence counter | #19 | done |
 | `src/protocol/replies.ts` | SPP frame splitting, reply/notification parsing | #19 | done |
 | `src/protocol/errors.ts`, `hex.ts` | error types, hex helpers | #19 | done |
-| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`, `startNoiseMeter`), argument validation | #20, #28, #30, #31, #33, #106, #3 | done |
+| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`, `startNoiseMeter`, `notificationIcon`), argument validation | #20, #28, #30, #31, #33, #106, #3, #5 | done |
 | `src/protocol/status.ts` | status `46` decoding, `bd 17` custom page decoding, `isCountdownEnd` (`71 55 03 01 01 00`) and `isCustomPageReply` | #20, #101 | done |
 | `src/transport/Transport.ts`, `errors.ts`, `chunk.ts` | transport interface + `TransportError`, manager errors, 20-byte chunking | #21 | done |
 | `src/transport/ConnectionManager.ts` | queue, request/reply (optional `accept` filter), polling, reconnect backoff, `connectFailed` event, timing option validation | #21, #22, #101, #48 | done |
@@ -100,7 +102,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/transport/settle.ts` | `settleWithin` (bounded wait), `assertTimerMs` (timer option validation) | #21, #48 | done |
 | `src/transport/MockTransport.ts` | test transport | #21 | done |
 | `src/dev/FaultTransport.ts`, `devHarness.ts` | DEBUG-only fault injection and `devLink` commands, device link | #21, #22, #23 | done |
-| `src/flow/index.ts` | Flow listeners and trigger ids (incl. `FLOW_TRIGGER_COUNTDOWN_ENDED`): conditions `timebox_is_connected`, `timebox_channel_is`, actions `timebox_set_channel`, `timebox_show_clock`, `timebox_set_lighting`, `timebox_show_custom_page`, `timebox_show_text`, `timebox_stop_text`, `timebox_show_image`, `timebox_show_image_url`, `timebox_start_countdown`, `timebox_stop_countdown`, `timebox_set_weather`, `timebox_set_temperature` | #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #98, #101 | done |
+| `src/flow/index.ts` | Flow listeners and trigger ids (incl. `FLOW_TRIGGER_COUNTDOWN_ENDED`): conditions `timebox_is_connected`, `timebox_channel_is`, actions `timebox_set_channel`, `timebox_show_clock`, `timebox_set_lighting`, `timebox_show_custom_page`, `timebox_show_text`, `timebox_stop_text`, `timebox_show_image`, `timebox_show_image_url`, `timebox_start_countdown`, `timebox_stop_countdown`, `timebox_set_weather`, `timebox_set_temperature`, `timebox_show_notification_icon` | #5, #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #98, #101 | done |
 
 Update this table when an issue fills a module.
 
