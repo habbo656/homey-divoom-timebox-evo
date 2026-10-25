@@ -35,6 +35,7 @@ export const ARGUMENT_FIELDS = [
   'saturation',
   'fit',
   'url',
+  'icon',
 ] as const;
 export type ArgumentField = (typeof ARGUMENT_FIELDS)[number];
 

@@ -67,7 +67,8 @@
       "hue": "Hue",
       "saturation": "Saturation",
       "fit": "Fit",
-      "url": "URL"
+      "url": "URL",
+      "icon": "Icon"
     }
   }
 }

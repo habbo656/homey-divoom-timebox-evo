@@ -7,6 +7,7 @@ import { parseClockStyleId, parseHexColor } from './clock';
 import { parseCountdownArgs } from './countdown';
 import { hueSatToRgb } from './lighting';
 import { parseTextDuration, parseTextDurationArg, parseTextSpeedId, prepareText } from './scrollText';
+import { parseNotificationIconId } from './notification';
 import { dimToBrightness } from './TimeboxController';
 import { parseTemperatureArg, parseWeatherConditionId } from './weather';
 
@@ -148,5 +149,16 @@ describe('lighting and brightness', () => {
   it('dim: range and number', () => {
     expect(summary(thrown(() => dimToBrightness(2)))).toEqual(['invalid_range', 'dim', { value: '2', min: 0, max: 1 }]);
     expect(summary(thrown(() => dimToBrightness('0.5')))).toEqual(['invalid_number', 'dim', { value: '"0.5"' }]);
+  });
+});
+
+describe('notification icon (#5)', () => {
+  it('icon: invalid_choice with the allowed ids', () => {
+    const e = thrown(() => parseNotificationIconId('nope'));
+    expect(e.kind).toBe('invalid_choice');
+    expect(e.field).toBe('icon');
+    expect(e.params.value).toBe('"nope"');
+    expect(String(e.params.allowed)).toMatch(/^kakaotalk, instagram, .*, telegram, .*, tamtam$/);
+    expect(e.message).toMatch(/^icon must be one of kakaotalk, .*, got nope$/);
   });
 });
