@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Public page: data only via textContent/attributes, scripts only from here and the pinned Chart.js. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>Agent run metrics</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <h1>Agent run metrics</h1>
+      <p class="sub">
+        Effort and outcome of every agent pipeline run (homey-divoom-timebox-evo). Numbers, IDs and enums only.
+        Dashed lines mark a change of model, Claude Code version or prompt commit.
+      </p>
+    </header>
+    <section class="filters" aria-label="Filters">
+      <label>Model <select id="f-model"></select></label>
+      <label>CLI version <select id="f-cli"></select></label>
+      <label>Size <select id="f-size"></select></label>
+      <label>Risk <select id="f-risk"></select></label>
+      <label>From <input type="date" id="f-from" /></label>
+      <label>To <input type="date" id="f-to" /></label>
+      <span id="count" class="count"></span>
+    </section>
+    <p id="status" class="status">Loading…</p>
+    <section class="grid">
+      <figure><figcaption>Tokens per run (input + output + cache, by stage)</figcaption><div class="chart"><canvas id="c-tokens"></canvas></div></figure>
+      <figure><figcaption>Turns per run (by stage)</figcaption><div class="chart"><canvas id="c-turns"></canvas></div></figure>
+      <figure><figcaption>Duration per run, minutes (by stage)</figcaption><div class="chart"><canvas id="c-duration"></canvas></div></figure>
+      <figure><figcaption>API-equivalent cost per run, USD (by stage)</figcaption><div class="chart"><canvas id="c-cost"></canvas></div></figure>
+      <figure class="wide"><figcaption>Static context size, approx. tokens (bytes / 4)</figcaption><div class="chart"><canvas id="c-context"></canvas></div></figure>
+    </section>
+    <section>
+      <h2>Per issue</h2>
+      <div class="table-wrap">
+        <table id="issues">
+          <thead>
+            <tr>
+              <th>Issue</th>
+              <th>Kind</th>
+              <th>Runs</th>
+              <th>Fix rounds</th>
+              <th>First-try gate</th>
+              <th>Review findings (B/M/m)</th>
+              <th>HW test</th>
+              <th>UAT</th>
+              <th>Total tokens</th>
+              <th>Cost USD</th>
+              <th>Last status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </body>
+</html>

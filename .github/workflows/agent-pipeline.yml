@@ -193,7 +193,10 @@ jobs:
       - if: always()
         env:
           RESULT: ${{ steps.c.outputs.result-file }}
-        run: mkdir -p "$RUNNER_TEMP/refine-out" && { [ -z "$RESULT" ] || ! [ -s "$RESULT" ] || cp "$RESULT" "$RUNNER_TEMP/refine-out/result.json"; }
+          METRICS: ${{ steps.c.outputs.metrics-file }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/refine-out" && { [ -z "$RESULT" ] || ! [ -s "$RESULT" ] || cp "$RESULT" "$RUNNER_TEMP/refine-out/result.json"; }
+          [ -z "$METRICS" ] || ! [ -s "$METRICS" ] || cp "$METRICS" "$RUNNER_TEMP/refine-out/metrics.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -214,6 +217,7 @@ jobs:
       contents: read # writes use the bot token
     outputs:
       go: ${{ steps.r.outputs.go }}
+      status: ${{ steps.r.outputs.status }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -239,24 +243,25 @@ jobs:
           F: ${{ runner.temp }}/out/result.json
         run: |
           say() { bash scripts/agent/issue.sh say "$N" "$1"; }
-          hold() { echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          # The status is the run's outcome in its metrics record (docs/pipeline.md, Run metrics).
+          hold() { printf 'go=false\nstatus=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           if [ "$PLAN" = wait ]; then
             gh issue edit "$N" --add-label agent:needs-owner >/dev/null
             say "the plan for #$N waits for your confirmation (its rating is in the plan comment): \`/agent go\` starts development, \`/agent answer <changes>\` makes a new plan."
-            hold
+            hold needs-owner
           fi
-          if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit while planning. The scheduled run resumes this issue."; hold; fi
+          if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit while planning. The scheduled run resumes this issue."; hold limited; fi
           if [ "$OK" != true ] || ! [ -s "$F" ]; then
-            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N failed without a result (see the workflow run). \`/agent retry\` resumes."; hold
+            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N failed without a result (see the workflow run). \`/agent retry\` resumes."; hold blocked
           fi
           out=$(python3 scripts/agent/refine-comment.py "$F" "$OWNER" "$N" comment.md)
           status=$(sed -n 's/^status=//p' <<<"$out"); gate=$(sed -n 's/^gate=//p' <<<"$out")
           echo "$out" >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" = invalid ]; then
-            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N returned neither a plan nor questions. \`/agent retry\` plans again."; hold
+            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N returned neither a plan nor questions. \`/agent retry\` plans again."; hold blocked
           fi
           gh issue comment "$N" --body-file comment.md >/dev/null
-          if [ "$status" != ready ] || [ "$gate" = owner ]; then gh issue edit "$N" --add-label agent:needs-owner >/dev/null; hold; fi
+          if [ "$status" != ready ] || [ "$gate" = owner ]; then gh issue edit "$N" --add-label agent:needs-owner >/dev/null; hold needs-owner; fi
           echo "go=true" >> "$GITHUB_OUTPUT"
 
   develop:
@@ -340,11 +345,13 @@ jobs:
         if: always()
         env:
           RESULT: ${{ steps.c.outputs.result-file }}
+          METRICS: ${{ steps.c.outputs.metrics-file }}
           N: ${{ needs.pick.outputs.issue }}
         run: |
           # Outside the checkout: out/ is not ignored, and the commit of uncommitted changes below must not pick it up.
           out="$RUNNER_TEMP/develop-out"; mkdir -p "$out"
           [ -n "$RESULT" ] && [ -s "$RESULT" ] && cp "$RESULT" "$out/result.json"
+          [ -n "$METRICS" ] && [ -s "$METRICS" ] && cp "$METRICS" "$out/metrics.json"
           re="^agent/issue-$N-[a-z0-9][a-z0-9-]{0,50}$"
           b=""
           [ -s "$out/result.json" ] && b=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("branch",""))' "$out/result.json")
@@ -376,6 +383,7 @@ jobs:
       contents: read # writes use the bot token
     outputs:
       next: ${{ steps.p.outputs.next }}
+      status: ${{ steps.p.outputs.status }}
       sha: ${{ steps.p.outputs.sha }}
       branch: ${{ steps.p.outputs.branch }}
       pr: ${{ steps.p.outputs.pr }}
@@ -416,7 +424,7 @@ jobs:
           ROUND: ${{ needs.pick.outputs.round }}
         run: |
           say() { bash scripts/agent/issue.sh say "$N" "$1"; }
-          stop() { echo "next=stop" >> "$GITHUB_OUTPUT"; exit 0; }
+          stop() { printf 'next=stop\nstatus=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           j() { python3 -c 'import json,os,sys; print(json.load(open(os.environ["OUT"]+"/result.json")).get(sys.argv[1], ""))' "$1"; }
           if [ "$STAGE" = develop ]; then
             # Checkpoint first, whatever the outcome: push the branch's commits (fast-forward only, no PR), so that
@@ -461,9 +469,9 @@ jobs:
             fi
             kept=""; [ $pushed = true ] && kept=" Progress so far is on \`$b\`; the next run continues it."
             [ -n "$push_err" ] && kept=" Progress not saved: $push_err"
-            if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit.$kept The scheduled run resumes this issue."; stop; fi
+            if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit.$kept The scheduled run resumes this issue."; stop limited; fi
             if [ "$DEV" != success ] || [ "$OK" != true ] || [ $res = false ]; then
-              gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the develop run of #$N failed without a result (see the workflow run).$kept \`/agent retry\` resumes."; stop
+              gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the develop run of #$N failed without a result (see the workflow run).$kept \`/agent retry\` resumes."; stop blocked
             fi
             status=$(j status)
             case "$status" in
@@ -475,13 +483,13 @@ jobs:
 
           Answer with a comment that starts with \`/agent answer\`; the pipeline plans again with your answer.
           <!-- agent-questions -->" >/dev/null
-                stop ;;
+                stop needs-owner ;;
               ready) ;;
               *) gh issue edit "$N" --add-label agent:blocked >/dev/null
-                 say "blocked: $(j summary | head -c 1500)$kept  \`/agent retry\` resumes."; stop ;;
+                 say "blocked: $(j summary | head -c 1500)$kept  \`/agent retry\` resumes."; stop blocked ;;
             esac
-            if [ -n "$push_err" ]; then gh issue edit "$N" --add-label agent:blocked >/dev/null; say "$push_err Blocked."; stop; fi
-            [ $pushed = true ] || { say "develop returned no commits; nothing to publish."; stop; }
+            if [ -n "$push_err" ]; then gh issue edit "$N" --add-label agent:blocked >/dev/null; say "$push_err Blocked."; stop blocked; fi
+            [ $pushed = true ] || { say "develop returned no commits; nothing to publish."; stop no-change; }
             gh issue edit "$N" --remove-label agent:needs-owner >/dev/null 2>&1 || true
           else
             b=$PICKED
@@ -558,12 +566,21 @@ jobs:
           schema-file: .github/agent/review.schema.json
           model: sonnet
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      - run: mkdir -p out && cp "${{ steps.c.outputs.result-file }}" out/review.json
+      - if: always()
+        env:
+          RESULT: ${{ steps.c.outputs.result-file }}
+          METRICS: ${{ steps.c.outputs.metrics-file }}
+        run: |
+          mkdir -p out
+          [ -z "$RESULT" ] || cp "$RESULT" out/review.json
+          [ -z "$METRICS" ] || ! [ -s "$METRICS" ] || cp "$METRICS" out/metrics.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: review
           path: out/
           retention-days: 3
+          if-no-files-found: ignore
 
   verdicts:
     # Decide (deterministically) whether the hardware test may run.
@@ -711,6 +728,7 @@ jobs:
         run: |
           mkdir -p out
           f="${{ steps.c.outputs.result-file }}"; [ -n "$f" ] && [ -s "$f" ] && cp "$f" out/hwtest.json || echo '{}' > out/hwtest.json
+          m="${{ steps.c.outputs.metrics-file }}"; [ -z "$m" ] || ! [ -s "$m" ] || cp "$m" out/metrics.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -726,6 +744,9 @@ jobs:
     environment: bot
     permissions:
       contents: read # writes use the bot token
+    outputs:
+      status: ${{ steps.f.outputs.status }}
+      hwtest: ${{ steps.f.outputs.hwtest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -739,7 +760,8 @@ jobs:
         with:
           path: ${{ runner.temp }}/a
         continue-on-error: true
-      - env:
+      - id: f
+        env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ needs.pick.outputs.issue }}
           KIND: ${{ needs.pick.outputs.kind }}
@@ -757,6 +779,8 @@ jobs:
         run: |
           say() { bash scripts/agent/issue.sh say "$N" "$1"; }
           jf() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get(sys.argv[2], ""))' "$1" "$2" 2>/dev/null; }
+          # The run's outcome and hardware verdict for its metrics record (docs/pipeline.md, Run metrics).
+          done_() { printf 'status=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           problems=""
           # 1. Gate
           [ "$GATE" = true ] || problems="$problems
@@ -774,7 +798,7 @@ jobs:
           if [ "$HWPLAN" = needs-owner ]; then
             gh pr edit "$PR" --add-label owner:review >/dev/null 2>&1 || true
             say "PR #$PR changes protected paths (workflows, agent settings, runner scripts or dependencies). Review the diff of \`$SHA\` and comment \`/agent approve-diff\` on the PR (or merge it yourself). Nothing runs on the hardware runner before that."
-            exit 0
+            done_ needs-owner
           fi
           # 4. Hardware test
           hw=""
@@ -782,14 +806,15 @@ jobs:
             if [ "$HWREADY" != true ]; then
               gh issue edit "$N" --add-label agent:needs-owner >/dev/null
               say "the hardware runner is not ready, so the test of \`$SHA\` did not run ([run]($RUN_URL), step summary of the hwtest job). Fix it (e.g. plug in the webcam, start the runner) and comment \`/agent retry\`."
-              exit 0
+              echo "hwtest=blocked" >> "$GITHUB_OUTPUT"; done_ needs-owner
             fi
             if [ "$PAIRED" != success ]; then
               gh issue edit "$N" --add-label agent:needs-owner >/dev/null
               say "no TimeBox was paired within 30 min, so the hardware test did not run. Comment \`/agent retry\` when you are at the Homey app."
-              exit 0
+              echo "hwtest=blocked" >> "$GITHUB_OUTPUT"; done_ needs-owner
             fi
             hw=$(jf "$A/hwtest/hwtest.json" verdict); [ -n "$hw" ] || hw=blocked
+            echo "hwtest=$hw" >> "$GITHUB_OUTPUT"
             gh pr comment "$PR" --body "## Hardware test: $hw
 
           $(jf "$A/hwtest/hwtest.json" report)
@@ -797,7 +822,7 @@ jobs:
             if [ "$hw" = blocked ]; then
               gh issue edit "$N" --add-label agent:needs-owner >/dev/null
               say "the hardware test of \`$SHA\` is blocked (report on PR #$PR). Fix the bench and comment \`/agent retry\`."
-              exit 0
+              done_ needs-owner
             fi
             [ "$hw" = pass ] || problems="$problems
           - **Hardware test**: $hw (report on PR #$PR)."
@@ -814,7 +839,7 @@ jobs:
               gh issue comment "$N" --body "Pre-check of the [auto] cases failed; fixing ${url##*/} first, then a new round.
           <!-- agent-uat-rejected round=$ROUND -->" >/dev/null
               gh workflow run agent-pipeline.yml -f from="$N"
-              exit 0
+              done_ next-round
             fi
           fi
           # 5. Merge or next round
@@ -827,14 +852,75 @@ jobs:
             else
               gh workflow run agent-pipeline.yml -f from="$N"
             fi
-            exit 0
+            done_ merged
           fi
           gh issue comment "$N" --body "## Findings, round $ROUND (\`$SHA\`)
           $problems
           <!-- agent-findings round=$ROUND sha=$SHA -->" >/dev/null
           if [ "$ROUND" -lt 3 ]; then
             gh workflow run agent-pipeline.yml -f issue="$N" -f round=$((ROUND + 1))
+            done_ next-round
           else
             gh issue edit "$N" --add-label agent:blocked >/dev/null
             say "#$N is still red after 3 rounds (the last one with an Opus developer). Options: \`/agent retry\` (3 more rounds), \`/agent answer <instructions>\`, or close the issue."
+            done_ blocked
           fi
+
+  metrics:
+    # Deterministic, after every run that picked an issue, failed, cancelled and usage-limited ones included: one
+    # metrics record (numbers, IDs and enums only) on the gh-pages branch, the dashboard's data (docs/pipeline.md,
+    # Run metrics). The model jobs only hand in their stage records as artifacts; this job alone pushes to gh-pages.
+    needs: [pick, guard, refine, record, develop, publish, gate, review, verdicts, hwtest, finish]
+    if: always() && needs.pick.outputs.go != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bot
+    permissions:
+      contents: read # writes use the bot token
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the prompt commit is the newest commit of .claude/agents, .github/agent and CLAUDE.md
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          name: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          email: ${{ vars.AGENT_BOT_EMAIL }}
+          git: "true"
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/a
+        continue-on-error: true
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          N: ${{ needs.pick.outputs.issue }}
+          KIND: ${{ needs.pick.outputs.kind }}
+          ROUND: ${{ needs.pick.outputs.round }}
+          STAGE: ${{ needs.pick.outputs.stage }}
+          PR: ${{ needs.publish.outputs.pr }}
+          GATE: ${{ needs.gate.outputs.green }}
+          GATE_RESULT: ${{ needs.gate.result }}
+          REVIEW: ${{ needs.verdicts.outputs.review }}
+          HW: ${{ needs.finish.outputs.hwtest }}
+          S_FINISH: ${{ needs.finish.outputs.status }}
+          S_PUBLISH: ${{ needs.publish.outputs.status }}
+          S_RECORD: ${{ needs.record.outputs.status }}
+          CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+        run: |
+          # The job that ended the run names the outcome; without one the run was cancelled or failed.
+          status=${S_FINISH:-${S_PUBLISH:-$S_RECORD}}
+          if [ -z "$status" ]; then [ "$CANCELLED" = true ] && status=cancelled || status=failed; fi
+          [ -n "$GATE" ] || [ "$GATE_RESULT" != failure ] || GATE=false
+          risk=""; size=""
+          if [ "$KIND" = issue ] && [[ "$N" =~ ^[0-9]+$ ]]; then
+            ps=$(bash scripts/agent/issue.sh plan-state "$N" 2>/dev/null || true)
+            risk=$(sed -n 's/^risk=//p' <<<"$ps"); size=$(sed -n 's/^size=//p' <<<"$ps")
+          fi
+          python3 scripts/agent/metrics.py run "$RUNNER_TEMP/record.json" "$RUNNER_TEMP/a" \
+            run_id="$GITHUB_RUN_ID" run_attempt="$GITHUB_RUN_ATTEMPT" issue="$N" pr="$PR" round="$ROUND" kind="$KIND" \
+            path="$STAGE" risk="$risk" size="$size" gate="$GATE" review="$REVIEW" hwtest="$HW" status="$status"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print("metrics: status=%s, %d stage records" % (r["status"], len(r["stages"])))' "$RUNNER_TEMP/record.json" >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/agent/pages-publish.sh "$RUNNER_TEMP/record.json"

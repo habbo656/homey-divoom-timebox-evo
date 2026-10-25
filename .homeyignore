@@ -3,6 +3,7 @@
 # covered by the CLI's default `.*` rule; they are listed so the intent is explicit.
 /docs/
 /scripts/
+/pages/
 /CLAUDE.md
 /README.md
 /eslint.config.mjs

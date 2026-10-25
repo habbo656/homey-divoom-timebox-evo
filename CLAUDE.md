@@ -30,7 +30,7 @@ Read the overviews and indexes below, then open only the area or topic files the
    `.github/workflows/ci.yml` (owner, 2026-10-06).
    Workflow/pipeline change approved by the owner on 2026-10-24: GitHub Actions pipeline (ADR 0011).
    Only the pipeline's deterministic workflow steps push `agent/*` branches, open PRs and squash-merge, and only when
-   every gate in `docs/pipeline.md` passed. Never force-push, never push to `main` directly, never release or publish.
+   every gate in `docs/pipeline.md` passed; its metrics jobs also push run records to `gh-pages` (#24). Never force-push, never push to `main` directly, never release or publish.
 5. Keep docs in sync: any change to behaviour/architecture updates `docs/` in the same PR. The docs are the complete
    knowledge base; GitHub only manages the work.
 6. Finish with a short report: what was done, test results, open points or blockers.

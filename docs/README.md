@@ -8,7 +8,7 @@
 | Doc | Purpose |
 |---|---|
 | [project-requirements.md](project-requirements.md) | Refined repo/process requirements (source of truth for the setup) |
-| [pipeline.md](pipeline.md) | Agent pipeline in GitHub Actions: owner commands, workflows, security model, runner check, hardware testing |
+| [pipeline.md](pipeline.md) | Agent pipeline in GitHub Actions: owner commands, workflows, security model, run metrics, runner check, hardware testing |
 | [conventions.md](conventions.md) | Coding, branching, commit, test conventions |
 | [architecture.md](architecture.md) | App architecture overview (living document): layers, data flow, module status, layout |
 | [architecture/](architecture.md#areas) | Area files with the detail per topic (transport, pairing, device, modes, clock, text, weather, store assets, ...); the overview lists them |
@@ -36,7 +36,8 @@
 | [0008](decisions/0008-native-text-overlay.md) | Native text as an overlay, not a mode | accepted |
 | [0009](decisions/0009-pure-js-image-decoding.md) | Pure-JS image decoding for the Show image actions | accepted, amended by 0010 |
 | [0010](decisions/0010-bounded-memory-image-decoding.md) | Bounded-memory image decoding | accepted |
-| [0011](decisions/0011-actions-pipeline-public-repo.md) | Agent pipeline in GitHub Actions for a public repository | accepted, amended by 0012, 0013 and 0014 |
+| [0011](decisions/0011-actions-pipeline-public-repo.md) | Agent pipeline in GitHub Actions for a public repository | accepted, amended by 0012, 0013, 0014 and 0015 |
 | [0012](decisions/0012-bot-identity.md) | The pipeline writes to GitHub as its own GitHub App | accepted |
 | [0013](decisions/0013-protocol-kb-skill.md) | The protocol knowledge base reaches the agents as a skill | accepted |
 | [0014](decisions/0014-refine-step.md) | A refine step rates, clarifies and plans before develop | accepted |
+| [0015](decisions/0015-run-metrics-pages.md) | Agent run metrics on a public GitHub Pages dashboard | accepted |

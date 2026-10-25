@@ -88,9 +88,11 @@ jobs:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       - env:
           RESULT: ${{ steps.c.outputs.result-file }}
+          METRICS: ${{ steps.c.outputs.metrics-file }}
           V: ${{ needs.verdict.outputs.version }}
         run: |
           mkdir -p out; cp "$RESULT" out/result.json
+          [ -z "$METRICS" ] || ! [ -s "$METRICS" ] || cp "$METRICS" out/metrics.json
           b="agent/release-v$V"
           git rev-parse -q --verify "refs/heads/$b" >/dev/null && git bundle create out/branch.bundle "refs/heads/$b" ^origin/main 2>/dev/null || true
       - uses: actions/upload-artifact@v4
@@ -108,6 +110,7 @@ jobs:
     outputs:
       sha: ${{ steps.p.outputs.sha }}
       pr: ${{ steps.p.outputs.pr }}
+      rejected: ${{ steps.p.outputs.rejected }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,6 +157,7 @@ jobs:
               bash scripts/agent/issue.sh approve "${url##*/}" "$BOT" >/dev/null
               list="$list #${url##*/}"
             done
+            echo "rejected=$(wc -w <<<"$list" | tr -d ' ')" >> "$GITHUB_OUTPUT"
             gh issue comment "$N" --body "Rejected cases filed as approved \`uat-finding\` bugs:$list. The pipeline fixes them, then prepares a new round here.
           <!-- agent-uat-rejected -->" >/dev/null
             echo "sha=" >> "$GITHUB_OUTPUT"
@@ -167,6 +171,7 @@ jobs:
           ver=$(git diff "origin/main...$b" -- package.json package-lock.json app.json .homeycompose/app.json | grep -E '^[+-] ' | grep -vE '"version": ' || true)
           if [ -n "$bad$ver" ]; then bash scripts/agent/issue.sh say "$N" "the release branch changes more than docs and version fields; not merged. Files: $bad"; exit 1; fi
           git push -q origin "refs/heads/$b:refs/heads/$b"
+          echo "rejected=0" >> "$GITHUB_OUTPUT"
           url=$(gh pr create --base main --head "$b" --title "chore(release): v$V" --body "Refs #$N. UAT v$V accepted by @$OWNER; acceptance docs and version bump. Tag \`v$V\` follows the merge; publishing stays with the owner.")
           printf 'sha=%s\npr=%s\n' "$(git rev-parse "refs/heads/$b")" "${url##*/}" >> "$GITHUB_OUTPUT"
 
@@ -186,6 +191,8 @@ jobs:
     environment: bot
     permissions:
       contents: read # writes use the bot token
+    outputs:
+      status: ${{ steps.f.outputs.status }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,7 +206,8 @@ jobs:
           name: ${{ vars.AGENT_BOT_SLUG }}[bot]
           email: ${{ vars.AGENT_BOT_EMAIL }}
           git: "true"
-      - env:
+      - id: f
+        env:
           GH_TOKEN: ${{ steps.bot.outputs.token }}
           N: ${{ inputs.issue }}
           V: ${{ needs.verdict.outputs.version }}
@@ -207,9 +215,55 @@ jobs:
           SHA: ${{ needs.publish.outputs.sha }}
           GATE: ${{ needs.gate.outputs.green }}
         run: |
-          if [ -z "$SHA" ]; then gh workflow run agent-pipeline.yml -f from="$N"; exit 0; fi
+          if [ -z "$SHA" ]; then gh workflow run agent-pipeline.yml -f from="$N"; echo "status=next-round" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$GATE" != true ]; then bash scripts/agent/issue.sh say "$N" "gate red on release PR #$PR; not merged."; exit 1; fi
           gh pr merge "$PR" --squash --delete-branch
           git fetch -q origin main && git tag "v$V" origin/main && git push -q origin "v$V"
           gh issue close "$N" --comment "@$OWNER v$V accepted: docs and version bump merged (PR #$PR), tagged \`v$V\`. Publishing to the Homey App Store stays with you." >/dev/null
           gh workflow run agent-pipeline.yml -f from="$N"
+          echo "status=merged" >> "$GITHUB_OUTPUT"
+
+  metrics:
+    # Deterministic: one record of type uat (milestone, verdict, rejected cases) on gh-pages, like the pipeline's
+    # metrics job (docs/pipeline.md, Run metrics).
+    needs: [verdict, agent, publish, gate, finish]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bot
+    permissions:
+      contents: read # writes use the bot token
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          name: ${{ vars.AGENT_BOT_SLUG }}[bot]
+          email: ${{ vars.AGENT_BOT_EMAIL }}
+          git: "true"
+      - uses: actions/download-artifact@v4
+        with:
+          name: uat
+          path: ${{ runner.temp }}/a/uat
+        continue-on-error: true
+      - env:
+          N: ${{ inputs.issue }}
+          V: ${{ needs.verdict.outputs.version }}
+          VERDICT: ${{ needs.verdict.outputs.verdict }}
+          REJECTED: ${{ needs.publish.outputs.rejected }}
+          PR: ${{ needs.publish.outputs.pr }}
+          GATE: ${{ needs.gate.outputs.green }}
+          S_FINISH: ${{ needs.finish.outputs.status }}
+          CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
+        run: |
+          status=$S_FINISH
+          if [ -z "$status" ]; then [ "$CANCELLED" = true ] && status=cancelled || status=failed; fi
+          python3 scripts/agent/metrics.py uat "$RUNNER_TEMP/record.json" "$RUNNER_TEMP/a" \
+            run_id="$GITHUB_RUN_ID" run_attempt="$GITHUB_RUN_ATTEMPT" issue="$N" pr="$PR" milestone="$V" \
+            verdict="$VERDICT" rejected="$REJECTED" gate="$GATE" status="$status"
+          bash scripts/agent/pages-publish.sh "$RUNNER_TEMP/record.json"
