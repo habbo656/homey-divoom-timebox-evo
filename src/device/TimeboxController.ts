@@ -38,6 +38,8 @@ import { formatCountdown } from './countdown';
 import { buildImageCommand, ImageError, runImageJob } from './image';
 import type { ImageFit } from './image';
 import { hueSatToRgb, powerOffCommand, rgbToHueSat } from './lighting';
+import { notificationIconCode, notificationIconCommand } from './notification';
+import type { NotificationIconId } from './notification';
 import { parseTextDuration, prepareText } from './scrollText';
 import { fillPlaceholders } from './text';
 import {
@@ -56,6 +58,8 @@ import type { Weather, WeatherSource, WeatherUpdate } from './weather';
 export const STATUS_POLL_INTERVAL_MS = 60_000;
 /** How long the link may be down (or silent) before the device is marked unavailable. */
 export const UNAVAILABLE_GRACE_MS = 30_000;
+/** The opcode of the `50 55` reply that confirms a notification icon (protocol section 5.5). */
+const NOTIFICATION_ICON_OPCODE = 0x50;
 /** How long the `46` query that confirms a brightness change waits for its reply. */
 export const DIM_CONFIRM_TIMEOUT_MS = 5_000;
 /** How long the `74` write of a brightness change may take before the change fails (a hung write must not hang Homey). */
@@ -1155,6 +1159,35 @@ export class TimeboxController {
       // The stop is out; without the re-send the device ends on the clock and the next poll tells the app.
       this.log(`countdown stop: mode re-send failed: ${errorText(e)}`);
     }
+  }
+
+  // --- notification icon (#5) -------------------------------------------------------------------------------------
+
+  /**
+   * The Flow action "Show notification icon": send `50 TT` (protocol section 5.5) and wait for the `50 55` reply. The
+   * device shows the icon for about 2 s and then returns to the previous view by itself, so the icon is not a mode: the
+   * tile, the known channel, the triggers and the text, image and countdown tracking stay as they are. Rejects with an
+   * `ArgumentError` for an unknown icon id (nothing is sent) and with the readable `notConnected` error if the Timebox is
+   * not connected or the link is lost during the wait. A panel that is off is turned on first with `setPower(true)`: an
+   * unconfirmed restore rejects with the `notConfirmed` error and the icon is not sent. No `50` reply within the confirm
+   * timeout rejects with the `notConfirmed` error (#141).
+   */
+  async showNotificationIcon(id: NotificationIconId): Promise<void> {
+    const code = notificationIconCode(id);
+    const frame = notificationIconCommand(id);
+    if (this.stopped || this.link.state !== 'connected') throw new Error(this.messages.notConnected);
+    if (!this.power) {
+      this.log('notification: panel is off, turning it on first');
+      await this.setPower(true);
+    }
+    try {
+      await this.link.request(frame, NOTIFICATION_ICON_OPCODE, this.confirmTimeoutMs);
+    } catch (e) {
+      if (e instanceof RequestTimeoutError) this.log(`notification icon confirm timeout: ${id} (code ${code})`);
+      else this.log(`notification icon confirm failed: ${errorText(e)}`);
+      throw new Error(this.confirmFailure(e) === 'lost' ? this.messages.notConnected : this.messages.notConfirmed);
+    }
+    this.log(`notification icon shown: ${id} (code ${code})`);
   }
 
   // --- static image (#31) -----------------------------------------------------------------------------------------

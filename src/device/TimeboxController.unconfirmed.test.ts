@@ -254,6 +254,7 @@ describe('the internal power-on passes the error on (#141)', () => {
     ['Show text', 0x6e, (r) => r.c.showText(textRequest)],
     ['Start countdown', 0x72, (r) => r.c.startCountdown({ minutes: 1, seconds: 0 })],
     ['Show image', 0x44, (r) => r.c.showImage(imageRequest)],
+    ['Show notification icon', 0x50, (r) => r.c.showNotificationIcon('telegram')],
   ];
 
   it.each(cases)('%s rejects with not_confirmed and sends its own frame never', async (_name, opcode, run) => {
