@@ -18,7 +18,7 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
   may clear the field while the dev link is attached; `start()` after `stop()` is a no-op). The setup is wrapped in
   try/catch: if it throws, the error is logged (`[device] setup failed: <msg>`) and the device is set unavailable with
   `device.unavailable.setup_failed` instead of looking available. After `onUninit`/`onDeleted` (`deinitialised` flag)
-  a finishing or failing setup only logs a setup error (no `started` log, no `setUnavailable`). `onSettings` applies the clock settings, `time_sync` and the weather settings (see "Clock face", "Time sync", "Weather"). `onDeleted`/`onUninit` call `stop()` (idempotent:
+  a finishing or failing setup only logs a setup error (no `started` log, no `setUnavailable`). `onInit` and `onSettings` apply the device class (`use_as_light`, #19); `onSettings` applies the clock settings, `time_sync` and the weather settings (see "Clock face", "Time sync", "Weather"). `onDeleted`/`onUninit` call `stop()` (idempotent:
   timers cleared, listeners removed, link stopped, no log or surface call afterwards).
   - `dim`: Homey 0..1 maps to brightness 0..100 (`dimToBrightness`, `Math.round`, `ArgumentError` (a `RangeError`) for anything but a number in
     0..1). `setDim` validates first, throws `Error(device.error.not_connected)` without a live link while the panel is on (nothing is queued,
@@ -67,7 +67,7 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
     episode. `onOnlineChanged(true|false)` (the Flow triggers) fires only on a change: not for the first decision after
     startup (previous `null`), `false` only if the device was online before.
 
-  - Settings: the clock face settings (see "Clock face"), `time_sync` (group "Clock", checkbox, default on; `onSettings` calls `setTimeSyncEnabled`), the weather settings (see "Weather"), in `drivers/timebox/driver.settings.compose.json`: group "Clock" has exactly `clock_style`, `clock_weather`, `clock_temperature`, `clock_calendar`, `clock_animations`, `time_sync`, followed by group "Weather" with `weather_auto` and `weather_interval` (see "Weather"; guarded by `src/manifest.test.ts`). There is no status interval setting: the status poll is fixed at 60 s (`STATUS_POLL_INTERVAL_MS`, #70), `ConnectionManager.setPollInterval` remains for the dev harness.
+  - Settings: the clock face settings (see "Clock face"), `time_sync` (group "Clock", checkbox, default on; `onSettings` calls `setTimeSyncEnabled`), the weather settings (see "Weather"), in `drivers/timebox/driver.settings.compose.json`: group "Clock" has exactly `clock_style`, `clock_weather`, `clock_temperature`, `clock_calendar`, `clock_animations`, `time_sync`, followed by group "Weather" with `weather_auto` and `weather_interval` (see "Weather"), followed by group "Light" with `use_as_light` (checkbox, default off, #19; see "Power and lighting"; guarded by `src/manifest.test.ts`). There is no status interval setting: the status poll is fixed at 60 s (`STATUS_POLL_INTERVAL_MS`, #70), `ConnectionManager.setPollInterval` remains for the dev harness.
     Reconnect backoff keeps the `ConnectionManager` defaults.
   - `ConnectionManager` emits `connectFailed {reason, permanent, retryInMs}` for every failed connect attempt (not for a
     lost link of an established session, not after `stop()`), which the controller uses for the permanent case.
@@ -81,7 +81,7 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
     `clock face mismatch: ...`, `clock face re-sent (small from <origin>): <hex>`, `clock face re-send skipped: a text, countdown or stop was queued`, `clock face re-send skipped: mode changed`,
     `clock face re-send skipped: not connected`, `clock face re-send failed: <msg>`, `clock animations -> off|on: 26 0X (switch|connect)`, `clock animations not set: <msg>`, `clock settings applied`, `clock settings superseded by a newer change`, `clock settings not applied: <msg>`,
     `clock settings saved, applied when the clock is shown`, `invalid clock_* setting, using the default`,
-    `time synced (<connect|setting|daily|zone change|offset change|retry>): <YYYY-MM-DD hh:mm:ss> <zone> UTC+hh:mm`
+    `device class -> <light|other> (<init|setting>)`, `could not set the device class: <msg>`, `time synced (<connect|setting|daily|zone change|offset change|retry>): <YYYY-MM-DD hh:mm:ss> <zone> UTC+hh:mm`
     (zone and offset are logged on purpose: Homey's Node might lack full time zone data), `time sync not confirmed`,
     `time sync failed: <msg>`, `device brightness N out of
     range, clamped`, `flow trigger <id>`; errors `surface call failed: <msg>`,

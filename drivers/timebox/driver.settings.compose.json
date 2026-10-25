@@ -194,5 +194,27 @@
         ]
       }
     ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Light",
+      "de": "Licht"
+    },
+    "children": [
+      {
+        "id": "use_as_light",
+        "type": "checkbox",
+        "label": {
+          "en": "Use as a light",
+          "de": "Als Licht verwenden"
+        },
+        "hint": {
+          "en": "Homey treats the TimeBox as a light: it can be added to moods, and \"all lights off\" and voice commands for lights switch it too. Off: it stays a display.",
+          "de": "Homey behandelt die TimeBox als Licht: Sie kann in Stimmungen aufgenommen werden, und „Alle Lichter aus“ sowie Sprachbefehle für Lichter schalten sie mit. Aus: Sie bleibt eine Anzeige."
+        },
+        "value": false
+      }
+    ]
   }
 ]

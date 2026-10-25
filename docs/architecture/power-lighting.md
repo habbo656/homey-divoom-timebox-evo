@@ -3,8 +3,10 @@
 _Part of [architecture](../architecture.md); moved from "Power and lighting" (#120)._
 
   - Power and lighting (#26; `src/device/lighting.ts` pure, `TimeboxController` logic): capabilities `onoff`, `light_hue`,
-    `light_saturation` (Homey's own, no custom cards). The device class stays `other` on purpose: class `light` would put the
-    Timebox into "all lights off" and voice light commands, which is wrong for a display. `capabilitiesOptions.onoff.setOnDim`
+    `light_saturation` (Homey's own, no custom cards). The manifest class stays `other`: class `light` would put the
+    TimeBox into "all lights off" and voice light commands, which is wrong for a display by default. Opt-in (#19): the device
+    setting `use_as_light` (group "Light", checkbox, default off; `src/device/lightClass.ts`: `resolveUseAsLight`, only the
+    boolean `true` is on; `targetDeviceClass`) switches the class at runtime with `setClass('light'|'other')`, see "Use as a light". `capabilitiesOptions.onoff.setOnDim`
     is `false`, so setting `dim` does not switch `onoff` on (`dim` keeps its `74` behaviour, #22). While the panel is off the app
     holds the `dim` value and sends it at the next power on, because a `74` would light the panel (#62, below).
     - Power is app state: no `46` field is a reliable power flag (d8 follows the last `45` command but not `74`, protocol
@@ -71,8 +73,17 @@ _Part of [architecture](../architecture.md); moved from "Power and lighting" (#1
       writes the hue/saturation tile (not for black) and `TimeboxDevice` writes `timebox_channel` = `lighting` (skipped when a newer change superseded it, #141).
     - "Turn everything off" (expected behaviour, the hardware test checks what it can): any Homey action that sets the device's
       `onoff` capability (the tile, the Flow card "Turn off", zone-wide or voice actions that address `onoff`) turns the panel off;
-      "all lights off" actions that address light-class devices should not include it (class `other`). Turning on returns to the
-      last channel.
+      "all lights off" actions that address light-class devices do not include it while the class is `other` and do include it
+      when "Use as a light" is on (#19). Turning on returns to the last channel.
+    - Use as a light (#19): `TimeboxDevice.applyDeviceClass(useAsLight, 'init'|'setting')` compares `getClass()` with the target and
+      calls `setClass` only on a difference, logging `[device] device class -> <light|other> (<init|setting>)`. `onInit` runs it
+      after the capability migrations and before `setup()`; a failure only logs `[device] could not set the device class: <msg>`
+      and never stops the setup. `onSettings` awaits it when `use_as_light` changed; on failure it logs the same line and throws
+      the localised `device.error.class_not_changed`, so Homey shows the error and keeps the old setting. Moods: a mood sets
+      `onoff`, `dim`, `light_hue` and `light_saturation` through the normal listeners, so the colour follows the #69 rule
+      (it applies to the active mode: clock or lighting; another mode is switched to lighting by `setTileColor`). Limits: a mood
+      cannot set the mode tile, the clock style or any card-only feature; a mood applied while the TimeBox is unreachable fails
+      like any capability write (`not_connected`).
     - Dim while off (#62): `74` lights an off panel, so `setDim` sends nothing while `onoff` is false or an off is being
       sent: the value is held (`dim held while off: P (sent at power on)`), the `dim` tile shows it, and it is sent as `74 P`
       right after the next switch on (power on, any mode pick or Flow display action, a switch on at the device, the

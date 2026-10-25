@@ -28,6 +28,7 @@ import type { CountdownTime } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 import { localiseError } from './argumentError';
 import { onoffSetOnDimDisabled } from './lighting';
+import { resolveUseAsLight, targetDeviceClass, USE_AS_LIGHT_SETTING } from './lightClass';
 import { resolveTimeSyncSetting } from './timeSync';
 import { WeatherUpdater } from './openMeteo';
 import type { FetchLike } from './openMeteo';
@@ -124,6 +125,13 @@ export class TimeboxDevice extends Homey.Device {
 
     await this.migrateClockColor();
 
+    // The device class follows the "Use as a light" setting (#19); a failure must not stop the setup.
+    try {
+      await this.applyDeviceClass(resolveUseAsLight(this.getSetting(USE_AS_LIGHT_SETTING)), 'init');
+    } catch (e) {
+      this.error(`[device] could not set the device class: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     try {
       await this.setup();
     } catch (e) {
@@ -163,6 +171,14 @@ export class TimeboxDevice extends Homey.Device {
     } catch (e) {
       this.error(`[device] could not migrate the clock colour: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+
+  /** Switch the device class to the one of the "Use as a light" option (#19); nothing happens when it already is that class. */
+  private async applyDeviceClass(useAsLight: boolean, reason: 'init' | 'setting'): Promise<void> {
+    const target = targetDeviceClass(useAsLight);
+    if (this.getClass() === target) return;
+    await this.setClass(target);
+    this.log(`[device] device class -> ${target} (${reason})`);
   }
 
   private async setup(): Promise<void> {
@@ -404,6 +420,14 @@ export class TimeboxDevice extends Homey.Device {
     newSettings: { [key: string]: boolean | string | number | undefined | null };
     changedKeys: string[];
   }): Promise<void> {
+    if (changedKeys.includes(USE_AS_LIGHT_SETTING)) {
+      try {
+        await this.applyDeviceClass(resolveUseAsLight(newSettings[USE_AS_LIGHT_SETTING]), 'setting');
+      } catch (e) {
+        this.error(`[device] could not set the device class: ${e instanceof Error ? e.message : String(e)}`);
+        throw new Error(this.homey.__('device.error.class_not_changed'));
+      }
+    }
     let clockSettings: ClockSettings | null = null;
     if (changedKeys.some((key) => (CLOCK_SETTING_KEYS as readonly string[]).includes(key))) {
       const clock = resolveClockSettings(newSettings);

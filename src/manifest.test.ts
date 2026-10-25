@@ -46,10 +46,36 @@ describe('driver manifest (#70)', () => {
       'time_sync',
       'weather_auto',
       'weather_interval',
+      'use_as_light',
     ]);
     expect(settings.every((n) => n.type === 'group')).toBe(true);
-    expect(settings).toHaveLength(2); // Clock, Weather: no "Advanced" group
-    expect(settings.map((g) => (g as unknown as { label: { en: string } }).label.en)).toEqual(['Clock', 'Weather']);
+    expect(settings).toHaveLength(3); // Clock, Weather, Light: no "Advanced" group
+    expect(settings.map((g) => (g as unknown as { label: { en: string } }).label.en)).toEqual([
+      'Clock',
+      'Weather',
+      'Light',
+    ]);
+  });
+
+  it('offers "Use as a light" as a checkbox, off by default, while the driver class stays other (#19)', () => {
+    const light =
+      readJson<{ children: { id: string; type: string; value: unknown; label: Record<string, string> }[] }[]>(
+        'driver.settings.compose.json',
+      )[2].children[0];
+    expect(light.id).toBe('use_as_light');
+    expect(light.type).toBe('checkbox');
+    expect(light.value).toBe(false);
+    expect(light.label).toEqual({ en: 'Use as a light', de: 'Als Licht verwenden' });
+    expect(readJson<{ class: string }>('driver.compose.json').class).toBe('other');
+  });
+
+  it('has the localised error for a device class that could not be changed (#19)', () => {
+    for (const lang of ['en', 'de']) {
+      const locale = JSON.parse(readFileSync(join(__dirname, '..', 'locales', `${lang}.json`), 'utf8')) as {
+        device: { error: Record<string, string> };
+      };
+      expect(locale.device.error.class_not_changed, lang).toBeTruthy();
+    }
   });
 
   it('declares every card the app registers a listener for', () => {
