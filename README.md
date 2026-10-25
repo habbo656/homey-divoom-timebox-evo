@@ -43,8 +43,8 @@ A [Homey](https://homey.app) app that integrates the **Divoom TimeBox Evo** pixe
 > tile, one colour picker for the active mode, Flow action "Set lighting" with a colour), plus the Flow action "Show custom page" (1-3). Cloud, visualizations and the scoreboard are not offered; if the device shows cloud or a visualizer, the mode tile is empty.
 >
 > **Turn everything off:** the TimeBox has an `onoff` capability, so any Homey action that sets it is expected to turn the
-> panel off: the tile, the Flow card "Turn off", and zone-wide or voice actions that address `onoff`. "All lights off" that
-> addresses light devices does not include it by default (the device class is `other`, not `light`); with the device setting "Use as a light" on, the TimeBox becomes a light: it can be added to moods and "all lights off" includes it. Turning it on returns to the last mode
+> panel off: the tile, the Flow card "Turn off", and zone-wide or voice actions that address `onoff`. "All lights off" and
+> voice commands for lights include it too, because the TimeBox is a light device (it can also be added to moods). Turning it on returns to the last mode
 > (clock, lighting or custom). Changing the brightness (`dim`) of a switched-off TimeBox does not
 > light the panel: the app holds the value and sends it when the panel is switched on again (#62).
 > Current version: 1.1.0 (milestone Bugfix after Release 1.0, accepted 2026-10-18). Changelog: `.homeychangelog.json`.
