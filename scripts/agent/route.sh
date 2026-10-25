@@ -4,7 +4,7 @@
 # Output: "do=<action>" and "reason=<text>" lines (to $GITHUB_OUTPUT if set, else stdout).
 #   none | screen (owner approved → screen + record) | override (owner approves despite a screen flag)
 #   revoke (someone else edited an approved issue / set the label) | resume (owner answered or said retry)
-#   approve-diff (owner approved a protected-path PR diff) | stop | next (start the next approved issue)
+#   go (owner confirmed a plan that waits for confirmation) | approve-diff (owner approved a protected-path PR diff) | stop | next (start the next approved issue)
 #   uat-check (owner verdict on a UAT issue)
 # Only the repository owner can start anything. Bodies are parsed for a fixed command word only.
 set -uo pipefail
@@ -32,6 +32,7 @@ case "${EVENT:-}/${ACTION:-}" in
     case "$first" in
       "/agent approve-diff"*) [ "${IS_PR:-}" = true ] && out approve-diff "owner approved the PR diff" || out none "approve-diff only on a PR" ;;
       "/agent approve"*) [ "${IS_PR:-}" = true ] && out none "approve is for issues" || out screen "owner approved by comment" ;;
+      "/agent go"*) [ "${IS_PR:-}" = true ] && out none "go is for issues" || out go "owner confirmed the plan" ;;
       "/agent override"*) out override "owner overrides the screen" ;;
       "/agent answer"*|"/agent retry"*) out resume "owner said /agent $(awk '{print $2}' <<<"$first")" ;;
       "/agent stop"*) out stop "owner stopped the pipeline for this issue" ;;

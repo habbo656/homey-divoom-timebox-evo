@@ -13,6 +13,7 @@
 #   issue.sh say N TEXT             bot comment that mentions the owner (the only owner channel)
 #   issue.sh marker N NAME          body of the newest bot comment carrying <!-- agent-NAME … -->
 #   issue.sh markers N NAME         number of such bot comments
+#   issue.sh plan-state N           state=refine|ready|wait plus the newest plan's hw/risk/size/gate (comments.py)
 set -euo pipefail
 : "${GITHUB_REPOSITORY:?}"
 OWNER=${OWNER:-${GITHUB_REPOSITORY%%/*}}
@@ -60,6 +61,7 @@ case "$cmd" in
   say) gh issue comment "$n" --body "@$OWNER ${3:?text}" >/dev/null ;;
   marker) comments marker "${3:?name}" ;;
   markers) comments markers "${3:?name}" ;;
+  plan-state) comments plan-state ;;
   verify)
     info=$(gh issue view "$n" --json state,labels --jq '.state + " ," + ([.labels[].name] | join(",")) + ","')
     state=${info%% *}; labels=${info#* }
@@ -77,5 +79,5 @@ case "$cmd" in
     [ "$rec" = "$(hash)" ] || { echo "VERIFY FAIL: #$n changed after the approval (hash mismatch)"; exit 1; }
     echo "VERIFY OK: #$n approved (label by $actor), content unchanged since the approval"
     ;;
-  *) echo "usage: issue.sh hash|context|approve|revoke|verify|say|marker|markers N …" >&2; exit 2 ;;
+  *) echo "usage: issue.sh hash|context|approve|revoke|verify|say|marker|markers|plan-state N …" >&2; exit 2 ;;
 esac

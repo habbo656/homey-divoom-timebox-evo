@@ -10,7 +10,9 @@ diagram is in the [README](../README.md#how-this-app-is-built-agent-pipeline).
 ```
 owner: label agent:approved ─► INTAKE: router (owner only) ─► injection screen (no tools) + heuristics ─► approval record
                                                                                 │ flagged → owner: /agent override
-PIPELINE  pick (roadmap order) ─► guard (approval + hash) ─► DEVELOP: planner → developer → doc-keeper → gate (ubuntu)
+PIPELINE  pick (roadmap order) ─► guard (approval + hash) ─► REFINE: planner rates risk/size, asks, plans (ubuntu)
+   ─► record (plan comment) │ questions / XL split / risk high or XL → owner: /agent answer · /agent go
+   ─► DEVELOP: developer (Opus if risk high or size ≥ L) → doc-keeper → gate (ubuntu)
    ─► publish (push branch, plan comment, draft PR) ─► gate (ubuntu) ∥ REVIEW: fresh reviewer (ubuntu)
    ─► protected paths? → owner: /agent approve-diff ─► HARDWARE TEST: runner check → build → dev run → pairing → tester (Mac)
    ─► finish: merge + next issue │ findings → next round (2 + 1 Opus escalation) → agent:blocked → owner
@@ -26,7 +28,8 @@ Only the repository owner can start or steer anything; labels or comments by any
 |---|---|---|
 | issue | label `agent:approved` or comment `/agent approve` | screen the issue, record the approval, start the pipeline (one issue at a time, roadmap order) |
 | issue | `/agent override` | approve although the screen flagged it (`security:flagged`) |
-| issue | `/agent answer <text>` | answer the planner's questions (`agent:needs-owner`) and resume |
+| issue | `/agent answer <text>` | answer the planner's or developer's questions, or change the plan (`agent:needs-owner`); the pipeline plans again |
+| issue | `/agent go` | confirm a plan that waits for the owner (risk high or size XL); development starts |
 | issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, pairing timeout, 3 red rounds) |
 | issue | `/agent stop` | label `agent:blocked`; nothing runs until `/agent retry` |
 | PR | `/agent approve-diff` | allow hardware test and merge of exactly the current head of a PR that touches protected paths |
@@ -34,7 +37,7 @@ Only the repository owner can start or steer anything; labels or comments by any
 | UAT issue | `ACCEPTED …` / `REJECTED UAT-3, UAT-7 …` | the milestone verdict (first word of the comment) |
 
 What the owner still does by hand: write or confirm issues (the `brainstormer` agent helps locally), approve them, answer
-questions, pair the TimeBox when a hardware test asks for it (comment on the issue, the job waits 30 min), review
+questions (requirements are never assumed), confirm high-risk or XL plans, split XL issues, pair the TimeBox when a hardware test asks for it (comment on the issue, the job waits 30 min), review
 protected diffs, the UAT per milestone, and publishing to the Homey App Store.
 
 ## Workflows
@@ -56,27 +59,51 @@ Pipeline jobs (`agent-pipeline.yml`):
 2. **guard** — `scripts/agent/issue.sh verify`: open, `agent:approved` set by the owner (or by the bot for issues it
    filed from an owner verdict), title + body unchanged since the approval (sha256 in the approval record), not
    `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
-3. **develop** (ubuntu, read-only token) — installs the protocol KB skill (below), then `.github/agent/develop.md`: planner → developer (round 3: Opus) → doc-keeper →
-   `scripts/gate.sh`; returns JSON (`develop.schema.json`) and the branch as a git bundle. Questions end the run with
-   `agent:needs-owner`. The agents commit after every finished step; the bundle and upload steps run also after a failed,
+   Decides the plan state (`scripts/agent/issue.sh plan-state`, kind `issue` only): `refine` when there is no plan yet
+   or an owner `/agent answer` or new questions came after the newest plan; `wait` when that plan waits for
+   `/agent go`; `ready` otherwise. Fix rounds therefore reuse the plan.
+3. <a id="refine"></a>**refine** (ubuntu, read-only, only in state `refine`) — the KB skill, then `.github/agent/refine.md`:
+   one Opus session that is the `planner` (`.claude/agents/planner.md`, tools Read/Grep/Glob/Bash/Skill, no file
+   changes). It returns JSON (`refine.schema.json`):
+   - **rating** — size S (one concern) / M (a few files, one area) / L (several areas, a new capability with Flow
+     cards, settings, docs) / XL (more than one PR); risk low (docs, tests, isolated code) / medium (device-facing with
+     VERIFIED opcodes, shared modules) / high (unverified opcode, connect/pairing behaviour, breaking or migrating
+     existing devices, settings or Flows, protected paths); with a one-line reason each.
+   - **refinement** — requirements (what to build: behaviour, texts, defaults, Flow cards, limits, errors, scope) are
+     never assumed: anything the issue, the owner's comments and the docs leave open becomes a question
+     (`needs_owner`). How to build it is the planner's decision, recorded in the plan.
+   - **split** — an XL issue gets a proposed split into issues instead of a plan, unless the owner kept it as one
+     (`/agent answer keep as one issue`).
+   - **plan** — the implementation plan with the hardware test scenario (`ready`).
+4. **record** (deterministic, states `refine` and `wait`) — `scripts/agent/refine-comment.py` renders the result as one
+   comment: rating + plan + scenario with `<!-- agent-plan hw=… risk=… size=… gate=none|owner -->`, or rating +
+   questions / split with `<!-- agent-questions … -->` and `agent:needs-owner`. `gate=owner` (risk high or size XL) also
+   sets `agent:needs-owner` and asks for `/agent go` (intake answers it with `<!-- agent-plan-go -->`, valid for that plan
+   only). Develop starts only for a `ready` plan without gate; a usage limit or a failed session pauses or blocks as in
+   develop.
+5. **develop** (ubuntu, read-only token) — installs the protocol KB skill (below), rebuilds the context (now with the
+   plan), then `.github/agent/develop.md`: developer → doc-keeper → `scripts/gate.sh`. It does not plan: it implements the
+   newest posted plan. The developer model comes from the plan's rating: Opus for risk high or size L/XL, and in round 3
+   (escalation); Sonnet otherwise. Returns JSON (`develop.schema.json`) and the branch as a git bundle. A requirement the
+   plan leaves open ends the run with questions and `agent:needs-owner`; the owner's answer makes refine plan again. The agents commit after every finished step; the bundle and upload steps run also after a failed,
    cancelled or timed-out session (the model step has its own timeout below the job's), from `$RUNNER_TEMP/develop-out`
    (outside the checkout, so the commit of leftover changes never picks up the result file).
-4. **publish** (deterministic) — **checkpoint first, whatever the outcome** (`ready`, `blocked`, `needs_owner`, no
-   result, usage limit): posts a new plan once (`<!-- agent-plan hw=… -->`) and pushes the branch's commits
-   (fast-forward only, no PR yet), so the next run reuses the plan and continues the branch instead of redoing the
-   work. A branch that is not on GitHub yet is first rebased onto the current `main` if `main` moved during the run:
+6. **publish** (deterministic, skipped when develop did not start) — **checkpoint first, whatever the outcome**
+   (`ready`, `blocked`, `needs_owner`, no result, usage limit): pushes the branch's commits (fast-forward only, no PR
+   yet), so the next run continues the branch instead of redoing the work (for a UAT issue it also posts the `[auto]`
+   cases as the scenario when they changed). A branch that is not on GitHub yet is first rebased onto the current `main` if `main` moved during the run:
    GitHub compares a new branch with the current `main`, so the app's push would look like it reverts `main`'s workflow
    changes and is refused ("refusing to allow a GitHub App to create or update workflow", #3, 2026-10-24); the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
    draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`). A branch with any commit that touches
    `.claude/skills/` is never pushed (the KB skill is private, see below).
-5. **gate** (`gate.yml`) and **review** (ubuntu, read-only; KB skill, `.github/agent/review.md`, fresh `reviewer`) in parallel.
-6. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
+7. **gate** (`gate.yml`) and **review** (ubuntu, read-only; KB skill, `.github/agent/review.md`, fresh `reviewer`) in parallel.
+8. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
-7. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
+9. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
    Homey LAN API, LAN dev run, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start` (`HOMEY_RUN_MODE=auto`: LAN, else cloud with `HOMEY_PAT`), then
    `scripts/agent/await-device.sh` (asks the owner to pair if no TimeBox is available, polls 30 min), then the tester
    (`.github/agent/hwtest.md`), finally `homey-run.sh stop` (`--uninstall` before a UAT).
-8. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
+10. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
    issue. Otherwise a findings comment (`<!-- agent-findings round=… sha=… -->`) and the next round; after round 3
    `agent:blocked` and an `@owner` comment.
 
@@ -86,7 +113,7 @@ dispatch can be replaced by a newer one — the 3-hourly schedule re-picks the w
 
 State lives in GitHub, written only by deterministic steps: labels (`agent:approved`, `agent:needs-owner`,
 `agent:blocked`, `security:flagged`, `status:in-progress`, `owner:review`, `uat`, `uat-finding`) and hidden markers in
-bot comments (`agent-approval`, `agent-plan`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
+bot comments (`agent-approval`, `agent-plan`, `agent-plan-go`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
 `agent-diff-approval`, `agent-pairing`, `agent-uat-ready`, `agent-uat-rejected`).
 
 ## Bot identity
@@ -118,7 +145,7 @@ owner's **private** repository `habbo656/divoom-timebox-protocol-rea` (ADR 0013)
 Agent Skill (and an MCP server with the same content); the pipeline uses the **skill**:
 - `.github/actions/kb` clones only `agent/divoom-evo/` (shallow, sparse, SSH with the read-only deploy key
   `KB_DEPLOY_KEY`, GitHub's pinned host key) and copies it to `.claude/skills/divoom-evo` in the checkout, in the
-  develop and review jobs (ubuntu). Branch or tag: repository variable `KB_REF` (default `main`). Without the secret the
+  refine, develop and review jobs (ubuntu). Branch or tag: repository variable `KB_REF` (default `main`). Without the secret the
   step warns and the agents work from `docs/` alone.
 - Agents ask it with `node .claude/skills/divoom-evo/scripts/divoom.js overview | recipe <task> | command <op> |
   encode <builder> '<json>' | decode <hex…> | search <words> | section <id>` (subagents have no Skill tool, so they call
@@ -211,8 +238,8 @@ Pro and is not used). A run that hits the limit says so on the issue and the sch
 |---|---|---|---|
 | orchestrator (top-level sessions) | sonnet | develop, review, hwtest, uat jobs | JSON result |
 | injection screen | sonnet, no tools | intake | clean / suspicious |
-| `planner` | opus, high | develop | plan incl. hardware test scenario |
-| `developer` | sonnet, high (round 3: opus) | develop | commits |
+| `planner` | opus | refine (as the top-level session) | rating, questions or split, plan incl. hardware test scenario |
+| `developer` | sonnet, high (opus for risk high or size L/XL, and in round 3) | develop | commits |
 | `doc-keeper` | sonnet, medium | develop (branch / uat mode), uat (acceptance) | doc commits, verdict |
 | `reviewer` | opus, high | review | findings + verdict |
 | `tester` | sonnet, medium | hwtest (Mac) | pass / fail / blocked |

@@ -63,9 +63,10 @@ real Homey with a real TimeBox, watched by a webcam. All communication happens h
    that tries to trick an AI ("prompt injection"): hidden instructions, requests for secrets, links to send data to.
    Anything suspicious stops here until the owner looks at it. Comments by people other than the owner are never shown
    to an agent, and an edit of an approved issue cancels the approval.
-3. **Plan.** A planner agent writes a plan and posts it on the issue. If it needs a decision, it asks the owner there
-   and waits for the answer.
-4. **Build.** A developer agent writes the code and tests, a doc-keeper updates the documentation, and the quality gate
+3. **Rate, clarify, plan.** A planner agent rates the issue (risk and size), asks the owner about anything the issue
+   leaves open instead of guessing, and posts the implementation plan on the issue. Too large an issue gets a proposed
+   split; a high-risk or very large plan waits for the owner's `/agent go`.
+4. **Build.** A developer agent implements the plan with code and tests, a doc-keeper updates the documentation, and the quality gate
    (lint, build, tests, Homey validation) must pass. These agents cannot write to GitHub at all; a separate, simple
    workflow step publishes their branch and opens a pull request.
 5. **Review.** A second, independent agent reviews the change, including signs of manipulation (unrelated code, network
@@ -86,7 +87,7 @@ flowchart LR
     direction TB
     O1["Write or confirm an issue"]
     O2["Approve: label agent:approved"]
-    O3["Answer a question:<br/>/agent answer …"]
+    O3["Answer a question:<br/>/agent answer …<br/>confirm a risky plan: /agent go"]
     O4["Pair the TimeBox<br/>when asked"]
     O5["Check a protected diff:<br/>/agent approve-diff"]
     O6["Test the milestone by hand<br/>(UAT checklist)"]
@@ -109,7 +110,7 @@ flowchart LR
   end
   subgraph AGENTS["🤖 Agents on GitHub-hosted runners (read-only)"]
     direction TB
-    A1["Planner: plan"]
+    A1["Planner: rate risk + size,<br/>clarify, plan"]
     A2["Developer: code + tests"]
     A3["Doc-keeper: docs"]
     A4["Quality gate"]
@@ -128,7 +129,7 @@ flowchart LR
   G1 -- yes --> G2
   G2 -- suspicious --> O2
   G2 -- clean --> G3 --> G4 --> A1
-  A1 -- question --> O3 --> A1
+  A1 -- question, split, risky plan --> O3 --> A1
   A1 --> A2 --> A3 --> A4 --> G5
   G5 --> A5 --> G6
   G6 -- protected files --> O5 --> M1
