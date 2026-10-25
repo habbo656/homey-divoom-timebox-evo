@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   COUNTDOWN_MAX_MINUTES,
   CLOCK_STYLES,
+  MAX_NOTIFICATION_ICON,
   MAX_TEXT_UNITS,
   nativeText,
+  notificationIcon,
   queryCustomPage,
   queryStatus,
   setBrightness,
@@ -24,8 +26,10 @@ import {
   type DateTimeParts,
   type Lighting,
 } from './commands';
+import { envelope } from './envelope';
 import { fromHex, toHex } from './hex';
-import { IMAGE_PAYLOAD } from './__fixtures__/golden';
+import { decodeSppFrame } from './replies';
+import { IMAGE_PAYLOAD, NOTIFICATION_TELEGRAM_ENVELOPE, NOTIFICATION_TELEGRAM_SPP_FRAME } from './__fixtures__/golden';
 
 describe('setBrightness', () => {
   it.each([
@@ -419,4 +423,32 @@ describe('staticImage', () => {
     expect(() => staticImage({ palette: [{ r: 256, g: 0, b: 0 }], pixels: px })).toThrow(RangeError);
     expect(() => staticImage({ palette: [{ r: 0, g: -1, b: 0 }], pixels: px })).toThrow(RangeError);
   });
+});
+
+describe('notificationIcon (#5)', () => {
+  it.each([
+    [0, '50 00'],
+    [1, '50 01'],
+    [3, '50 03'],
+    [18, '50 12'],
+    [23, '50 17'],
+  ])('encodes code %i', (code, hex) => {
+    expect(toHex(notificationIcon(code))).toBe(hex);
+  });
+
+  it('has 24 codes, 0..23', () => {
+    expect(MAX_NOTIFICATION_ICON).toBe(23);
+  });
+
+  it('matches the golden vector for Telegram (18) in the BLE envelope and as SPP frame', () => {
+    expect(toHex(envelope(notificationIcon(18), 0x0101))).toBe(NOTIFICATION_TELEGRAM_ENVELOPE);
+    expect(decodeSppFrame(fromHex(NOTIFICATION_TELEGRAM_SPP_FRAME))).toEqual(notificationIcon(18));
+  });
+
+  it.each([-1, 24, 25, 255, 1.5, NaN, Infinity, '1' as unknown as number, undefined as unknown as number])(
+    'rejects %s (codes from 24 read past the firmware table)',
+    (code) => {
+      expect(() => notificationIcon(code)).toThrow(RangeError);
+    },
+  );
 });

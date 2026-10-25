@@ -9,6 +9,8 @@ import { parseCountdownArgs } from '../device/countdown';
 import { parseImageFitId } from '../device/image';
 import type { ImageFit } from '../device/image';
 import { parseImageUrl } from '../device/imageSource';
+import { parseNotificationIconId } from '../device/notification';
+import type { NotificationIconId } from '../device/notification';
 import { parseTextDurationArg, parseTextSpeedId } from '../device/scrollText';
 import type { TextRequest } from '../device/TimeboxController';
 import { parseTemperatureArg, parseWeatherConditionId } from '../device/weather';
@@ -34,6 +36,7 @@ export const FLOW_ACTION_SHOW_IMAGE = 'timebox_show_image';
 export const FLOW_ACTION_SHOW_IMAGE_URL = 'timebox_show_image_url';
 export const FLOW_ACTION_SET_WEATHER = 'timebox_set_weather';
 export const FLOW_ACTION_SET_TEMPERATURE = 'timebox_set_temperature';
+export const FLOW_ACTION_SHOW_NOTIFICATION_ICON = 'timebox_show_notification_icon';
 
 /** What the condition needs from the device argument. */
 export interface ConnectableDevice {
@@ -164,6 +167,17 @@ export interface SetTemperatureArgs {
 /** The argument of the action "Set weather": the condition dropdown id, validated before use. */
 export interface SetWeatherArgs {
   condition: unknown;
+}
+
+/** What the action "Show notification icon" needs from the device argument. */
+export interface NotificationIconShowableDevice {
+  /** Shows the icon for about 2 s (not a mode); rejects with a readable error if that is not possible. */
+  showNotificationIcon(id: NotificationIconId): Promise<void>;
+}
+
+/** The argument of the action "Show notification icon": the icon dropdown id, validated before use. */
+export interface ShowNotificationIconArgs {
+  icon: unknown;
 }
 
 /** The argument of the channel cards: a dropdown value (its id), validated before use. */
@@ -298,4 +312,11 @@ export function registerTimeboxFlowCards(rawFlow: FlowLike, translate: (key: str
     .registerRunListener(async ({ device, temperature }: { device: WeatherSettableDevice } & SetTemperatureArgs) => {
       await device.setWeather({ temperatureC: parseTemperatureArg(temperature) });
     });
+  flow
+    .getActionCard(FLOW_ACTION_SHOW_NOTIFICATION_ICON)
+    .registerRunListener(
+      async ({ device, icon }: { device: NotificationIconShowableDevice } & ShowNotificationIconArgs) => {
+        await device.showNotificationIcon(parseNotificationIconId(icon));
+      },
+    );
 }

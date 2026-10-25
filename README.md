@@ -16,6 +16,7 @@ start a pizza countdown in the kitchen, or put a snapshot of your doorbell camer
 - Show a temperature and a weather type, set by hand in a Flow or automatically from Open-Meteo.
 - Start and stop a countdown, and start a Flow when it ends ("Countdown ended" trigger).
 - Show an image from an image tag (for example a camera snapshot) or from a URL, scaled to 16x16.
+- Show an app notification icon (for example Telegram, WhatsApp or a missed call) for about 2 seconds as a short signal from a Flow.
 - React to the display being connected or disconnected (triggers and a condition).
 - Automatic time sync with the time of your Homey.
 

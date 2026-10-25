@@ -25,6 +25,7 @@ Key rules (details in the evidence files):
 - [protocol/clock.md](protocol/clock.md): section 5.1 clock rows, animation pages (`26 0X`), small clock quirk
 - [protocol/native-text.md](protocol/native-text.md): section 5.5 native text row and measurements
 - [protocol/countdown.md](protocol/countdown.md): section 5.1 countdown row and section 5.6 measurements
+- [protocol/notifications.md](protocol/notifications.md): section 5.5 notification icon row, the icon code table (`50 TT`, #5)
 - [protocol/audio.md](protocol/audio.md): sections 5.3 and 6 (audio, A2DP)
 - [protocol/homey-implications.md](protocol/homey-implications.md): section 9
 - [protocol/open-questions.md](protocol/open-questions.md): section 11
@@ -281,8 +282,8 @@ after reboot). The device clock also survived. Never send firmware/file opcodes 
 | `6f RR GG BB` | enter drawing pad, filled with a background colour | VERIFIED |
 | `58 RR GG BB NN <NN pixel offsets>` | set pixels (offset = y·16 + x, ≤ 200 per command) | VERIFIED: red diagonal, green top row |
 | `5a` | leave drawing pad | sent; the drawing stays visible until the next channel change |
-| `50 TT` | notification icon for app type TT | VERIFIED: `50 55`; an app icon shows for ~2 s, then the previous view returns (1 = colourful icon, 3 = Facebook "f") |
-| `50 TT LL <UTF-8 text>` | notification with text | `50 55`; the icon showed, but the text was not seen in the photos |
+| `50 TT` | notification icon for app type TT (TT 0..23; never ≥ 24, the firmware reads past its table) | VERIFIED for TT 1 and 3: `50 55`; an app icon shows for ~2 s, then the previous view returns (1 = colourful icon, 3 = Facebook "f"). TT 0, 2, 4..23: SOURCE (KB: command 0x50) until photographed. Builder `notificationIcon`, Flow action "Show notification icon" (#5) — code table and notes: [notifications.md](protocol/notifications.md) |
+| `50 TT LL <UTF-8 text>` | notification with text | `50 55`; the icon showed, but the text was not seen in the photos (the firmware ignores the text, KB). Not used |
 | `84` | reset notifications | sent, no reply |
 
 Evidence: [native-text.md](protocol/native-text.md#55-native-text-evidence).

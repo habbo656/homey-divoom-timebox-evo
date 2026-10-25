@@ -67,7 +67,8 @@
       "hue": "Farbton",
       "saturation": "Sättigung",
       "fit": "Einpassen",
-      "url": "URL"
+      "url": "URL",
+      "icon": "Symbol"
     }
   }
 }

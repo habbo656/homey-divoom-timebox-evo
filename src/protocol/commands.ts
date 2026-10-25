@@ -338,3 +338,18 @@ export function startCountdown(o: CountdownTime): Uint8Array {
 export function stopCountdown(): Uint8Array {
   return Uint8Array.of(0x72, 0x03, 0x00, 0x00, 0x00);
 }
+
+/**
+ * Highest notification icon code `TT` of `50 TT` (protocol section 5.5): the firmware icon table has 24 entries, 0..23.
+ * The firmware does not check the range, so a code of 24 or more reads past the table and is never built.
+ */
+export const MAX_NOTIFICATION_ICON = 23;
+
+/**
+ * `50 TT`: show the built-in notification icon `TT` for about 2 s, then the previous view returns (protocol section 5.5,
+ * reply `50 55`). VERIFIED for TT 1 and 3; the other codes come from the firmware table (SOURCE,
+ * docs/protocol/notifications.md). The text form `50 TT LL <text>` is never built: the firmware ignores the text.
+ */
+export function notificationIcon(code: number): Uint8Array {
+  return Uint8Array.of(0x50, intInRange('notification icon', code, 0, MAX_NOTIFICATION_ICON));
+}

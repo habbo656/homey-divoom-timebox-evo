@@ -97,6 +97,7 @@ export class FakeSurface implements DeviceSurface {
  * answered with the channel and colour of the state (d9, the last visualization, is a constant), `18` (time) is recorded in `times` (the 9-byte
  * payload) and acknowledged with `18 55` unless `ackTime` is false. `bd 17 PP` selects the custom page (stored in
  * `customPage`, no reply, as on the Evo) and `bd 17 ff` is answered with `bd 55 17 PP` unless `answerPage` is false.
+ * `50 TT` (notification icon) is recorded in `icons` and answered with `50 55` unless `answerIcon` is false.
  */
 export function evo(t: MockTransport, initial = 50) {
   const state = {
@@ -115,6 +116,9 @@ export function evo(t: MockTransport, initial = 50) {
     /** The custom page (0..2) set by `bd 17 PP`. */
     customPage: 0,
     answerPage: true,
+    /** The codes of the `50 TT` notification icons received. */
+    icons: [] as number[],
+    answerIcon: true,
     times: [] as number[][],
   };
   const status = () =>
@@ -162,6 +166,10 @@ export function evo(t: MockTransport, initial = 50) {
         return undefined;
       }
       return state.answerPage ? [replyFrame(0xbd, 0x17, state.customPage)] : undefined;
+    }
+    if (op === 0x50) {
+      state.icons.push(w[12]);
+      return state.answerIcon ? [replyFrame(0x50)] : undefined;
     }
     if (op === 0x46 && state.answer) return [status()];
     return undefined;

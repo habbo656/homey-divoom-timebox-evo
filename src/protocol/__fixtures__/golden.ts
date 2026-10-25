@@ -14,6 +14,15 @@ export const IMAGE_SPP_FRAME = `01 57 00 ${IMAGE_PAYLOAD} 8f 22 02`;
 /** Image payload in the BLE envelope with seq 0x0101 (LEN 0x5c, CRC `96 22`). */
 export const IMAGE_ENVELOPE = `fe ef aa 55 5c 00 01 01 00 00 00 ${IMAGE_PAYLOAD} 96 22`;
 
+/**
+ * Notification icon Telegram `50 12` (section 5.5, #5) in the BLE envelope with seq 0x0101 (computed with
+ * scripts/probe/divoom.py ble_envelope()). The KB recipe frame of this command uses another BLE framing and appends the
+ * app's text length byte, so it is not comparable byte for byte; the SPP frame below equals the KB `raw 0x50 12` frame.
+ */
+export const NOTIFICATION_TELEGRAM_ENVELOPE = 'fe ef aa 55 09 00 01 01 00 00 00 50 12 6d 00';
+/** The same payload as SPP frame (KB `raw 0x50 12` and scripts/probe/divoom.py frame(), CRC `66 00`). */
+export const NOTIFICATION_TELEGRAM_SPP_FRAME = '01 04 00 50 12 66 00 02';
+
 // Device replies as SPP frames `01 LEN 04 CMD 55 DATA CRC 02`, computed with scripts/probe/divoom.py frame().
 /** `f7 55 4e 6f 62 02 69 04 00 00` heartbeat (section 2). */
 export const REPLY_HEARTBEAT = '01 0d 00 04 f7 55 4e 6f 62 02 69 04 00 00 eb 02 02';

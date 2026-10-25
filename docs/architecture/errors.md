@@ -5,7 +5,7 @@ _Part of [architecture](../architecture.md); moved from "User-facing errors (#10
 - **User-facing errors (#108)** (`src/device/argumentError.ts`, Homey-free): every error a user can see is localised (en + de).
   Input validation in the device layer (the parsers `parseTextSpeedId`, `parseTextDuration(Arg)`, `prepareText`, `parseCountdownArgs`,
   `parseTemperatureArg`, `parseWeatherConditionId`, `parseClockStyleId`, `parseHexColor(value, field)`, `parseChannelId`,
-  `parseCustomPageId`, `hueSatToRgb`, `dimToBrightness`, `parseImageFitId`, `parseImageUrl`) throws an `ArgumentError`, a `RangeError` subclass with `kind`
+  `parseCustomPageId`, `hueSatToRgb`, `dimToBrightness`, `parseImageFitId`, `parseImageUrl`, `parseNotificationIconId`) throws an `ArgumentError`, a `RangeError` subclass with `kind`
   (`invalid_range`, `invalid_number`, `invalid_choice`, `invalid_color`, `invalid_text`, `invalid_url`), `field` (one of `ARGUMENT_FIELDS`, e.g.
   `duration`, `text_color`) and `params` (`value`, `min`, `max`, `allowed`, `type`). Its `message` stays the English text for logs.
   `localiseError(e, translate)` turns an `ArgumentError` into a plain `Error` with the text of `device.error.<kind>`, filled by
@@ -21,7 +21,7 @@ _Part of [architecture](../architecture.md); moved from "User-facing errors (#10
   `not_confirmed` (#141, #151): a display change (`switchTo`, see `modes.md`), a dim, a power off or a custom page read-back that the Timebox did not answer (`46`, or `bd 17 ff` for the page) within the confirm timeout. A link lost or `stop()` during that wait gives `not_connected` instead.
   Image errors (#31) are `ImageError`s (`src/device/imageError.ts`, kinds `unreachable`, `unreadable` (image tag), `too_large`, `unsupported`, `missing`; `params` `max_mb`, `max_mp`, `max_side`)
   and are localised by the same `localiseError` with `device.error.image_<kind>`. Their `message` is the real cause for the log (HTTP status, decoder
-  message, never a URL path); the user sees only the localised text. The argument fields `fit` and `url` are labelled like the card arguments.
+  message, never a URL path); the user sees only the localised text. The argument fields `fit` and `url` are labelled like the card arguments; so is `icon` (#5: "Icon" / "Symbol").
 
 - **Pairing (#37):** the pairing view texts `scan_failed: {error}` and `add_failed: {error}` (`locales/*.json`, `pair.scan.*`) deliberately keep the raw cause
   (for example the Bluetooth error text) in parentheses as technical detail so a user can report it, and since #36 each is followed by

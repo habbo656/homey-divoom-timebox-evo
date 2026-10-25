@@ -34,6 +34,7 @@ import type { FetchLike } from './openMeteo';
 import type { ImageFit } from './image';
 import { downloadImage, loadImageToken, urlForLog } from './imageSource';
 import type { ImageFetchLike } from './imageSource';
+import type { NotificationIconId } from './notification';
 import { resolveWeatherSettings, WEATHER_SETTING_KEYS } from './weather';
 import type { WeatherUpdate } from './weather';
 
@@ -386,6 +387,15 @@ export class TimeboxDevice extends Homey.Device {
   async stopCountdown(): Promise<void> {
     if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
     await this.controller.stopCountdown();
+  }
+
+  /**
+   * Used by the Flow action "Show notification icon": the icon shows for about 2 s, then the previous view returns (not a
+   * mode: the tile and the triggers are not touched); a turned-off Timebox is turned on first.
+   */
+  async showNotificationIcon(id: NotificationIconId): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.controller.showNotificationIcon(id);
   }
 
   /**
