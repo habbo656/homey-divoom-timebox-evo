@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['.homeybuild/**', 'node_modules/**', '.homeycompose/.cache/**', 'app.json'] },
+  { ignores: ['.homeybuild/**', 'node_modules/**', '.homeycompose/.cache/**', 'app.json', '.hwtest/**'] },
   ...tseslint.configs.recommended,
   {
     // The protocol layer is a pure codec: it may only import its own siblings (docs/architecture.md).
