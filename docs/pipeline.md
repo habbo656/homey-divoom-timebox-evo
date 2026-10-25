@@ -16,6 +16,7 @@ PIPELINE  pick (roadmap order) ─► guard (approval + hash) ─► REFINE: pla
    ─► publish (push branch, plan comment, draft PR) ─► gate (ubuntu) ∥ REVIEW: fresh reviewer (ubuntu)
    ─► protected paths? → owner: /agent approve-diff ─► HARDWARE TEST: runner check → build → dev run → pairing → tester (Mac)
    ─► finish: merge + next issue │ findings → next round (2 + 1 Opus escalation) → agent:blocked → owner
+   ─► metrics: one record per run (also failed, cancelled, limited) → gh-pages dashboard
 milestone done ─► UAT issue ─► doc-keeper writes docs/uat/v<x>.md ─► [auto] pre-check on the Mac ─► owner tests
    ─► ACCEPTED: docs + version bump + tag v<x> ─► next milestone │ REJECTED: uat-finding bugs ─► pipeline ─► new round
 ```
@@ -46,7 +47,7 @@ protected diffs, the UAT per milestone, and publishing to the Homey App Store.
 |---|---|---|---|
 | `agent-intake.yml` | issue labelled/edited, comment created | ubuntu | `scripts/agent/route.sh` decides; screen + approval, revoke, or dispatch |
 | `agent-pipeline.yml` | dispatch (`issue`, `round`, `from`), every 3 h | ubuntu + Mac | one issue end to end (below); the schedule resumes after usage limits and picks up approved issues |
-| `agent-uat.yml` | dispatch by intake on an owner verdict | ubuntu | ACCEPTED: acceptance docs, `release:bump`, merge, tag; REJECTED: bug issues |
+| `agent-uat.yml` | dispatch by intake on an owner verdict | ubuntu | ACCEPTED: acceptance docs, `release:bump`, merge, tag; REJECTED: bug issues; a `uat` metrics record |
 | `gate.yml` | reusable | ubuntu | `scripts/gate.sh` on a commit; the merge gate |
 | `ci.yml` | push to `main`, pull requests | ubuntu | `gate.yml`; GitHub-hosted only, so fork PRs never reach the Mac |
 | `runner-check.yml` | manual, daily, reusable | Mac | `scripts/runner-check.sh` via `.github/actions/runner-check` |
@@ -106,6 +107,8 @@ Pipeline jobs (`agent-pipeline.yml`):
 10. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
    issue. Otherwise a findings comment (`<!-- agent-findings round=… sha=… -->`) and the next round; after round 3
    `agent:blocked` and an `@owner` comment.
+11. **metrics** (deterministic, `if: always()` after every run that picked an issue) — one metrics record on
+   `gh-pages` ([Run metrics](#run-metrics)). Record, publish and finish set the run's `status` output for it.
 
 Rounds: the fix budget is 2 rounds plus one Opus escalation round (round 3), counted per dispatch. Pipeline and UAT
 runs share the concurrency group `agent-pipeline` (one at a time); GitHub keeps only one pending run per group, so a
@@ -183,6 +186,7 @@ public. Layers, from the outside in:
    `scripts/probe/`, `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.homeyignore`, lint/TS config): such a PR
    is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. The bot app has no
    Workflows permission, so it cannot push `.github/workflows/**` at all.
+   Run metrics on `gh-pages` (public) are numbers and enums only, validated against a closed schema (see Run metrics).
 6. **Self-hosted runner guard.** `scripts/runner/job-started.sh`, installed outside the checkout as the runner's
    `ACTIONS_RUNNER_HOOK_JOB_STARTED`, refuses every job whose workflow is not from `main`, whose event is not
    `workflow_dispatch`/`schedule`/push to `main`, or whose triggering actor is not the owner or the bot app (`RUNNER_GUARD_BOT`) — so a fork PR or a
@@ -223,6 +227,11 @@ while it is private, the pipeline cannot start (its model jobs need the `agents`
    with `$HOME`, which `config.sh` stores literally; an existing registration can change `workFolder` in the runner's
    `.runner` file), `scripts/runner/install-hook.sh <runner dir> <app slug>`, restart the runner, Homey key
    in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
+
+7. Run metrics (#24): Settings → Pages → source "Deploy from a branch", branch `gh-pages`, folder `/`. The first
+   metrics job creates `gh-pages` as an orphan branch, so enable Pages after the first run (or create the branch by
+   hand). If a ruleset covers all branches, exclude `gh-pages` or allow the bot app to push to it (no force pushes are
+   needed). The site is public: `https://<owner>.github.io/<repo>/`.
 
 Check the whole setup with `scripts/repo-check.sh` (read-only, uses `gh api`, so the owner runs it): visibility,
 default token, fork PR approval, the three environments with their branch policy and secrets, the bot variables, an
@@ -365,6 +374,54 @@ photo after each → `stop` → verdict from log + photos. The dev run uninstall
 go with it (see above). Pairing itself needs the owner (Homey app UI): in Actions the hardware job asks on the issue and waits up to 30 min
 (`scripts/agent/await-device.sh`); in a local session the tester reports `blocked`.
 
+
+## Run metrics
+Every pipeline run that picked an issue — merged, next round, waiting for the owner, blocked, usage-limited, failed
+or cancelled — adds **exactly one record** to the public `gh-pages` branch, and every UAT verdict run one record of
+type `uat` (ADR 0015). A static dashboard on GitHub Pages shows them over time, so drift in effort or quality (more
+tokens, turns or fix rounds, more review findings or red gates) can be tied to a model, Claude Code or prompt change.
+
+- **Stage records** — `.github/actions/claude` writes one per session (output `metrics-file`), built only from numeric
+  and enum fields of Claude Code's `--output-format json` result: `stage` (the prompt file's name: refine, develop,
+  review, hwtest, uat, screen), `model` (the session's model id, from `modelUsage`), `cli_version`, `num_turns`,
+  `duration_ms`, `cost_usd` (API-equivalent; the plan is not billed per token), input/output/cache-read/cache-creation
+  tokens, `subagents` (spawned), per-model token totals, `ok`, `limited`, `subtype`. Never the result text, the prompt
+  or anything from the issue. The model jobs copy it as `metrics.json` into the artifacts they already upload.
+- **Run record** — the `metrics` job (`agent-pipeline.yml`; `agent-uat.yml` likewise) runs `scripts/agent/metrics.py`:
+  run context (`run_id`, `run_attempt`, issue, PR, fix round, kind, `path` develop/verify, timestamp, `prompt_commit` =
+  the newest commit of `.claude/agents`, `.github/agent` or `CLAUDE.md`, planner `risk`/`size` from `issue.sh
+  plan-state`), the static context size, the stage records, and the outcome: gate (`green`), review verdict and
+  blocker/major/minor counts, hardware verdict (pass/fail/blocked; a runner that is not ready or no pairing counts as
+  blocked), `status` (merged, next-round, needs-owner, blocked, limited, no-change, cancelled, failed — from the
+  `status` output of record, publish or finish; no status means cancelled if a job was cancelled, else failed). UAT
+  records carry milestone, verdict (ACCEPTED/REJECTED) and the number of rejected cases (bugs filed).
+- **Schema** — `.github/agent/metrics.schema.json`: integers, numbers, booleans and strings that each have an enum, a
+  const or an anchored pattern (the validator refuses a schema with a free string), `additionalProperties: false`
+  everywhere. `metrics.py` has its own validator for that subset (no dependencies; patterns use full matches, so a
+  trailing newline cannot pass). A stage record that fails is left out with a warning; a run record that fails is not
+  written or published (the job fails). `<script>` cannot pass any string field.
+- **Static context size** — `scripts/agent/context-size.sh`: bytes of `CLAUDE.md`, `.claude/agents/*.md`, the prompt
+  templates `.github/agent/*.md`, the descriptions of the installed skills and the "Read first" docs of `CLAUDE.md`
+  (approx. tokens = bytes / 4). Measured on the `main` checkout of the metrics job, where the private KB skill is not
+  installed, so its description is not counted.
+- **Publishing** — `scripts/agent/pages-publish.sh` (bot token, the metrics jobs only; model jobs keep read-only
+  tokens) validates the record again, writes `data/runs/<run_id>-<run_attempt>.json`, rebuilds `data/index.json` from
+  that folder and copies the dashboard (`pages/` on `main`) to the branch root. One file per run, so runs never
+  conflict on a record; a rejected push (another run pushed first) starts again from the new head (5 tries). No
+  job-level concurrency group: GitHub keeps only one pending job per group and would cancel a third one with its
+  record. `gh-pages` is the only push target besides `agent/*` branches (and `main` via squash merge).
+- **Dashboard** — `pages/index.html`, `app.js`, `style.css` (no build step, excluded from the app by `.homeyignore`):
+  stacked per-stage charts of tokens, turns, duration and cost per run, dashed markers where the model set, the CLI
+  version or the prompt commit changed, the static context trend, a per-issue table (runs, fix rounds, first-try gate,
+  review findings, hardware verdict, UAT verdict, tokens, cost, last status), filters for model, CLI version, size,
+  risk and date. Security: strict CSP meta tag (scripts only from the site and the pinned
+  `chart.js@4.4.1` on jsDelivr, no inline code), every value re-checked and rendered via `textContent`, attributes or
+  the canvas, never `innerHTML`.
+- **Public data rule** — the site is public: numbers, IDs and enums only; no free text from issues, PRs, prompts or
+  model output, no bench or personal details. A new field needs a schema entry with an enum or pattern.
+- Tests: `scripts/agent/metrics.test.mjs` (validation, record build, concurrent publishing to a local bare remote).
+- Not recorded: scheduled runs that find nothing to start, intake runs. Follow-ups (out of scope of #24): peak
+  context per turn (stream-json), fix/revert commits after merge, threshold alerts.
 
 ## CI
 `.github/workflows/ci.yml` runs `gate.yml` (the full `scripts/gate.sh`, including the Prettier check) on GitHub-hosted

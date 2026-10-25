@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent run metrics record (docs/pipeline.md, Run metrics). Published on the public gh-pages branch: numbers, IDs and enums only; every string has an enum or a pattern.",
+  "oneOf": [{ "$ref": "#/$defs/run" }, { "$ref": "#/$defs/uat" }],
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0, "maximum": 1000000000000 },
+    "small": { "type": "integer", "minimum": 0, "maximum": 100000 },
+    "id": { "type": "integer", "minimum": 1, "maximum": 100000000000000 },
+    "idOrNull": { "type": ["integer", "null"], "minimum": 1, "maximum": 100000000000000 },
+    "usd": { "type": "number", "minimum": 0, "maximum": 100000 },
+    "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$" },
+    "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{12}$" },
+    "gate": { "enum": [true, false, null] },
+    "status": {
+      "enum": ["merged", "next-round", "needs-owner", "blocked", "limited", "no-change", "cancelled", "failed"]
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "total": { "$ref": "#/$defs/count" },
+        "claude_md": { "$ref": "#/$defs/count" },
+        "agents": { "$ref": "#/$defs/count" },
+        "prompts": { "$ref": "#/$defs/count" },
+        "skills": { "$ref": "#/$defs/count" },
+        "docs": { "$ref": "#/$defs/count" }
+      },
+      "required": ["total", "claude_md", "agents", "prompts", "skills", "docs"],
+      "additionalProperties": false
+    },
+    "modelUsage": {
+      "type": "object",
+      "properties": {
+        "model": { "$ref": "#/$defs/model" },
+        "input_tokens": { "$ref": "#/$defs/count" },
+        "output_tokens": { "$ref": "#/$defs/count" },
+        "cache_read_tokens": { "$ref": "#/$defs/count" },
+        "cache_creation_tokens": { "$ref": "#/$defs/count" },
+        "cost_usd": { "$ref": "#/$defs/usd" }
+      },
+      "required": ["model", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens", "cost_usd"],
+      "additionalProperties": false
+    },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": 1 },
+        "stage": { "enum": ["refine", "develop", "review", "hwtest", "uat", "screen", "other"] },
+        "model": { "$ref": "#/$defs/model" },
+        "cli_version": { "type": "string", "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,6}$" },
+        "num_turns": { "$ref": "#/$defs/small" },
+        "duration_ms": { "$ref": "#/$defs/count" },
+        "cost_usd": { "$ref": "#/$defs/usd" },
+        "input_tokens": { "$ref": "#/$defs/count" },
+        "output_tokens": { "$ref": "#/$defs/count" },
+        "cache_read_tokens": { "$ref": "#/$defs/count" },
+        "cache_creation_tokens": { "$ref": "#/$defs/count" },
+        "subagents": { "$ref": "#/$defs/small" },
+        "models": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/modelUsage" } },
+        "ok": { "type": "boolean" },
+        "limited": { "type": "boolean" },
+        "subtype": {
+          "enum": [
+            "success",
+            "error_max_turns",
+            "error_during_execution",
+            "error_max_budget_usd",
+            "error_max_structured_output_retries",
+            "other",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "schema", "stage", "model", "cli_version", "num_turns", "duration_ms", "cost_usd", "input_tokens",
+        "output_tokens", "cache_read_tokens", "cache_creation_tokens", "subagents", "models", "ok", "limited", "subtype"
+      ],
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": 1 },
+        "type": { "const": "run" },
+        "run_id": { "$ref": "#/$defs/id" },
+        "run_attempt": { "$ref": "#/$defs/id" },
+        "timestamp": { "$ref": "#/$defs/count" },
+        "issue": { "$ref": "#/$defs/idOrNull" },
+        "pr": { "$ref": "#/$defs/idOrNull" },
+        "round": { "type": "integer", "minimum": 1, "maximum": 9 },
+        "kind": { "enum": ["issue", "uat", null] },
+        "path": { "enum": ["develop", "verify", null] },
+        "risk": { "enum": ["low", "medium", "high", null] },
+        "size": { "enum": ["S", "M", "L", "XL", null] },
+        "prompt_commit": { "$ref": "#/$defs/commit" },
+        "context": { "$ref": "#/$defs/context" },
+        "stages": { "type": "array", "maxItems": 6, "items": { "$ref": "#/$defs/stage" } },
+        "gate": { "$ref": "#/$defs/gate" },
+        "review": { "enum": ["approve", "changes_requested", "missing", null] },
+        "review_blockers": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+        "review_majors": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+        "review_minors": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+        "hwtest": { "enum": ["pass", "fail", "blocked", null] },
+        "status": { "$ref": "#/$defs/status" }
+      },
+      "required": [
+        "schema", "type", "run_id", "run_attempt", "timestamp", "issue", "pr", "round", "kind", "path", "risk", "size",
+        "prompt_commit", "context", "stages", "gate", "review", "review_blockers", "review_majors", "review_minors",
+        "hwtest", "status"
+      ],
+      "additionalProperties": false
+    },
+    "uat": {
+      "type": "object",
+      "properties": {
+        "schema": { "const": 1 },
+        "type": { "const": "uat" },
+        "run_id": { "$ref": "#/$defs/id" },
+        "run_attempt": { "$ref": "#/$defs/id" },
+        "timestamp": { "$ref": "#/$defs/count" },
+        "issue": { "$ref": "#/$defs/idOrNull" },
+        "pr": { "$ref": "#/$defs/idOrNull" },
+        "milestone": { "type": ["string", "null"], "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,4}$" },
+        "verdict": { "enum": ["ACCEPTED", "REJECTED", null] },
+        "rejected": { "type": ["integer", "null"], "minimum": 0, "maximum": 1000 },
+        "prompt_commit": { "$ref": "#/$defs/commit" },
+        "context": { "$ref": "#/$defs/context" },
+        "stages": { "type": "array", "maxItems": 2, "items": { "$ref": "#/$defs/stage" } },
+        "gate": { "$ref": "#/$defs/gate" },
+        "status": { "$ref": "#/$defs/status" }
+      },
+      "required": [
+        "schema", "type", "run_id", "run_attempt", "timestamp", "issue", "pr", "milestone", "verdict", "rejected",
+        "prompt_commit", "context", "stages", "gate", "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
