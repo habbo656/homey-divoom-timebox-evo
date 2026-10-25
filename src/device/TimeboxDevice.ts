@@ -28,7 +28,6 @@ import type { CountdownTime } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 import { localiseError } from './argumentError';
 import { onoffSetOnDimDisabled } from './lighting';
-import { resolveUseAsLight, targetDeviceClass, USE_AS_LIGHT_SETTING } from './lightClass';
 import { resolveTimeSyncSetting } from './timeSync';
 import { WeatherUpdater } from './openMeteo';
 import type { FetchLike } from './openMeteo';
@@ -42,6 +41,8 @@ import type { WeatherUpdate } from './weather';
 const CHANNEL_CAPABILITY = 'timebox_channel';
 /** Capabilities added after the first release: devices paired earlier get them in `onInit`. */
 const MIGRATED_CAPABILITIES = ['onoff', 'light_hue', 'light_saturation'] as const;
+/** The device class: the manifest class (#19); devices paired before keep the stored class `other` until migrated. */
+const DEVICE_CLASS = 'light';
 /** Store key of the clock colour (`#RRGGBB`): owned by the app, follows the tile colour picker in clock mode. */
 const CLOCK_COLOR_STORE = 'clock_color';
 /** Store key of the clock style of the last "Show clock" (a style id): restored at power on; absent = the style of the settings. */
@@ -125,12 +126,7 @@ export class TimeboxDevice extends Homey.Device {
 
     await this.migrateClockColor();
 
-    // The device class follows the "Use as a light" setting (#19); a failure must not stop the setup.
-    try {
-      await this.applyDeviceClass(resolveUseAsLight(this.getSetting(USE_AS_LIGHT_SETTING)), 'init');
-    } catch (e) {
-      this.error(`[device] could not set the device class: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    await this.migrateDeviceClass();
 
     try {
       await this.setup();
@@ -173,12 +169,18 @@ export class TimeboxDevice extends Homey.Device {
     }
   }
 
-  /** Switch the device class to the one of the "Use as a light" option (#19); nothing happens when it already is that class. */
-  private async applyDeviceClass(useAsLight: boolean, reason: 'init' | 'setting'): Promise<void> {
-    const target = targetDeviceClass(useAsLight);
-    if (this.getClass() === target) return;
-    await this.setClass(target);
-    this.log(`[device] device class -> ${target} (${reason})`);
+  /**
+   * The device is always a light (#19). Homey keeps the stored class of devices paired while the manifest class was `other`,
+   * so switch them over once; nothing happens when the class already is `light`. A failure only logs and never stops the setup.
+   */
+  private async migrateDeviceClass(): Promise<void> {
+    try {
+      if (this.getClass() === DEVICE_CLASS) return;
+      await this.setClass(DEVICE_CLASS);
+      this.log(`[device] device class -> ${DEVICE_CLASS} (migrated)`);
+    } catch (e) {
+      this.error(`[device] could not set the device class: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private async setup(): Promise<void> {
@@ -420,14 +422,6 @@ export class TimeboxDevice extends Homey.Device {
     newSettings: { [key: string]: boolean | string | number | undefined | null };
     changedKeys: string[];
   }): Promise<void> {
-    if (changedKeys.includes(USE_AS_LIGHT_SETTING)) {
-      try {
-        await this.applyDeviceClass(resolveUseAsLight(newSettings[USE_AS_LIGHT_SETTING]), 'setting');
-      } catch (e) {
-        this.error(`[device] could not set the device class: ${e instanceof Error ? e.message : String(e)}`);
-        throw new Error(this.homey.__('device.error.class_not_changed'));
-      }
-    }
     let clockSettings: ClockSettings | null = null;
     if (changedKeys.some((key) => (CLOCK_SETTING_KEYS as readonly string[]).includes(key))) {
       const clock = resolveClockSettings(newSettings);

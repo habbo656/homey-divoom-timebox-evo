@@ -3,7 +3,7 @@
     "en": "TimeBox Evo",
     "de": "TimeBox Evo"
   },
-  "class": "other",
+  "class": "light",
   "capabilities": [
     "onoff",
     "dim",

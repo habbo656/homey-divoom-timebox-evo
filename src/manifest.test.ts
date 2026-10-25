@@ -46,35 +46,22 @@ describe('driver manifest (#70)', () => {
       'time_sync',
       'weather_auto',
       'weather_interval',
-      'use_as_light',
     ]);
     expect(settings.every((n) => n.type === 'group')).toBe(true);
-    expect(settings).toHaveLength(3); // Clock, Weather, Light: no "Advanced" group
-    expect(settings.map((g) => (g as unknown as { label: { en: string } }).label.en)).toEqual([
-      'Clock',
-      'Weather',
-      'Light',
-    ]);
+    expect(settings).toHaveLength(2); // Clock, Weather: no "Advanced" group, no "Light" group (#19)
+    expect(settings.map((g) => (g as unknown as { label: { en: string } }).label.en)).toEqual(['Clock', 'Weather']);
   });
 
-  it('offers "Use as a light" as a checkbox, off by default, while the driver class stays other (#19)', () => {
-    const light =
-      readJson<{ children: { id: string; type: string; value: unknown; label: Record<string, string> }[] }[]>(
-        'driver.settings.compose.json',
-      )[2].children[0];
-    expect(light.id).toBe('use_as_light');
-    expect(light.type).toBe('checkbox');
-    expect(light.value).toBe(false);
-    expect(light.label).toEqual({ en: 'Use as a light', de: 'Als Licht verwenden' });
-    expect(readJson<{ class: string }>('driver.compose.json').class).toBe('other');
-  });
-
-  it('has the localised error for a device class that could not be changed (#19)', () => {
+  it('is always a light: the driver class is light and there is no "Use as a light" setting (#19)', () => {
+    expect(readJson<{ class: string }>('driver.compose.json').class).toBe('light');
+    const built = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8')) as {
+      drivers: { class: string; settings: SettingNode[] }[];
+    };
+    expect(built.drivers[0].class).toBe('light');
+    expect(settingIds(built.drivers[0].settings)).not.toContain('use_as_light');
     for (const lang of ['en', 'de']) {
-      const locale = JSON.parse(readFileSync(join(__dirname, '..', 'locales', `${lang}.json`), 'utf8')) as {
-        device: { error: Record<string, string> };
-      };
-      expect(locale.device.error.class_not_changed, lang).toBeTruthy();
+      const text = readFileSync(join(__dirname, '..', 'locales', `${lang}.json`), 'utf8');
+      expect(text, lang).not.toContain('class_not_changed');
     }
   });
 
