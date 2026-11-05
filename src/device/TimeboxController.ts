@@ -71,6 +71,8 @@ export const DIM_SEND_TIMEOUT_MS = 10_000;
 export const TEXT_SEND_TIMEOUT_MS = 20_000;
 /** How long the `46` query that confirms a channel change waits for its reply. */
 export const CHANNEL_CONFIRM_TIMEOUT_MS = 5_000;
+/** How many times in a row the off command is sent again when the panel lit itself while off (#29, `checkSelfWake`). */
+export const MAX_OFF_RESENDS = 3;
 /**
  * How long after entering the clock with the small style from another mode (or off) the clock command is sent once more:
  * the first one shows the default dial there (#88, protocol section 5.1); 1.5 s is the interval the probe proved.
@@ -349,6 +351,13 @@ export class TimeboxController {
    * Null while on (and at startup from stored off: the first report is adopted).
    */
   private offShadow: number | null = null;
+  /**
+   * Re-sends of the off command since the last report with power byte `00`, a power change or a switch on (#29). The firmware
+   * can light the panel by itself while it is off (`46` d8 flips to `01`); the cap stops an off the device does not take.
+   */
+  private offResends = 0;
+  /** The "giving up" line of the off re-send was logged (once per series). */
+  private offResendGaveUp = false;
   /** The first status of this run has written `onoff` to the tile. */
   private powerReported = false;
   /** The lighting colour the tile shows (the last one sent or reported); null until known, never black. */
@@ -423,6 +432,7 @@ export class TimeboxController {
     const colorChanged = this.deviceColor(status.lightingColor);
     const wroteTile = this.deviceChannel(status.channel);
     if (colorChanged && !wroteTile && this.getChannel() === 'lighting') this.writeTile(this.knownColor);
+    this.checkSelfWake(status);
     if (firstOfSession) void this.flushWeather('connect');
     if (firstOfSession && !this.stopped) void this.sendHotAtConnect();
   };
@@ -641,6 +651,7 @@ export class TimeboxController {
    */
   async setPower(on: boolean): Promise<void> {
     if (typeof on !== 'boolean') throw new RangeError(`onoff must be a boolean, got ${String(on)}`);
+    this.resetOffResends();
     if (on) await this.sendMode(this.restoreChannel());
     else await this.powerOff();
   }
@@ -1591,6 +1602,47 @@ export class TimeboxController {
       this.log(`lighting confirmed: ${formatHexColor(requested)}`);
     } else {
       this.log(`lighting mismatch: device ${formatHexColor(c)}, requested ${formatHexColor(requested)}`);
+    }
+  }
+
+  private resetOffResends(): void {
+    this.offResends = 0;
+    this.offResendGaveUp = false;
+  }
+
+  /**
+   * The firmware can light a panel that is off by itself, hours or minutes after the off command, in the lighting mode (#29,
+   * protocol/status.md). Then `46` still reports the off shadow in d0, but the power byte d8 is `01` again. While the panel
+   * is off, no power change is in flight, and the report carries the shadow code and d8 `01`, the off is sent again (at most
+   * `MAX_OFF_RESENDS` times in a row). A report with d8 `00`, a power change or a switch on starts the count again.
+   * A different known d0 is a switch on at the device and is handled by `deviceChannel` before.
+   */
+  private checkSelfWake(status: DeviceStatus): void {
+    if (this.stopped) return;
+    if (this.power || status.powerByte === 0x00) {
+      this.resetOffResends();
+      return;
+    }
+    if (this.channelInFlight > 0 || this.offShadow === null || status.channel !== this.offShadow) return;
+    if (status.powerByte !== 0x01) return;
+    if (this.offResends >= MAX_OFF_RESENDS) {
+      if (!this.offResendGaveUp) {
+        this.offResendGaveUp = true;
+        this.log(`woke while off: off not taken after ${MAX_OFF_RESENDS} resends, giving up`);
+      }
+      return;
+    }
+    this.offResends++;
+    void this.resendOff();
+  }
+
+  /** Send the off command again after a self-wake (the existing off path); never rejects, a failure is only logged. */
+  private async resendOff(): Promise<void> {
+    this.log('power <- device: woke while off (d8 01), sending off again');
+    try {
+      await this.powerOff();
+    } catch (e) {
+      this.log(`off resend failed: ${errorText(e)}`);
     }
   }
 
