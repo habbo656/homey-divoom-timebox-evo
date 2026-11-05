@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": { "enum": ["done", "blocked"] },
+    "report": { "type": "string" }
+  },
+  "required": ["verdict", "report"],
+  "additionalProperties": false
+}

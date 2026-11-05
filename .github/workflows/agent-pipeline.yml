@@ -1,5 +1,6 @@
 name: agent-pipeline
-# One issue end to end: guard → refine (rate, ask, plan) → record → develop (implement, docs, gate) → publish →
+# One issue end to end: guard → refine (rate, ask, plan) → record → [research on the hardware runner → refine again] →
+# develop (implement, docs, gate) → publish →
 # gate + independent review → hardware test (self-hosted) → finish (merge or next fix round). Model jobs get read-only tokens and no GitHub access;
 # deterministic jobs publish their results. Docs: docs/pipeline.md.
 on:
@@ -121,7 +122,8 @@ jobs:
           VERSION: ${{ needs.pick.outputs.version }}
         run: |
           bash scripts/agent/issue.sh verify "$N" | tee -a "$GITHUB_STEP_SUMMARY"
-          # refine: no plan yet, or an owner answer / new questions after it; wait: the plan waits for /agent go.
+          # refine: no plan yet, or an owner answer / new questions / research results after it; wait: the plan or
+          # research request waits for /agent go; research: a research request is the newest step.
           state=ready
           [ "$KIND" != issue ] || state=$(bash scripts/agent/issue.sh plan-state "$N" | sed -n 's/^state=//p')
           echo "state=$state" | tee -a "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
@@ -145,7 +147,8 @@ jobs:
 
   refine:
     # The planner alone: rates the issue (risk, size), turns every open requirement into a question for the owner
-    # instead of an assumption, and writes the implementation plan. Read-only; record publishes the result.
+    # instead of an assumption, and writes the implementation plan or requests hardware research first. Read-only;
+    # record publishes the result.
     needs: [pick, guard]
     if: needs.pick.outputs.stage == 'develop' && needs.guard.outputs.plan == 'refine'
     runs-on: ubuntu-latest
@@ -206,8 +209,9 @@ jobs:
           if-no-files-found: ignore
 
   record:
-    # Deterministic: posts the rating with the plan, the questions or the proposed split, and decides whether develop
-    # runs now. Questions, a split, and plans rated risk high or size XL go to the owner first.
+    # Deterministic: posts the rating with the plan, the research request, the questions or the proposed split, and
+    # decides whether research or develop runs now. Questions, a split, and plans or research requests rated risk high
+    # or size XL go to the owner first.
     needs: [pick, guard, refine]
     if: always() && needs.pick.outputs.stage == 'develop' && contains(fromJSON('["refine","wait"]'), needs.guard.outputs.plan)
     runs-on: ubuntu-latest
@@ -217,6 +221,7 @@ jobs:
       contents: read # writes use the bot token
     outputs:
       go: ${{ steps.r.outputs.go }}
+      research: ${{ steps.r.outputs.research }}
       status: ${{ steps.r.outputs.status }}
     steps:
       - uses: actions/checkout@v4
@@ -247,22 +252,182 @@ jobs:
           hold() { printf 'go=false\nstatus=%s\n' "$1" >> "$GITHUB_OUTPUT"; exit 0; }
           if [ "$PLAN" = wait ]; then
             gh issue edit "$N" --add-label agent:needs-owner >/dev/null
-            say "the plan for #$N waits for your confirmation (its rating is in the plan comment): \`/agent go\` starts development, \`/agent answer <changes>\` makes a new plan."
+            say "the plan or research request for #$N waits for your confirmation (its rating is in that comment): \`/agent go\` starts it, \`/agent answer <changes>\` makes a new one."
             hold needs-owner
           fi
           if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit while planning. The scheduled run resumes this issue."; hold limited; fi
           if [ "$OK" != true ] || ! [ -s "$F" ]; then
             gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N failed without a result (see the workflow run). \`/agent retry\` resumes."; hold blocked
           fi
-          out=$(python3 scripts/agent/refine-comment.py "$F" "$OWNER" "$N" comment.md)
+          rounds=$(bash scripts/agent/issue.sh plan-state "$N" | sed -n 's/^research_rounds=//p')
+          out=$(python3 scripts/agent/refine-comment.py "$F" "$OWNER" "$N" comment.md "$rounds")
           status=$(sed -n 's/^status=//p' <<<"$out"); gate=$(sed -n 's/^gate=//p' <<<"$out")
           echo "$out" >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" = invalid ]; then
             gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the refine run of #$N returned neither a plan nor questions. \`/agent retry\` plans again."; hold blocked
           fi
           gh issue comment "$N" --body-file comment.md >/dev/null
+          if [ "$status" = research ] && [ "$gate" != owner ]; then printf 'research=true\nstatus=research\n' >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "$status" != ready ] || [ "$gate" = owner ]; then gh issue edit "$N" --add-label agent:needs-owner >/dev/null; hold needs-owner; fi
           echo "go=true" >> "$GITHUB_OUTPUT"
+
+  research:
+    # Measures on the real device what the plan depends on (docs/pipeline.md#research). The checkout is main, never an
+    # agent branch: no unreviewed code runs on the Mac. The session can only hand back a report; no bundle, no bot token.
+    needs: [pick, guard, record]
+    if: >-
+      always() && needs.pick.outputs.stage == 'develop' && needs.guard.result == 'success'
+      && (needs.guard.outputs.plan == 'research' || needs.record.outputs.research == 'true')
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 300
+    environment: hardware
+    env:
+      HOMEY_RUN_MODE: lan # no HOMEY_PAT in this job: a research dev run uses the LAN only
+    permissions:
+      contents: read
+    concurrency:
+      group: hardware
+      cancel-in-progress: false
+    outputs:
+      ready: ${{ steps.rc.outputs.ready }}
+      advertising: ${{ steps.evo.outputs.advertising }}
+      ok: ${{ steps.c.outputs.ok }}
+      limited: ${{ steps.c.outputs.limited }}
+    steps:
+      - name: Prepare the hardware runner
+        # Like the hwtest job: mask the bench's names first, native git when the runner runs translated.
+        run: |
+          for v in "$(id -un)" "$HOME" "$(hostname -s)" "$(hostname)" "$RUNNER_NAME" "$(dirname "$RUNNER_WORKSPACE")"; do
+            [ "${#v}" -ge 3 ] && echo "::add-mask::$v"
+          done
+          if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            printf '#!/bin/sh\nexec arch -arm64 /usr/bin/git "$@"\n' > "$RUNNER_TEMP/bin/git"
+            chmod +x "$RUNNER_TEMP/bin/git"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Free the BLE link
+        # The Evo takes one connection: a dev build kept from an earlier test would hold it (and the lock checked next).
+        run: scripts/homey-run.sh stop --uninstall >/dev/null 2>&1 || true
+      - id: rc
+        uses: ./.github/actions/runner-check
+        with:
+          require: tools,bluetooth,ble,camera,lock
+          fail: "false"
+      - name: TimeBox reachable over BLE
+        id: evo
+        if: steps.rc.outputs.ready == 'true'
+        run: |
+          # Only a count leaves this step: the scan lists every device nearby. The link can take a moment to drop.
+          for _ in 1 2 3 4 5 6 7 8; do
+            n=$("$PROBE_PYTHON" scripts/probe/ble.py --scan 10 2>/dev/null | grep -ci 'names:.*timebox' || true)
+            if [ "$n" -gt 0 ]; then echo "advertising=true" >> "$GITHUB_OUTPUT"; echo "TimeBox advertising"; exit 0; fi
+            sleep 5
+          done
+          echo "advertising=false" >> "$GITHUB_OUTPUT"; echo "TimeBox not advertising"
+      - name: Trusted context
+        if: steps.evo.outputs.advertising == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ needs.pick.outputs.issue }}
+        run: mkdir -p "$RUNNER_TEMP/ctx" && bash scripts/agent/issue.sh context "$N" "$RUNNER_TEMP/ctx/context.md"
+      - id: c
+        if: steps.evo.outputs.advertising == 'true'
+        # Below the job timeout, so that the bench is still restored after a stuck session.
+        timeout-minutes: 280
+        uses: ./.github/actions/claude
+        env:
+          VAR_ISSUE: ${{ needs.pick.outputs.issue }}
+          VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
+          # Measurements run for a long time in the foreground (background tasks are off, .github/actions/claude).
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          prompt-file: .github/agent/research.md
+          schema-file: .github/agent/research.schema.json
+          model: sonnet
+          tools: Read,Grep,Glob,Bash
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      - name: Restore the bench
+        if: always()
+        run: |
+          scripts/homey-run.sh stop --uninstall >/dev/null 2>&1 || true
+          echo "bench restored"
+      - if: always()
+        env:
+          RESULT: ${{ steps.c.outputs.result-file }}
+          METRICS: ${{ steps.c.outputs.metrics-file }}
+        run: |
+          out="$RUNNER_TEMP/research-out"; mkdir -p "$out"
+          [ -z "$RESULT" ] || ! [ -s "$RESULT" ] || cp "$RESULT" "$out/result.json"
+          [ -z "$METRICS" ] || ! [ -s "$METRICS" ] || cp "$METRICS" "$out/metrics.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: research
+          path: ${{ runner.temp }}/research-out/
+          retention-days: 3
+          if-no-files-found: ignore
+
+  research-report:
+    # Deterministic: posts the report and plans again with it, or tells the owner what keeps the research from running.
+    needs: [pick, research]
+    if: always() && needs.research.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: bot
+    permissions:
+      contents: read # writes use the bot token
+    outputs:
+      status: ${{ steps.r.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: research
+          path: ${{ runner.temp }}/out
+        continue-on-error: true
+      - id: r
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          N: ${{ needs.pick.outputs.issue }}
+          READY: ${{ needs.research.outputs.ready }}
+          ADVERTISING: ${{ needs.research.outputs.advertising }}
+          OK: ${{ needs.research.outputs.ok }}
+          LIMITED: ${{ needs.research.outputs.limited }}
+          F: ${{ runner.temp }}/out/result.json
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          say() { bash scripts/agent/issue.sh say "$N" "$1"; }
+          hold() { echo "status=$1" >> "$GITHUB_OUTPUT"; exit 0; }
+          ask() { gh issue edit "$N" --add-label agent:needs-owner >/dev/null; say "$1"; hold needs-owner; }
+          [ "$READY" = true ] || ask "the hardware runner is not ready, so the research for #$N did not run ([run]($RUN_URL), step summary of the research job). Fix it (e.g. start the runner, plug in the webcam) and comment \`/agent retry\`."
+          [ "$ADVERTISING" = true ] || ask "the research for #$N did not run: the TimeBox is not reachable over Bluetooth from the runner. It needs power, and nothing else may hold its link: stop the TimeBox app on the Homey and close the phone app. Then comment \`/agent retry\`."
+          if [ "$LIMITED" = true ]; then say "paused at the Claude usage limit during the research. The scheduled run starts the research again."; hold limited; fi
+          if [ "$OK" != true ] || ! [ -s "$F" ]; then
+            gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the research run of #$N failed without a result ([run]($RUN_URL)). \`/agent retry\` runs it again."; hold blocked
+          fi
+          # Model output: it must not carry a pipeline marker of its own, and a comment holds at most 65536 characters.
+          report=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("report","").replace("<!-- agent-","<!-- ")[:60000])' "$F")
+          verdict=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("verdict",""))' "$F")
+          if [ "$verdict" = "done" ]; then
+            printf '## Hardware research report\n\n%s\n\n<!-- agent-research verdict=done -->\n' "$report" > comment.md
+            gh issue comment "$N" --body-file comment.md >/dev/null
+            gh workflow run agent-pipeline.yml -f issue="$N"
+            hold research
+          fi
+          ask "the research for #$N is blocked by the bench. Fix it and comment \`/agent retry\`.
+
+          $report"
 
   develop:
     needs: [pick, guard, refine, record]
@@ -483,6 +648,19 @@ jobs:
 
           Answer with a comment that starts with \`/agent answer\`; the pipeline plans again with your answer.
           <!-- agent-questions -->" >/dev/null
+                stop needs-owner ;;
+              needs_research)
+                # The plan turned out to depend on a measurement: same path as a request from refine, rated like the plan.
+                if [ "$KIND" != issue ]; then gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the UAT run of #$N asked for hardware research, which only issues can do. Blocked."; stop blocked; fi
+                ps=$(bash scripts/agent/issue.sh plan-state "$N")
+                python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); json.dump({"status":"research","risk":sys.argv[2],"size":sys.argv[3],"rating_reason":"Rating of the newest plan; the developer found that it needs a measurement on the hardware first.","research":r.get("research","")},open(sys.argv[4],"w"))' \
+                  "$OUT/result.json" "$(sed -n 's/^risk=//p' <<<"$ps")" "$(sed -n 's/^size=//p' <<<"$ps")" research.json
+                out=$(python3 scripts/agent/refine-comment.py research.json "$OWNER" "$N" comment.md "$(sed -n 's/^research_rounds=//p' <<<"$ps")")
+                rs=$(sed -n 's/^status=//p' <<<"$out"); gate=$(sed -n 's/^gate=//p' <<<"$out")
+                if [ "$rs" = invalid ]; then gh issue edit "$N" --add-label agent:blocked >/dev/null; say "the develop run of #$N asked for hardware research without saying what to measure.$kept \`/agent retry\` resumes."; stop blocked; fi
+                gh issue comment "$N" --body-file comment.md >/dev/null
+                if [ "$rs" = research ] && [ "$gate" != owner ]; then gh workflow run agent-pipeline.yml -f issue="$N"; stop research; fi
+                gh issue edit "$N" --add-label agent:needs-owner >/dev/null
                 stop needs-owner ;;
               ready) ;;
               *) gh issue edit "$N" --add-label agent:blocked >/dev/null
@@ -870,7 +1048,7 @@ jobs:
     # Deterministic, after every run that picked an issue, failed, cancelled and usage-limited ones included: one
     # metrics record (numbers, IDs and enums only) on the gh-pages branch, the dashboard's data (docs/pipeline.md,
     # Run metrics). The model jobs only hand in their stage records as artifacts; this job alone pushes to gh-pages.
-    needs: [pick, guard, refine, record, develop, publish, gate, review, verdicts, hwtest, finish]
+    needs: [pick, guard, refine, record, research, research-report, develop, publish, gate, review, verdicts, hwtest, finish]
     if: always() && needs.pick.outputs.go != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -907,11 +1085,12 @@ jobs:
           HW: ${{ needs.finish.outputs.hwtest }}
           S_FINISH: ${{ needs.finish.outputs.status }}
           S_PUBLISH: ${{ needs.publish.outputs.status }}
+          S_RESEARCH: ${{ needs.research-report.outputs.status }}
           S_RECORD: ${{ needs.record.outputs.status }}
           CANCELLED: ${{ contains(needs.*.result, 'cancelled') }}
         run: |
           # The job that ended the run names the outcome; without one the run was cancelled or failed.
-          status=${S_FINISH:-${S_PUBLISH:-$S_RECORD}}
+          status=${S_FINISH:-${S_PUBLISH:-${S_RESEARCH:-$S_RECORD}}}
           if [ -z "$status" ]; then [ "$CANCELLED" = true ] && status=cancelled || status=failed; fi
           [ -n "$GATE" ] || [ "$GATE_RESULT" != failure ] || GATE=false
           risk=""; size=""

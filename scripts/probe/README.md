@@ -19,6 +19,9 @@ image (1036 bytes, as the app sends images), `clock`
 `snap:FILE.jpg` webcam photo, `text:SP:RRGGBB:RRGGBB:message` native scrolling text (speed, text colour, background
 colour, message; BLE only, sends five payloads spaced by `--wait`, use `--wait 0.05`), `textoff` (`6e 00`). Replies are split into frames and printed as hex.
 
+`hex:` refuses the firmware/file opcodes (`93`–`9e`) and `75` (device name), see `docs/divoom-protocol.md`. The pipeline's
+research job runs these scripts unattended (`docs/pipeline.md#research`).
+
 ## BLE (the transport Homey can use)
 
 No pairing needed. Payloads are wrapped in the `FE EF AA 55` envelope with seq `0x01xx`.

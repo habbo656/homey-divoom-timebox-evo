@@ -29,8 +29,11 @@ The plan is executed **without owner review** (except high-risk or XL plans), so
 Then return ONE plan (<= ~80 lines):
 - **Understanding** (2-3 lines); map every acceptance criterion to a task or test.
 - **Approach** (alternatives in one line each, with the reason for the choice). Follow the roadmap design principles.
-- **Protocol**: list every opcode used and its status in `docs/divoom-protocol.md`. Only VERIFIED opcodes may ship. If an
-  unverified one is needed, add a first task "verify on hardware with `scripts/probe/ble.py` + webcam, record evidence".
+- **Hardware research**: anything that must be measured on the real device before the plan is decision-complete (an
+  unverified opcode, unknown firmware behaviour, a root cause) is not a plan task: developers have no hardware. In the
+  pipeline request it as research (`docs/pipeline.md#research`) and plan from the report; in a local session name it as
+  the blocking first step for the owner.
+- **Protocol**: list every opcode used and its status in `docs/divoom-protocol.md`. Only VERIFIED opcodes may ship.
   For payloads, replies and firmware behaviour ask the protocol KB (`docs/pipeline.md#protocol-knowledge-base`):
   `node .claude/skills/divoom-evo/scripts/divoom.js command 0x45` (also `overview`, `recipe`, `search`), if installed.
 - **Tasks**: ordered checklist, each one commit; **files** touched; **tests** to add; **docs** to update.

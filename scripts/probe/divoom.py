@@ -120,7 +120,10 @@ def payload_for(step: str):
     if step.startswith("rgb:"):
         return f"lighting {step[4:]}", bytes([0x45, 0x01]) + bytes.fromhex(step[4:]) + bytes([100, 0x00, 0x01])
     if step.startswith("hex:"):
-        return "raw payload", bytes.fromhex(step[4:])
+        payload = bytes.fromhex(step[4:])
+        if payload and (payload[0] == 0x75 or 0x93 <= payload[0] <= 0x9E):
+            raise ValueError(f"refused: opcode {payload[0]:02x} (firmware/file or device name, docs/divoom-protocol.md)")
+        return "raw payload", payload
     return None
 
 
