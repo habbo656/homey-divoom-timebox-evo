@@ -13,8 +13,10 @@ import {
   STATUS_CLOCK_B20_GREEN,
   STATUS_CLOCK_B50,
   STATUS_LIGHTING_GREEN_B100,
+  STATUS_OFF_D8_00,
   STATUS_UNSOLICITED_22,
   STATUS_VISUALIZATION_3,
+  STATUS_WAKE_D8_01,
 } from './__fixtures__/golden';
 
 /** An SPP frame around `payload` (`04 CMD 55 DATA…`): `01 | LEN | payload | CRC | 02`. */
@@ -32,6 +34,7 @@ describe('decodeStatus (real captures)', () => {
       channel: 0,
       lightingColor: { r: 0xff, g: 0, b: 0 },
       brightness: 50,
+      powerByte: 1,
       visualization: 3,
       clockColor: { r: 0xff, g: 0x80, b: 0 },
       clockStyle: 0,
@@ -59,6 +62,24 @@ describe('decodeStatus (real captures)', () => {
     expect(s.visualization).toBe(3);
   });
 
+  it('decodes d8 (power byte) of the off report and of the self-wake report (#29)', () => {
+    const off = decodeStatus(reply(STATUS_OFF_D8_00));
+    const wake = decodeStatus(reply(STATUS_WAKE_D8_01));
+    expect(off.channel).toBe(1);
+    expect(off.powerByte).toBe(0);
+    expect(wake.channel).toBe(1);
+    expect(wake.powerByte).toBe(1);
+    // The reports differ only in d8.
+    expect({ ...wake, powerByte: 0 }).toEqual(off);
+  });
+
+  it('decodes d8 of the existing captures', () => {
+    expect(decodeStatus(reply(STATUS_LIGHTING_GREEN_B100)).powerByte).toBe(1);
+    expect(decodeStatus(reply(STATUS_CLOCK_B20_GREEN)).powerByte).toBe(1);
+    expect(decodeStatus(reply(STATUS_VISUALIZATION_3)).powerByte).toBe(1);
+    expect(decodeStatus(reply(STATUS_UNSOLICITED_22)).powerByte).toBe(1);
+  });
+
   it('accepts the 22-byte unsolicited report', () => {
     const r = reply(STATUS_UNSOLICITED_22);
     expect(r.data.length).toBe(22);
@@ -72,6 +93,7 @@ describe('decodeStatus (real captures)', () => {
       channel: 0x00,
       lightingColor: { r: 3, g: 4, b: 5 },
       brightness: 6,
+      powerByte: 8,
       visualization: 9,
       clockColor: { r: 12, g: 13, b: 14 },
       clockStyle: 15,
