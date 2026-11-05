@@ -25,7 +25,37 @@ d0 stays `00` while the clock view shows animation pages (probe #106, section 5.
 `45 01 … 00`, `01` after every `45 00`/`02`/`04`/`05`/`06`/`45 01 … 01`, and unchanged by `74` (still `00` with the panel
 lit by `74 3c`). It was `01` in the clock view before the first off. So d8 reads "off" after the off command, but it is
 not a reliable on/off flag: `74` lights the panel without changing it, and what a device-side power button does to it is
-untested. The app does not use d8 in #26 (it keeps the power state itself, see below); a follow-up could.
+untested. The app keeps the power state itself (#26, see below) and uses d8 only to detect the self-wake while off (#29, below).
+
+### Spontaneous power on after off (#29)
+
+Hardware research, 2026-11-05 (CET), Mac BLE probe with webcam photos in `.hwtest/main/` (not in the repository). The unit
+lit itself by itself while the app had sent the off command `45 01 ff 00 00 32 00 00 00 00 00 00`; it came back in the
+lighting mode with the colour and brightness from before (the owner's observation in #29, measured here).
+
+- **P0 (read only, before the probe):** `ac 55 3c 00` (auto power off 60 min, not the factory 30), `a2 55 01 16 00 00 00 3e ff 00 00 32`,
+  `b3 55 00 12`, `42 00`..`42 09` ten empty records (no alarm on). `46`: clock channel, d0 `00`, d8 `00`.
+- **P1, `18` while off:** off, then `18` with the current time (reply `18 55 76 00`), then `5f` (weather): photos `p1-off`,
+  `p1-after18`, `p1-after5f` all dark. **`18` and `5f` do not wake an off panel; neither does `46`** (above).
+- **P2, connected, only `46` every 60 s:** off at 20:46:22. The `46` frame changed only in d8, `00` to `01`, first seen in the
+  15th reply (about 14 min after the off, about 21:00). Photos: `p2-10` (20:56) dark, `p2-15` (21:01) and `p2-40` (21:27) solid
+  red (the lighting colour `ff 00 00` of the off payload, inferred). d0 stayed `01` (the off shadow) the whole time.
+- **P3, disconnected right after the off at 21:27:38** (the owner's test): `p3-0`, `p3-5`, `p3-20`, `p3-30` (21:57) dark,
+  `p3-35` (22:02) and `p3-40` (22:07) solid red. The wake fell between 21:57:23 and 22:02:20, about 30 to 35 min after the off.
+  **A reconnect does not cause it:** at 22:07:48 the panel was already lit when `46` was sent (`p3-reconnect`).
+- **Conclusion (measured):** the firmware lights the panel by itself, with no app command and also without a BLE link. The
+  only visible trace in `46` is **d8 `00` to `01` with d0 still `01`**. Both wake windows contain a full hour (21:00, 22:00
+  on a device clock set at 20:45). That an hour-aligned firmware event is the cause is **inferred, not tested**; it does not
+  follow the stored auto power off of 60 min (wakes at about 14 and 30 to 35 min).
+- **P4, `ab 05 00` (auto power off 5 min), 22:08:** read back `ac 55 05 00`. The panel stayed dark in the photos viewed until
+  22:22, then the unit stopped advertising and was unreachable (scan at 22:46 and retries until 22:50 found nothing, dark
+  panel), so it was probably powered off by the timer (inferred). The restore `ab 3c 00` could not be sent. **Warning: never
+  probe with a short `ab` unless the owner is at the device to press the power button afterwards.** Whether `ab 05 00` makes
+  the panel wake is unanswered.
+
+App rule (#29, `architecture/power-lighting.md`): while the app considers the panel off and a `46` report carries the shadow
+d0 and d8 `01`, the app sends the off again. It only sees the wake while connected, and the panel can stay lit until the
+next 60 s poll. What the device power button does to d8 is untested ([open-questions.md](open-questions.md)).
 
 Consequences for the app (#26): the app tracks power itself; after off the device reports d0 `01` although nothing is
 shown, so reports with that code are ignored while the app considers the panel off (the "off shadow", like the
