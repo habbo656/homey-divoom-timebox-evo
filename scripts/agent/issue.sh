@@ -13,7 +13,8 @@
 #   issue.sh say N TEXT             bot comment that mentions the owner (the only owner channel)
 #   issue.sh marker N NAME          body of the newest bot comment carrying <!-- agent-NAME … -->
 #   issue.sh markers N NAME         number of such bot comments
-#   issue.sh plan-state N           state=refine|ready|wait plus the newest plan's hw/risk/size/gate (comments.py)
+#   issue.sh plan-state N           state=refine|research|ready|wait, the newest plan's or research request's
+#                                   hw/risk/size/gate, research_rounds (comments.py)
 set -euo pipefail
 : "${GITHUB_REPOSITORY:?}"
 OWNER=${OWNER:-${GITHUB_REPOSITORY%%/*}}

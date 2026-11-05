@@ -1,9 +1,10 @@
 {
   "type": "object",
   "properties": {
-    "status": { "enum": ["ready", "needs_owner", "blocked"] },
+    "status": { "enum": ["ready", "needs_owner", "needs_research", "blocked"] },
     "branch": { "type": "string" },
     "questions": { "type": "array", "items": { "type": "string" } },
+    "research": { "type": "string" },
     "needs_hwtest": { "type": "boolean" },
     "hw_scenario": { "type": "string" },
     "summary": { "type": "string" },

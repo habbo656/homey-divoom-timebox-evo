@@ -1,7 +1,7 @@
 # Agentic workflow (GitHub Actions, autonomous)
 
 Development runs as Claude Code agents (`.claude/agents/`) inside GitHub Actions (ADR 0011). Everything that needs no
-hardware runs on GitHub-hosted runners; only the hardware test runs on the owner's Mac as a self-hosted runner, which
+hardware runs on GitHub-hosted runners; only the hardware research and the hardware test run on the owner's Mac as a self-hosted runner, which
 reaches the Homey on the LAN, the TimeBox over the Homey and the webcam. The owner talks to the pipeline **only through
 GitHub issues and PRs** (labels and comments; GitHub notifies the owner of every `@mention`). The repo docs stay the
 complete knowledge base (ADR 0006): GitHub records the work, it does not hold knowledge. A human-readable overview with a
@@ -12,6 +12,7 @@ owner: label agent:approved ─► INTAKE: router (owner only) ─► injection 
                                                                                 │ flagged → owner: /agent override
 PIPELINE  pick (roadmap order) ─► guard (approval + hash) ─► REFINE: planner rates risk/size, asks, plans (ubuntu)
    ─► record (plan comment) │ questions / XL split / risk high or XL → owner: /agent answer · /agent go
+   │ needs a measurement ─► RESEARCH: runner check → researcher on main (Mac) ─► report comment ─► REFINE again
    ─► DEVELOP: developer (Opus if risk high or size ≥ L) → doc-keeper → gate (ubuntu)
    ─► publish (push branch, plan comment, draft PR) ─► gate (ubuntu) ∥ REVIEW: fresh reviewer (ubuntu)
    ─► protected paths? → owner: /agent approve-diff ─► HARDWARE TEST: runner check → build → dev run → pairing → tester (Mac)
@@ -30,15 +31,15 @@ Only the repository owner can start or steer anything; labels or comments by any
 | issue | label `agent:approved` or comment `/agent approve` | screen the issue, record the approval, start the pipeline (one issue at a time, roadmap order) |
 | issue | `/agent override` | approve although the screen flagged it (`security:flagged`) |
 | issue | `/agent answer <text>` | answer the planner's or developer's questions, or change the plan (`agent:needs-owner`); the pipeline plans again |
-| issue | `/agent go` | confirm a plan that waits for the owner (risk high or size XL); development starts |
-| issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, pairing timeout, 3 red rounds) |
+| issue | `/agent go` | confirm a plan or research request that waits for the owner (risk high or size XL); it starts |
+| issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, TimeBox not reachable for research, pairing timeout, 3 red rounds) |
 | issue | `/agent stop` | label `agent:blocked`; nothing runs until `/agent retry` |
 | PR | `/agent approve-diff` | allow hardware test and merge of exactly the current head of a PR that touches protected paths |
 | any issue | `/agent next` | start the next approved roadmap issue |
 | UAT issue | `ACCEPTED …` / `REJECTED UAT-3, UAT-7 …` | the milestone verdict (first word of the comment) |
 
 What the owner still does by hand: write or confirm issues (the `brainstormer` agent helps locally), approve them, answer
-questions (requirements are never assumed), confirm high-risk or XL plans, split XL issues, pair the TimeBox when a hardware test asks for it (comment on the issue, the job waits 30 min), review
+questions (requirements are never assumed), confirm high-risk or XL plans and research, free the TimeBox's Bluetooth link for research when asked, split XL issues, pair the TimeBox when a hardware test asks for it (comment on the issue, the job waits 30 min), review
 protected diffs, the UAT per milestone, and publishing to the Homey App Store.
 
 ## Workflows
@@ -46,7 +47,7 @@ protected diffs, the UAT per milestone, and publishing to the Homey App Store.
 | Workflow | Trigger | Runner | Does |
 |---|---|---|---|
 | `agent-intake.yml` | issue labelled/edited, comment created | ubuntu | `scripts/agent/route.sh` decides; screen + approval, revoke, or dispatch |
-| `agent-pipeline.yml` | dispatch (`issue`, `round`, `from`), every 3 h | ubuntu + Mac | one issue end to end (below); the schedule resumes after usage limits and picks up approved issues |
+| `agent-pipeline.yml` | dispatch (`issue`, `round`, `from`), every 3 h | ubuntu + Mac (research, hwtest) | one issue end to end (below); the schedule resumes after usage limits and picks up approved issues |
 | `agent-uat.yml` | dispatch by intake on an owner verdict | ubuntu | ACCEPTED: acceptance docs, `release:bump`, merge, tag; REJECTED: bug issues; a `uat` metrics record |
 | `gate.yml` | reusable | ubuntu | `scripts/gate.sh` on a commit; the merge gate |
 | `ci.yml` | push to `main`, pull requests | ubuntu | `gate.yml`; GitHub-hosted only, so fork PRs never reach the Mac |
@@ -61,8 +62,9 @@ Pipeline jobs (`agent-pipeline.yml`):
    filed from an owner verdict), title + body unchanged since the approval (sha256 in the approval record), not
    `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
    Decides the plan state (`scripts/agent/issue.sh plan-state`, kind `issue` only): `refine` when there is no plan yet
-   or an owner `/agent answer` or new questions came after the newest plan; `wait` when that plan waits for
-   `/agent go`; `ready` otherwise. Fix rounds therefore reuse the plan.
+   or an owner `/agent answer`, new questions or a research report came after the newest plan or research request;
+   `wait` when that step waits for `/agent go`; `research` when a research request is the newest step; `ready`
+   otherwise. Fix rounds therefore reuse the plan.
 3. <a id="refine"></a>**refine** (ubuntu, read-only, only in state `refine`) — the KB skill, then `.github/agent/refine.md`:
    one Opus session that is the `planner` (`.claude/agents/planner.md`, tools Read/Grep/Glob/Bash/Skill, no file
    changes). It returns JSON (`refine.schema.json`):
@@ -76,20 +78,40 @@ Pipeline jobs (`agent-pipeline.yml`):
    - **split** — an XL issue gets a proposed split into issues instead of a plan, unless the owner kept it as one
      (`/agent answer keep as one issue`).
    - **plan** — the implementation plan with the hardware test scenario (`ready`).
+   - **research** — what has to be measured on the real device before the plan can be decision-complete
+     (`research`, see job 5).
 4. **record** (deterministic, states `refine` and `wait`) — `scripts/agent/refine-comment.py` renders the result as one
-   comment: rating + plan + scenario with `<!-- agent-plan hw=… risk=… size=… gate=none|owner -->`, or rating +
-   questions / split with `<!-- agent-questions … -->` and `agent:needs-owner`. `gate=owner` (risk high or size XL) also
+   comment: rating + plan + scenario with `<!-- agent-plan hw=… risk=… size=… gate=none|owner -->`, rating + research
+   request with `<!-- agent-research-request risk=… size=… gate=none|owner -->`, or rating + questions / split with
+   `<!-- agent-questions … -->` and `agent:needs-owner`. `gate=owner` (risk high or size XL) also
    sets `agent:needs-owner` and asks for `/agent go` (intake answers it with `<!-- agent-plan-go -->`, valid for that plan
-   only). Develop starts only for a `ready` plan without gate; a usage limit or a failed session pauses or blocks as in
+   or request only). Develop starts only for a `ready` plan without gate; a usage limit or a failed session pauses or blocks as in
    develop.
-5. **develop** (ubuntu, read-only token) — installs the protocol KB skill (below), rebuilds the context (now with the
+5. <a id="research"></a>**research** (Mac, `environment: hardware`, concurrency group `hardware`, only for a research
+   request without open gate; up to 5 h) — measures what the plan depends on, because develop and refine have no
+   Bluetooth, webcam or TimeBox (#29 blocked twice with "no hardware" although its plan was correct). Steps: remove a
+   kept dev build (`homey-run.sh stop --uninstall`, frees the BLE link and the lock), runner check (`tools, bluetooth,
+   ble, camera, lock`), wait up to about 2 min for the TimeBox to advertise, then one session with
+   `.github/agent/research.md` (tools Read/Grep/Glob/Bash, no subagents, `BASH_MAX_TIMEOUT_MS` 60 min for long waits),
+   finally the bench is restored. The session returns JSON (`research.schema.json`: `done` / `blocked` + report).
+   **research-report** (deterministic) posts a `done` report with `<!-- agent-research verdict=done -->` and dispatches
+   the issue again, so refine plans from the evidence (or asks the owner); the plan's docs task records the evidence in
+   `docs/protocol/`. A runner that is not ready, a TimeBox that does not advertise (usually the installed app on the
+   Homey holds the link) or a `blocked` verdict asks the owner (`agent:needs-owner`, `/agent retry` runs it again); a
+   usage limit pauses it for the schedule, which starts the research over. At most two rounds per owner answer, then
+   the request becomes a question to the owner, so research and develop cannot loop without a human. A later hardware
+   test may ask the owner to pair again, because research uninstalled the dev build.
+   While the runner is offline the job stays queued and holds the `agent-pipeline` group, like the hardware test.
+6. **develop** (ubuntu, read-only token) — installs the protocol KB skill (below), rebuilds the context (now with the
    plan), then `.github/agent/develop.md`: developer → doc-keeper → `scripts/gate.sh`. It does not plan: it implements the
    newest posted plan. The developer model comes from the plan's rating: Opus for risk high or size L/XL, and in round 3
    (escalation); Sonnet otherwise. Returns JSON (`develop.schema.json`) and the branch as a git bundle. A requirement the
-   plan leaves open ends the run with questions and `agent:needs-owner`; the owner's answer makes refine plan again. The agents commit after every finished step; the bundle and upload steps run also after a failed,
+   plan leaves open ends the run with questions and `agent:needs-owner`; the owner's answer makes refine plan again. A plan
+   that turns out to depend on a measurement ends the run with `status: needs_research`; publish posts it as a research
+   request rated like the plan and dispatches the issue. The agents commit after every finished step; the bundle and upload steps run also after a failed,
    cancelled or timed-out session (the model step has its own timeout below the job's), from `$RUNNER_TEMP/develop-out`
    (outside the checkout, so the commit of leftover changes never picks up the result file).
-6. **publish** (deterministic, skipped when develop did not start) — **checkpoint first, whatever the outcome**
+7. **publish** (deterministic, skipped when develop did not start) — **checkpoint first, whatever the outcome**
    (`ready`, `blocked`, `needs_owner`, no result, usage limit): pushes the branch's commits (fast-forward only, no PR
    yet), so the next run continues the branch instead of redoing the work (for a UAT issue it also posts the `[auto]`
    cases as the scenario when they changed). A branch that is not on GitHub yet is first rebased onto the current `main` if `main` moved during the run:
@@ -97,17 +119,17 @@ Pipeline jobs (`agent-pipeline.yml`):
    changes and is refused ("refusing to allow a GitHub App to create or update workflow", #3, 2026-10-24); the owner message says whether progress was kept. Then, only for `ready`: validates the branch name, opens a
    draft PR (`Closes #n`), classifies the diff (`scripts/agent/diff-check.sh`). A branch with any commit that touches
    `.claude/skills/` is never pushed (the KB skill is private, see below).
-7. **gate** (`gate.yml`) and **review** (ubuntu, read-only; KB skill, `.github/agent/review.md`, fresh `reviewer`) in parallel.
-8. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
+8. **gate** (`gate.yml`) and **review** (ubuntu, read-only; KB skill, `.github/agent/review.md`, fresh `reviewer`) in parallel.
+9. **verdicts** — hardware test only if gate green, review approve, plan has a scenario and the diff is not protected
    (or `/agent approve-diff` for that head).
-9. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
+10. **hwtest** (Mac, `environment: hardware`, concurrency group `hardware`) — runner check (tools, Bluetooth, BLE, camera,
    Homey LAN API, LAN dev run, lock), `npm ci && npm run build`, baseline photo, `scripts/homey-run.sh start` (`HOMEY_RUN_MODE=auto`: LAN, else cloud with `HOMEY_PAT`), then
    `scripts/agent/await-device.sh` (asks the owner to pair if no TimeBox is available, polls 30 min), then the tester
    (`.github/agent/hwtest.md`), finally `homey-run.sh stop` (`--uninstall` before a UAT).
-10. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
+11. **finish** (deterministic) — posts review and test reports on the PR; all green → `gh pr ready`, squash-merge, next
    issue. Otherwise a findings comment (`<!-- agent-findings round=… sha=… -->`) and the next round; after round 3
    `agent:blocked` and an `@owner` comment.
-11. **metrics** (deterministic, `if: always()` after every run that picked an issue) — one metrics record on
+12. **metrics** (deterministic, `if: always()` after every run that picked an issue) — one metrics record on
    `gh-pages` ([Run metrics](#run-metrics)). Record, publish and finish set the run's `status` output for it.
 
 Rounds: the fix budget is 2 rounds plus one Opus escalation round (round 3), counted per dispatch. Pipeline and UAT
@@ -116,7 +138,7 @@ dispatch can be replaced by a newer one — the 3-hourly schedule re-picks the w
 
 State lives in GitHub, written only by deterministic steps: labels (`agent:approved`, `agent:needs-owner`,
 `agent:blocked`, `security:flagged`, `status:in-progress`, `owner:review`, `uat`, `uat-finding`) and hidden markers in
-bot comments (`agent-approval`, `agent-plan`, `agent-plan-go`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
+bot comments (`agent-approval`, `agent-plan`, `agent-plan-go`, `agent-research-request`, `agent-research`, `agent-questions`, `agent-findings`, `agent-review`, `agent-hwtest`,
 `agent-diff-approval`, `agent-pairing`, `agent-uat-ready`, `agent-uat-rejected`).
 
 ## Bot identity
@@ -129,7 +151,7 @@ the pipeline's own **GitHub App** (`<slug>[bot]`), never from the owner's accoun
   `AGENT_APP_PRIVATE_KEY`); their own `GITHUB_TOKEN` is `contents: read`. Model jobs never see the key or a write token;
   they only commit locally with the bot's name and email.
 - The hardware job (environment `hardware`, Mac) needs the token only for the pairing comment: it mints it right before
-  `await-device.sh` and revokes it (`DELETE installation/token`) before the tester starts.
+  `await-device.sh` and revokes it (`DELETE installation/token`) before the tester starts. The research job never mints it.
 - Repository variables: `AGENT_APP_ID`, `AGENT_BOT_SLUG` (the app slug; workflows use `<slug>[bot]` as `BOT` for REST
   and event logins and the bare slug for GraphQL `author.login`), `AGENT_BOT_EMAIL`
   (`<bot user id>+<slug>[bot]@users.noreply.github.com`, so GitHub links the commits to the bot). This repository's
@@ -161,7 +183,8 @@ Agent Skill (and an MCP server with the same content); the pipeline uses the **s
   are public). Plans, reviews and docs may state the facts they need, never whole sections.
 - Locally: `ln -s "<path to the KB clone>/agent/divoom-evo" .claude/skills/divoom-evo` (or the MCP server:
   `claude mcp add divoom-evo -- node "<path>/agent/divoom-evo/scripts/mcp-server.js"`).
-- Not in the hardware job: the Mac runner has no KB key; the tester judges photos and logs against the plan.
+- Not in the hardware jobs: the Mac runner has no KB key; the tester judges photos and logs against the plan, and a
+  research request carries every payload as exact hex.
 
 ## Security model (public repository)
 The repository is public: anyone can open issues, comment and send fork PRs, and every Actions log and artifact is
@@ -185,7 +208,8 @@ public. Layers, from the outside in:
 5. **Protected paths** (`diff-check.sh`: `.github/`, `.claude/`, `CLAUDE.md`, the scripts the runner or the gate execute (including `homey-env.sh` and `homey-dev-run.mjs`),
    `scripts/probe/`, `package.json`, `package-lock.json`, `.npmrc`, `.nvmrc`, `.homeyignore`, lint/TS config): such a PR
    is never run on the Mac nor merged before the owner's `/agent approve-diff` on its exact head. The bot app has no
-   Workflows permission, so it cannot push `.github/workflows/**` at all.
+   Workflows permission, so it cannot push `.github/workflows/**` at all. Research runs before any review, so it checks
+   out `main` and never an agent branch: no unreviewed code reaches the Mac this way, and its only output is a report.
    Run metrics on `gh-pages` (public) are numbers and enums only, validated against a closed schema (see Run metrics).
 6. **Self-hosted runner guard.** `scripts/runner/job-started.sh`, installed outside the checkout as the runner's
    `ACTIONS_RUNNER_HOOK_JOB_STARTED`, refuses every job whose workflow is not from `main`, whose event is not
@@ -246,6 +270,7 @@ Pro and is not used). A run that hits the limit says so on the issue and the sch
 | Agent | Model | Runs in | Output |
 |---|---|---|---|
 | orchestrator (top-level sessions) | sonnet | develop, review, hwtest, uat jobs | JSON result |
+| researcher (top-level session, `.github/agent/research.md`) | sonnet | research (Mac) | report, verdict done / blocked |
 | injection screen | sonnet, no tools | intake | clean / suspicious |
 | `planner` | opus | refine (as the top-level session) | rating, questions or split, plan incl. hardware test scenario |
 | `developer` | sonnet, high (opus for risk high or size L/XL, and in round 3) | develop | commits |
@@ -279,6 +304,11 @@ Their commits carry the bot identity (`.claude/settings.json` `env`, see "Bot id
 - One hardware user at a time (concurrency group `hardware`). The lock in `scripts/homey-run.sh` only means "a dev build
   is installed". Mac probe scripts only after `scripts/homey-run.sh stop --uninstall`; the build is uninstalled before an
   owner UAT (`docs/uat/README.md`).
+- The research session sends raw payloads to the owner's device. `scripts/probe/divoom.py` refuses `hex:` payloads with
+  the firmware/file opcodes (`93`–`9e`) and `75` (`docs/divoom-protocol.md`), and the prompt allows only the request's
+  payloads, read-only queries and restored settings. This is a guard against mistakes, not a sandbox: a session with
+  Bash could write its own BLE code. A session that stops mid-way (limit, timeout) may leave a changed device setting;
+  its restart reads the setting as it finds it.
 
 ## Runner check
 `scripts/runner-check.sh [--require LIST] [--scan S]` (composite action `.github/actions/runner-check`, workflow
@@ -382,7 +412,7 @@ type `uat` (ADR 0015). A static dashboard on GitHub Pages shows them over time, 
 tokens, turns or fix rounds, more review findings or red gates) can be tied to a model, Claude Code or prompt change.
 
 - **Stage records** — `.github/actions/claude` writes one per session (output `metrics-file`), built only from numeric
-  and enum fields of Claude Code's `--output-format json` result: `stage` (the prompt file's name: refine, develop,
+  and enum fields of Claude Code's `--output-format json` result: `stage` (the prompt file's name: refine, research, develop,
   review, hwtest, uat, screen), `model` (the session's model id, from `modelUsage`), `cli_version`, `num_turns`,
   `duration_ms`, `cost_usd` (API-equivalent; the plan is not billed per token), input/output/cache-read/cache-creation
   tokens, `subagents` (spawned), per-model token totals, `ok`, `limited`, `subtype`. Never the result text, the prompt
@@ -392,8 +422,8 @@ tokens, turns or fix rounds, more review findings or red gates) can be tied to a
   the newest commit of `.claude/agents`, `.github/agent` or `CLAUDE.md`, planner `risk`/`size` from `issue.sh
   plan-state`), the static context size, the stage records, and the outcome: gate (`green`), review verdict and
   blocker/major/minor counts, hardware verdict (pass/fail/blocked; a runner that is not ready or no pairing counts as
-  blocked), `status` (merged, next-round, needs-owner, blocked, limited, no-change, cancelled, failed — from the
-  `status` output of record, publish or finish; no status means cancelled if a job was cancelled, else failed). UAT
+  blocked), `status` (merged, next-round, research, needs-owner, blocked, limited, no-change, cancelled, failed — from the
+  `status` output of record, research-report, publish or finish; no status means cancelled if a job was cancelled, else failed). UAT
   records carry milestone, verdict (ACCEPTED/REJECTED) and the number of rejected cases (bugs filed).
 - **Schema** — `.github/agent/metrics.schema.json`: integers, numbers, booleans and strings that each have an enum, a
   const or an anchored pattern (the validator refuses a schema with a free string), `additionalProperties: false`
@@ -419,7 +449,8 @@ tokens, turns or fix rounds, more review findings or red gates) can be tied to a
   the canvas, never `innerHTML`.
 - **Public data rule** — the site is public: numbers, IDs and enums only; no free text from issues, PRs, prompts or
   model output, no bench or personal details. A new field needs a schema entry with an enum or pattern.
-- Tests: `scripts/agent/metrics.test.mjs` (validation, record build, concurrent publishing to a local bare remote).
+- Tests: `scripts/agent/metrics.test.mjs` (validation, record build, concurrent publishing to a local bare remote);
+  `scripts/agent/research.test.mjs` covers the research states, the request comment and the probe guard.
 - Not recorded: scheduled runs that find nothing to start, intake runs. Follow-ups (out of scope of #24): peak
   context per turn (stream-json), fix/revert commits after merge, threshold alerts.
 

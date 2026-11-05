@@ -138,7 +138,7 @@ runs:
         cli = os.environ.get("CLI_VERSION", "")
         json.dump({
             "schema": 1,
-            "stage": stage if stage in ("refine", "develop", "review", "hwtest", "uat", "screen") else "other",
+            "stage": stage if stage in ("refine", "research", "develop", "review", "hwtest", "uat", "screen") else "other",
             "model": max(main, key=lambda m: m["output_tokens"])["model"] if main else mid(alias),
             "cli_version": cli if re.fullmatch(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}", cli) else "0.0.0",
             "num_turns": min(num(d.get("num_turns")), 100000), "duration_ms": num(d.get("duration_ms")),

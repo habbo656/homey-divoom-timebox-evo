@@ -4,9 +4,10 @@
 (() => {
   'use strict';
 
-  const STAGES = ['refine', 'develop', 'review', 'hwtest', 'uat', 'screen', 'other'];
+  const STAGES = ['refine', 'research', 'develop', 'review', 'hwtest', 'uat', 'screen', 'other'];
   const COLORS = {
     refine: '#8250df',
+    research: '#bc4c00',
     develop: '#0969da',
     review: '#1a7f37',
     hwtest: '#bf8700',

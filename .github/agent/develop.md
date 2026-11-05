@@ -24,6 +24,11 @@ plan first and continue where the work stopped; never redo committed steps.
    `status: blocked`. Requirements are never assumed: if the plan, the issue and the owner's comments leave a
    requirement open (what to build, not how), stop and return `status: needs_owner` with the questions (each
    answerable in one short reply, naming the options); the owner's answer makes the pipeline plan again.
+   This job has no Bluetooth, webcam or TimeBox. If the plan needs a measurement on the real device that no research
+   report in the context (`<!-- agent-research `) answers, and the implementation depends on it, do not implement
+   and do not return `blocked`: return `status: needs_research` with `research` (kind `issue` only): the plan's
+   measurement steps as written, with exact hex payloads, waits, photos, read-backs and restores. The pipeline runs
+   them on the hardware runner and plans again with the report.
 2. **Implement.** Spawn the `developer` with `model: "{{DEV_MODEL}}"` and the plan (round 1) or the findings of the
    previous round (the newest `<!-- agent-findings` comment) plus the plan. The pipeline picked the model from the
    plan's rating (opus for high risk or size L/XL, and in round 3 as the escalation).

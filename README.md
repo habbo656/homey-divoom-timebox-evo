@@ -67,6 +67,8 @@ real Homey with a real TimeBox, watched by a webcam. All communication happens h
 3. **Rate, clarify, plan.** A planner agent rates the issue (risk and size), asks the owner about anything the issue
    leaves open instead of guessing, and posts the implementation plan on the issue. Too large an issue gets a proposed
    split; a high-risk or very large plan waits for the owner's `/agent go`.
+   If the plan depends on something only the real device can tell, a research agent measures it on the owner's Mac
+   first and the planner plans again from its report. It runs the code of `main`, never unreviewed changes.
 4. **Build.** A developer agent implements the plan with code and tests, a doc-keeper updates the documentation, and the quality gate
    (lint, build, tests, Homey validation) must pass. These agents cannot write to GitHub at all; a separate, simple
    workflow step publishes their branch and opens a pull request.
@@ -122,6 +124,7 @@ flowchart LR
     direction TB
     M1["Runner check: Bluetooth,<br/>camera, Homey, TimeBox"]
     M2["Install build on the Homey"]
+    M0["Researcher: measure on the device,<br/>report to the planner"]
     M3["Tester: drive the app,<br/>judge webcam photos"]
   end
 
@@ -131,6 +134,7 @@ flowchart LR
   G2 -- suspicious --> O2
   G2 -- clean --> G3 --> G4 --> A1
   A1 -- question, split, risky plan --> O3 --> A1
+  A1 -- needs a measurement --> M0 --> A1
   A1 --> A2 --> A3 --> A4 --> G5
   G5 --> A5 --> G6
   G6 -- protected files --> O5 --> M1

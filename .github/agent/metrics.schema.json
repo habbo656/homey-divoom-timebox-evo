@@ -12,7 +12,7 @@
     "commit": { "type": ["string", "null"], "pattern": "^[0-9a-f]{12}$" },
     "gate": { "enum": [true, false, null] },
     "status": {
-      "enum": ["merged", "next-round", "needs-owner", "blocked", "limited", "no-change", "cancelled", "failed"]
+      "enum": ["merged", "next-round", "research", "needs-owner", "blocked", "limited", "no-change", "cancelled", "failed"]
     },
     "context": {
       "type": "object",
@@ -44,7 +44,7 @@
       "type": "object",
       "properties": {
         "schema": { "const": 1 },
-        "stage": { "enum": ["refine", "develop", "review", "hwtest", "uat", "screen", "other"] },
+        "stage": { "enum": ["refine", "research", "develop", "review", "hwtest", "uat", "screen", "other"] },
         "model": { "$ref": "#/$defs/model" },
         "cli_version": { "type": "string", "pattern": "^[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,6}$" },
         "num_turns": { "$ref": "#/$defs/small" },

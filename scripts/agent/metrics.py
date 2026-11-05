@@ -21,7 +21,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 SCHEMA = os.path.join(ROOT, ".github", "agent", "metrics.schema.json")
-STAGES = ["refine", "develop", "review", "hwtest", "uat", "screen", "other"]
+STAGES = ["refine", "research", "develop", "review", "hwtest", "uat", "screen", "other"]
 INTS = {"run_id", "run_attempt", "issue", "pr", "round", "rejected"}
 BOOLS = {"gate"}
 RUN_KEYS = {"run_id", "run_attempt", "issue", "pr", "round", "kind", "path", "risk", "size", "gate", "review", "hwtest", "status"}
