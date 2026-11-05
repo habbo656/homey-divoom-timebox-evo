@@ -16,6 +16,7 @@ Opcode rows (payload, function, reply, status) live here. Probe logs, photo seri
 Key rules (details in the evidence files):
 - BLE: subscribe to notifications; poll `46` for liveness, never rely on `f7` heartbeats ([transports.md](protocol/transports.md)).
 - `74 BB` (brightness): `00` turns the panel off; any send while the panel is off lights it again (the app holds `dim` while off since #62) ([display.md](protocol/display.md#opcode-table-notes)).
+- `18`, `5f` and `46` do not wake a panel that is off (measured, #29). The firmware can light an off panel by itself (`46` d8 `00` to `01`, about 14 to 35 min after the off); the app then sends the off again ([status.md](protocol/status.md#spontaneous-power-on-after-off-29)).
 - The hot flag `26 0X` controls the clock's animation pages; it persists on the device ([clock.md](protocol/clock.md)).
 
 - [protocol/transports.md](protocol/transports.md): sections 1.1 to 1.4, 2 and 10 (GATT, envelope, RFCOMM, SPP frame, replies, diagnostics)
@@ -140,6 +141,7 @@ Unsolicited frames:
 | d0 | current channel (`00` clock, `01` lighting, `02` cloud, `04` visualization, `05` custom) | matches the `45` replies. **Exception: `45 06` (scoreboard) does not change d0** (it keeps the previous channel's code, observed Homey Pro 2026-10-06, #24) |
 | d3..d5 | lighting colour R G B | `ff 00 ff` after magenta, `00 ff 00` after green |
 | d6, d10 | brightness 0..100 | change with `74` |
+| d8 | power byte of the last `45` | `00` after `45 01 … 00`, `01` after any other `45`; `74` does not change it. **Flips to `01` when the firmware lights an off panel by itself** while d0 stays `01` (#29, measured 2026-11-05); the app decodes it as `powerByte` |
 | d12..d14 | clock colour R G B | `00 ff ff` after a cyan clock (the app owns the clock colour since #69 and only compares d12..d14 in a log line) |
 | d9 | last visualization index (`45 04 NN`) | `0e` after `45 04 0e` |
 | d15 | clock style TT | `09` after `45 00 01 09 …` (the app compares d12..d15 with the requested clock face after a clock switch, #25) |
@@ -195,7 +197,7 @@ Payload = opcode + args (wrap per transport). Names from the decompiled Divoom a
 | `72 01 01 RRRR BBBB` | scoreboard red/blue (LE16, ≤ 999) | `72 55 01` | VERIFIED (shows red bottom, blue top) |
 | `72 02 01` | noise meter (dB) | `72 55 02` | VERIFIED; used since #3 (mode picker `noise_meter`, [status.md](protocol/status.md)) |
 | `72 03 OO MM SS` | countdown: OO `01` start / `00` stop, MM minutes (0..99), SS seconds (0..59) | `72 55 03`; unsolicited `71 55 03 01 01 00` when it ends | VERIFIED (Mac probe 2026-10-07, #33, section 5.6) — notes: [countdown.md](protocol/countdown.md#opcode-table-notes) |
-| `18 YL YH MO DD hh mm ss WD` | set date/time (year = YH*100+YL, WD 0=Sun) | `18 55` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
+| `18 YL YH MO DD hh mm ss WD` | set date/time (year = YH*100+YL, WD 0=Sun) | `18 55` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes); does not wake an off panel ([status.md](protocol/status.md#spontaneous-power-on-after-off-29)) |
 | `5f TT WW` | weather: temperature (signed), type 1 clear, 3 cloudy, 5 thunder, 6 rain, 8 snow, 9 fog | none | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
 | `2b UU` | temperature unit 0 °C / 1 °F | none | SOURCE (sent, not observed) |
 | `2d HH` | 12h/24h (`00`/`01`) | none | SOURCE. No visible change. The HH byte of `45 00` has no visible effect either (see above), so 12 h is not available on this Evo so far |
