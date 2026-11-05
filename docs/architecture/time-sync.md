@@ -16,4 +16,4 @@ _Part of [architecture](../architecture.md); moved from "Time sync" (#120)._
     `link.request(18, 0x18, 5 s)`, expecting `18 55`; concurrent syncs share one command. A missing acknowledgement logs
     `time sync not confirmed` and counts as synced (the timeout cannot tell a Timebox that does not acknowledge from a write that did not complete; if the link is really gone, the liveness poll drops the session and the reconnect syncs again, reason `connect`); any other failure logs `time sync failed: <msg>` and is retried by the
     60 s check after 15 min (`SYNC_RETRY_MS`, reason `retry`; the check does nothing else, and logs nothing, before that delay is over, also when the zone has become invalid). A sync interrupted by `stop()` logs nothing. The check timer starts in `start()` and is cleared in `stop()`.
-    Only `18` is sent (VERIFIED, protocol section 5.1).
+    Only `18` is sent (VERIFIED, protocol section 5.1). `18` does not wake a panel that is off (measured, #29, [status.md](../protocol/status.md#spontaneous-power-on-after-off-29)), so the sync is not held while off.
