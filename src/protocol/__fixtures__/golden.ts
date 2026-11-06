@@ -53,6 +53,14 @@ export const STATUS_LIGHTING_GREEN_B100 =
 /** Visualization channel after `45 04 03`: channel 4, last visualization index 3. */
 export const STATUS_VISUALIZATION_3 =
   '01 19 00 04 46 55 04 00 00 00 ff 00 64 00 01 03 64 01 ff 80 00 00 01 00 00 00 08 04 02';
+// Real `46` replies of the hardware research of #29 (2026-11-05), after `45 01 ff 00 00 32 00 00 00 00 00` (off): clock colour
+// ff 7f 00, d0 `01` (the off shadow). The two frames differ only in d8; envelope and checksum are computed from the data bytes.
+/** Reply right after the off command: d0 01, d8 (power byte) 00. */
+export const STATUS_OFF_D8_00 =
+  '01 19 00 04 46 55 01 00 00 ff 00 00 32 00 00 0b 32 01 12 ff 7f 00 01 00 00 00 b9 03 02';
+/** Reply after the firmware woke the panel by itself (no command sent): the same bytes with d8 01. */
+export const STATUS_WAKE_D8_01 =
+  '01 19 00 04 46 55 01 00 00 ff 00 00 32 00 01 0b 32 01 12 ff 7f 00 01 00 00 00 ba 03 02';
 /** Unsolicited `46` sent after a brightness change: 22 data bytes (the plain query reply has 20). */
 export const STATUS_UNSOLICITED_22 =
   '01 1b 00 04 46 55 00 00 00 00 ff 00 14 00 01 03 14 01 ff 80 00 00 00 00 00 00 55 00 ba 03 02';

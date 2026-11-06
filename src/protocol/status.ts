@@ -21,6 +21,11 @@ export interface DeviceStatus {
    * value such as 126 (section 2), and callers should see what the device reports.
    */
   brightness: number;
+  /**
+   * d8: raw power byte of the last `45` lighting command. `74` does not change it; it is `00` after the off command and
+   * `01` after a self-wake while off (measured 2026-11-05, docs/protocol/status.md). Also `01` while the panel is on.
+   */
+  powerByte: number;
   /** d9: last visualization index (`45 04 NN`). */
   visualization: number;
   /** d12..d14: clock colour. */
@@ -44,6 +49,7 @@ export function decodeStatus(reply: Reply): DeviceStatus {
     channel: d[0],
     lightingColor: { r: d[3], g: d[4], b: d[5] },
     brightness: d[6],
+    powerByte: d[8],
     visualization: d[9],
     clockColor: { r: d[12], g: d[13], b: d[14] },
     clockStyle: d[15],

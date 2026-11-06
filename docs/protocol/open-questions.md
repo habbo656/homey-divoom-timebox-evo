@@ -36,3 +36,8 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
   frames on a volume change at the phone (#4); the full `50 TT` icon list beyond TT 1 and 3 (#5; code table with status in [notifications.md](notifications.md), photographed in the #5 hardware test); whether the Evo stays reachable over BLE after
   the auto power-off `ab` fires (owner-attended test), what `46` reports then and during a sleep light `40`, and what a sleep-light stop returns to; whether the sleep light's mode, FM and volume bytes (MO, FL FH, VV) change the speaker
   volume or play sound (interacts with #4); whether startup channel values 4–6 of `8a 01 CC` are custom pages 0–2 (#6).
+- Self-wake while off (#29, [status.md](status.md#spontaneous-power-on-after-off-29)): the firmware lights an off panel by
+  itself (`46` d8 `00` to `01`, d0 stays `01`). Cause unknown: is it hour-aligned (both measured wakes contain a full hour) or
+  related to the auto power off? Untested: a longer series that shows the exact wake minute, what the device power button does
+  to d8, and whether `ab 05 00` makes the panel wake (never probe it without the owner at the device: the unit powered off and
+  stayed unreachable).

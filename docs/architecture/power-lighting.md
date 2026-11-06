@@ -24,6 +24,18 @@ _Part of [architecture](../architecture.md); moved from "Power and lighting" (#1
       device: `onoff` is set true (`power <- device: on`, `DeviceSurface.setOnOff(true)`) and the channel sync continues as
       usual; an unknown code (text, games) leaves the state alone. A hidden countdown's end frame while off also sets `onoff`
       true and drops the shadow, because the end display lights the panel (#125, [countdown.md](countdown.md)).
+    - Self-wake while off (#29): the firmware can light a panel that is off by itself, about 14 to 35 min after the off, in the
+      lighting mode ([status.md](../protocol/status.md#spontaneous-power-on-after-off-29)). `46` then still reports the shadow
+      d0, but d8 (`powerByte`) is `01`. `checkSelfWake` runs on every decoded report (poll and unsolicited): when `onoff` is
+      false, the app is not stopped, no power change is in flight (`channelInFlight` is 0), d0 equals `offShadow` and d8 is `01`,
+      it logs `power <- device: woke while off (d8 01), sending off again` and runs the normal off path (`powerOff`, so the
+      same command, confirm and shadow handling; a newer power on still wins). A failure is only logged
+      (`off resend failed: <msg>`); the tile is already off and nothing rejects. Cap: `MAX_OFF_RESENDS` (3) resends in a row; the
+      count (`offResends`) restarts with a report with d8 `00`, a report while on, any `setPower` or a switch on. At the cap the
+      app logs `woke while off: off not taken after 3 resends, giving up` once and stops. The first report of a session at a
+      startup from stored off also counts. Limits: it only works while connected, and the panel can stay lit until the next
+      60 s poll. A different known d0 is still a switch on at the device (`onoff` true, no resend). A switch back to lighting
+      made outside Homey (the Divoom phone app) is not detectable (d0 stays `01`), and it sets d8 `01`, so the app turns it off again.
     - Power on (`setPower(true)`) always sends the channel to return to, even if the app thinks the panel is on: the known
       channel, else the stored `timebox_channel` value (`storedChannel` option, `TimeboxDevice` passes it), else `clock`; it uses
       the normal `channelCommand` (clock face `shownFace()`: the stored clock colour and the shown style of "Show clock" if one is kept, else the style of
@@ -93,4 +105,4 @@ _Part of [architecture](../architecture.md); moved from "Power and lighting" (#1
       change (#151); the `74` sent at power on is not confirmed separately and a failure is only logged
       (`dim not sent at power on`, the tile goes back to the known brightness); the power-on confirm covers the link.
     - Known limitations: a device-side change from the off state back to exactly the shadow channel (lighting) is
-      not detectable; if the Evo boots into lighting after a power cycle while `onoff` is off, `onoff` can stay off.
+      not detectable (while off the app now sends the off again, see "Self-wake while off"); if the Evo boots into lighting after a power cycle while `onoff` is off, `onoff` can stay off.
