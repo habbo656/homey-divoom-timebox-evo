@@ -11,6 +11,7 @@ import {
   queryStatus,
   setBrightness,
   setChannel,
+  setVisualization,
   setClock,
   setCustomPage,
   setDateTime,
@@ -65,6 +66,20 @@ describe('setChannel', () => {
   // 1 lighting needs arguments, 4 (visualizer) is not offered, 3 does nothing on the Evo, 7 is ignored.
   it.each([1, 3, 4, 7, -1, 256, 0.5, NaN])('rejects %s', (value) => {
     expect(() => setChannel(value)).toThrow(RangeError);
+  });
+});
+
+describe('setVisualization', () => {
+  it.each([
+    [0, '45 04 00'],
+    [3, '45 04 03'],
+    [11, '45 04 0b'],
+  ])('encodes %i', (value, hex) => {
+    expect(toHex(setVisualization(value))).toBe(hex);
+  });
+
+  it.each([-1, 12, 1.5, NaN])('rejects %s', (value) => {
+    expect(() => setVisualization(value)).toThrow(RangeError);
   });
 });
 
