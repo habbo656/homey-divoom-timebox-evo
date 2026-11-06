@@ -4,8 +4,8 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
 
   - Mode picker (#24, reduced in #68; `src/device/channel.ts` pure, `TimeboxController` logic): capability `timebox_channel`
     (title "Mode" / "Modus"; the id and all code identifiers keep the word "channel"; `.homeycompose/capabilities/timebox_channel.json`: enum + `picker`, en/de, driver capabilities `["onoff", "dim", "light_hue", "light_saturation", "timebox_channel"]`).
-    Four stable ids (`CHANNEL_IDS`, never translated); `clock` 00, `lighting` 01, `custom` 05 have `46` d0 codes, `noise_meter` (#3, `72 02 01`) has none. Cloud (`02`),
-    visualizer (`04`) and scoreboard (`06`) are not offered since #68; `45 03` is never built. `setChannel(id)` (capability listener and Flow action share it)
+    Five stable ids (`CHANNEL_IDS`, never translated); `clock` 00, `lighting` 01, `custom` 05, `equalizer` (#2) 04 have `46` d0 codes, `noise_meter` (#3, `72 02 01`) has none. Cloud (`02`),
+    the other eleven visualizations (`04` with d9 other than `00`) and scoreboard (`06`) are not offered since #68; `45 03` is never built. `setChannel(id)` (capability listener and Flow action share it)
     validates the id (`parseChannelId`, `ArgumentError`, a `RangeError`),
     validates and builds the command with `channelCommand(id, lastStatus, knownBrightness, clockFace, override?)` (`override` is a `ChannelOverride` = `{lighting?: {color}}`; the shared private `switchTo(id, face, override?)` (`override` there also carries `customPage?` and `keepTile?`, handled by the controller, not by `channelCommand`), which `setClockSettings`, `showClock`, power on, the tile colour path (`setTileColor`) and the custom page action also use) BEFORE the not-connected check and before it supersedes anything (an invalid request throws `RangeError` and leaves a pending switch alone); then throws `device.error.not_connected` without a live link (nothing queued), sends it bounded (`sendBounded`, 10 s) and
     confirms with `request(46, 0x46, CHANNEL_CONFIRM_TIMEOUT_MS = 5 s)`: `[device] channel confirmed: <id>`,
@@ -43,7 +43,7 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
     timebox_channel_changed: <id>`). The Flow action calls `device.switchChannel(id)` = `triggerCapabilityListener(
     'timebox_channel', id)` followed by `setCapabilityValue` (the tile follows after a Flow switch, verified on hardware; the explicit write is harmless), so tile and Flow share one path. The physical buttons of the Evo are only seen at the next poll
     (fixed 60 s poll, `STATUS_POLL_INTERVAL_MS`).
-    - Other-mode rule (#68): when d0 is `02` (cloud) or `04` (visualizer) the device shows a mode the app does not offer
+    - Other-mode rule (#68, #2): when d0 is `02` (cloud) or `04` with d9 other than `00` (another visualization, named `visualizer`) the device shows a mode the app does not offer
       (`otherModeName`). The tile is cleared to `null` (`DeviceSurface.clearChannel`, `setCapabilityValue('timebox_channel', null)`), once per new code,
       with the log line `channel <- device: <cloud|visualizer> (mode not offered), tile cleared`. No trigger fires and the condition
       "Mode is X" is false for every X (`getChannel()` returns null, also in `TimeboxDevice`). The controller keeps the last
@@ -51,7 +51,16 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
       writes the tile and fires the trigger once, even if it is the mode from before. Power on restores the last offered mode
       (else the stored tile value, else `clock`). Any other unknown d0 (text, games, alarms, the unverified `03`) leaves the tile unchanged and is logged once per new code
       (`channel code 0xNN is not a known channel, tile unchanged`); if a later `46` after a switch reports such a code, the tile keeps the requested mode (no trigger, one log line per code).
-    - Removed values: `TimeboxDevice.onInit` clears a stored `timebox_channel` value that is no longer one of the three ids
+    - Equalizer (#2): the id `equalizer` is the visualization channel with the spectrum bars, command `45 04 00`
+      (`setVisualization(0)`; the app sends only index 0, there is no style setting). The `46` reply is decoded from d0 and
+      d9 together (`channelFromCode(code, visualization)`, `otherModeName(code, visualization)`): d0 `04` with d9 `00` is
+      `equalizer`, d0 `04` with another d9 is the other mode `visualizer`. A switch is confirmed by d0 `04` + d9 `00`;
+      d0 `04` with another d9 logs `channel mismatch: device visualizer, requested equalizer`. Power on, image end and
+      countdown stop re-send `45 04 00` through `channelCommand` like any mode; weather is sent, not held, in the equalizer.
+      Limits: a device-side switch between the equalizer and another visualization shows up only at the next poll (60 s); the
+      reaction to audio needs an A2DP stream (owner UAT); if the noise meter's d0 shadow is `04`, a device-side switch to the
+      equalizer is not detected (existing shadow limit). Protocol: [status.md](../protocol/status.md).
+    - Removed values: `TimeboxDevice.onInit` clears a stored `timebox_channel` value that is no longer one of the offered ids
       (`cloud`, `visualizer`, `scoreboard` from 0.2.x) to `null` (`[device] mode tile: removed mode <id> cleared`; a failure is logged and never stops the setup).
       Flows that use a removed value in the condition or action fail (breaking change, `docs/roadmap.md`).
     - Scoreboard limitation: the app no longer offers the scoreboard (`45 06`), and the scoreboard never changes `46` d0
