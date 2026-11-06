@@ -24,22 +24,41 @@ const status = (hex: string): DeviceStatus => decodeStatus(parseReply(decodeSppF
 describe('channel ids and codes', () => {
   it('maps every id to its device code and back', () => {
     const coded = CHANNEL_IDS.filter((id): id is CodedChannelId => id !== 'noise_meter');
-    expect(coded.map(channelCode)).toEqual([0, 1, 5]);
-    for (const id of coded) expect(channelFromCode(channelCode(id))).toBe(id);
+    expect(coded.map(channelCode)).toEqual([0, 1, 5, 4]);
+    for (const id of coded) expect(channelFromCode(channelCode(id), 0)).toBe(id);
+  });
+
+  it('lists the modes in a stable order, the equalizer last', () => {
+    expect([...CHANNEL_IDS]).toEqual(['clock', 'lighting', 'custom', 'noise_meter', 'equalizer']);
   });
 
   it('never maps a device code to the noise meter', () => {
-    for (let code = 0; code <= 255; code++) expect(channelFromCode(code)).not.toBe('noise_meter');
+    for (let code = 0; code <= 255; code++) expect(channelFromCode(code, 0)).not.toBe('noise_meter');
   });
 
-  it.each([2, 3, 4, 6, 7, 8, 0xff, -1, 1.5, NaN])('has no mode for code %s', (code) => {
-    expect(channelFromCode(code)).toBeNull();
+  it.each([2, 3, 6, 7, 8, 0xff, -1, 1.5, NaN])('has no mode for code %s', (code) => {
+    expect(channelFromCode(code, 0)).toBeNull();
   });
 
-  it('names the removed modes cloud (02) and visualizer (04), nothing else', () => {
-    expect(otherModeName(0x02)).toBe('cloud');
-    expect(otherModeName(0x04)).toBe('visualizer');
-    for (const code of [0, 1, 3, 5, 6, 7, 0xff, -1, 1.5, NaN]) expect(otherModeName(code)).toBeNull();
+  it('maps d0 04 to the equalizer only with the spectrum bars (d9 00)', () => {
+    expect(channelFromCode(0x04, 0)).toBe('equalizer');
+    for (const visualization of [1, 3, 11]) expect(channelFromCode(0x04, visualization)).toBeNull();
+  });
+
+  it('ignores d9 for the other codes', () => {
+    for (const visualization of [0, 3, 11]) {
+      expect(channelFromCode(0x00, visualization)).toBe('clock');
+      expect(channelFromCode(0x01, visualization)).toBe('lighting');
+      expect(channelFromCode(0x05, visualization)).toBe('custom');
+      expect(channelFromCode(0x02, visualization)).toBeNull();
+    }
+  });
+
+  it('names the other modes cloud (02) and visualizer (04 with d9 other than 00), nothing else', () => {
+    for (const visualization of [0, 3, 11]) expect(otherModeName(0x02, visualization)).toBe('cloud');
+    expect(otherModeName(0x04, 0)).toBeNull();
+    for (const visualization of [1, 3, 11]) expect(otherModeName(0x04, visualization)).toBe('visualizer');
+    for (const code of [0, 1, 3, 5, 6, 7, 0xff, -1, 1.5, NaN]) expect(otherModeName(code, 3)).toBeNull();
   });
 
   it('parses valid ids and rejects everything else, also the removed modes', () => {
@@ -54,6 +73,11 @@ describe('channelCommand', () => {
   it('noise_meter: 72 02 01, whatever the stored state', () => {
     expect(toHex(channelCommand('noise_meter', null, null, FACE))).toBe('72 02 01');
     expect(toHex(channelCommand('noise_meter', status(STATUS_CLOCK_B50), 50, FACE))).toBe('72 02 01');
+  });
+
+  it('equalizer: 45 04 00, whatever the stored state', () => {
+    expect(toHex(channelCommand('equalizer', null, null, FACE))).toBe('45 04 00');
+    expect(toHex(channelCommand('equalizer', status(STATUS_CLOCK_B50), 50, FACE))).toBe('45 04 00');
   });
 
   const clock = status(STATUS_CLOCK_B50); // colour red, brightness 50, last visualization 3
