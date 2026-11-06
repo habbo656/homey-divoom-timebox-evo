@@ -9,7 +9,7 @@ start a pizza countdown in the kitchen, or put a snapshot of your doorbell camer
 
 ## What you can do
 
-- Pick a mode on the device tile: clock, lighting or your own custom pages.
+- Pick a mode on the device tile: clock, lighting, your own custom pages, the noise meter or the equalizer (spectrum bars that react to music streamed over Bluetooth).
 - Show the clock in several styles and colours, with optional weather, temperature and calendar pages.
 - Switch the display on and off, set its brightness and its colour on the device tile; use it as mood lighting in any colour.
 - Show a scrolling text from a Flow (and stop it again).
