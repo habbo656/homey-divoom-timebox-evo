@@ -200,6 +200,13 @@
                   "en": "Noise meter",
                   "de": "Lärmmesser"
                 }
+              },
+              {
+                "id": "equalizer",
+                "label": {
+                  "en": "Equalizer",
+                  "de": "Equalizer"
+                }
               }
             ]
           }
@@ -261,6 +268,13 @@
                 "label": {
                   "en": "Noise meter",
                   "de": "Lärmmesser"
+                }
+              },
+              {
+                "id": "equalizer",
+                "label": {
+                  "en": "Equalizer",
+                  "de": "Equalizer"
                 }
               }
             ]
@@ -1357,6 +1371,13 @@
           "title": {
             "en": "Noise meter",
             "de": "Lärmmesser"
+          }
+        },
+        {
+          "id": "equalizer",
+          "title": {
+            "en": "Equalizer",
+            "de": "Equalizer"
           }
         }
       ]
