@@ -187,7 +187,7 @@ Payload = opcode + args (wrap per transport). Names from the decompiled Divoom a
 | `45 01 RR GG BB BB TT PP 00 00 00` | lighting: colour, brightness, TT effect, PP power | `45 55 01` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
 | `45 02` | cloud channel | `45 55 02` | VERIFIED (pixel-art gallery) |
 | `45 03 NN` | VJ effects (upstream) | none | **NEGATIVE on the Evo**: from lighting red, `45 03 05` changed nothing and `46` still reported channel 01. An earlier "visual" result was the rotating clock channel |
-| `45 04 NN` | visualization NN | `45 55 04` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
+| `45 04 NN` | visualization NN (the app sends only `45 04 00`, the spectrum bars = mode Equalizer, since #2) | `45 55 04` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
 | `45 05` | custom channel | `45 55 05` | VERIFIED |
 | `26 0X` | set the "hot" flag: `26 01` animation pages in the clock rotation (factory state), `26 00` none; read with `26 ff` (section 5.2) | **none** (no reply to the set; the read `26 ff` answers `26 55 0X`) | VERIFIED (Mac probe 2026-10-07, #106, #59) — notes: [clock.md](protocol/clock.md#opcode-table-notes) |
 | `45 06` | scoreboard view | `45 55 06` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |

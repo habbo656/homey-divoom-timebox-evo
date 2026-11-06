@@ -16,7 +16,7 @@ d0 stays `00` while the clock view shows animation pages (probe #106, section 5.
 | `74 28` (brightness 40) while off | **lit again**, lighting red | d0 `01`, d6/d10 `28`, **d8 stays `00` although the panel is lit** |
 | off, then `45 00 01 00 01 00 00 00 ff ff ff` (clock full form) | clock shown | d0 `00` |
 | off, then `45 02` | cloud channel shown | d0 `02` |
-| off, then `45 04 00` | visualization shown | d0 `04` |
+| off, then `45 04 00` | visualization shown | d0 `04` (d9 `00`) |
 | off, then `45 05` | custom channel shown | d0 `05` |
 | off, then `45 06` | scoreboard shown | d0 stays `01` (scoreboard shadow rule) |
 | off, then `45 01 ff 00 00 32 00 01 00 00 00` | lighting red lit | d0 `01` |
@@ -76,9 +76,8 @@ ends the tracking). The d0 under the noise meter is still unmeasured (recorded b
 
 Use in the app (#24, #68, `docs/architecture.md` "Mode picker"): d0 is the sync source of the `timebox_channel` capability
 (poll and unsolicited reports; the `45 55 NN` echo is not used). Codes `00 01 05` map to the modes `clock lighting custom`.
-`02` (cloud) and `04` (visualizer) are other modes the app does not offer: the tile is cleared and no trigger fires (the
-"other-mode rule"). Any other d0 (`03`, text, games, alarms) is logged and ignored. The commands `45 04` (visualization;
-`setVisualization` was removed in #68) and `45 06` (scoreboard) are not used by the app; since `45 06` never changes d0, a
+d0 `04` is read together with d9 (#2): d9 `00` (spectrum bars) maps to the mode `equalizer`; `02` (cloud) and `04` with another d9 (visualizer) are
+other modes the app does not offer: the tile is cleared and no trigger fires (the "other-mode rule"). Any other d0 (`03`, text, games, alarms) is logged and ignored. The app sends `45 04 00` (equalizer, `setVisualization(0)`, #2) and never the other indices; `45 06` (scoreboard) is not used by the app; since `45 06` never changes d0, a
 scoreboard on the device is invisible to the app. d3..d5 are an input of `channelCommand`: the lighting switch resends the
 stored colour (black becomes white so the panel is visibly lit) with the known brightness. Homey implication: the stored
 colour and the brightness are device state that survives mode changes, so a mode switch needs no state of its own.
