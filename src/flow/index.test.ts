@@ -674,7 +674,7 @@ describe('localised argument errors', () => {
       'set_channel "cloud"',
       FLOW_ACTION_SET_CHANNEL,
       { channel: 'cloud' },
-      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter.',
+      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer.',
     ],
     [
       'show_notification_icon "nope"',
@@ -700,7 +700,7 @@ describe('localised argument errors', () => {
     const { listeners } = register();
     const run = listeners.get(FLOW_CONDITION_CHANNEL_IS)!;
     await expect(Promise.resolve().then(() => run({ device, channel: 'cloud' }))).rejects.toThrow(
-      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter.',
+      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer.',
     );
   });
 

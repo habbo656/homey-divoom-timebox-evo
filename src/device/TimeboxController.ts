@@ -335,11 +335,14 @@ export class TimeboxController {
    */
   private noiseShadow: number | null = null;
   /**
-   * The d0 code of a mode the app does not offer (`02` cloud, `04` visualizer) while the device shows it, else null.
+   * The d0 code of a mode the app does not offer (`02` cloud, `04` with a visualization other than the spectrum bars,
+   * i.e. visualizer) while the device shows it, else null.
    * `knownChannel` then keeps the last offered mode (what "power on" returns to), `getChannel()` reports null and the
    * tile is cleared.
    */
   private otherModeCode: number | null = null;
+  /** The name of that mode (`cloud`, `visualizer`), for the logs; null exactly when `otherModeCode` is. */
+  private otherModeLabel: string | null = null;
   /**
    * Power state of the panel as the app knows it (`46` has no field known to report power, protocol section 3). While off
    * the known channel stays the channel from before off.
@@ -430,7 +433,7 @@ export class TimeboxController {
     this.deviceBrightness(status.brightness);
     // The lighting colour first (it only updates what is known), then the mode; at most one tile write per status.
     const colorChanged = this.deviceColor(status.lightingColor);
-    const wroteTile = this.deviceChannel(status.channel);
+    const wroteTile = this.deviceChannel(status.channel, status.visualization);
     if (colorChanged && !wroteTile && this.getChannel() === 'lighting') this.writeTile(this.knownColor);
     this.checkSelfWake(status);
     if (firstOfSession) void this.flushWeather('connect');
@@ -885,6 +888,7 @@ export class TimeboxController {
       if (leftOtherMode || this.knownChannel !== channel) {
         this.knownChannel = channel;
         this.otherModeCode = null;
+        this.otherModeLabel = null;
         // The tile was cleared for the other mode: write the mode again, also if it equals the last offered one.
         if (leftOtherMode) this.call(() => this.surface.setChannel(channel));
         // The colour tile shows the colour of the mode that is shown now.
@@ -900,8 +904,8 @@ export class TimeboxController {
       let confirmError: 'unconfirmed' | 'lost' | null = null;
       try {
         const status = decodeStatus(await this.link.request(queryStatus(), 0x46, this.channelConfirmMs));
-        const device = channelFromCode(status.channel);
-        const shown = device ?? otherModeName(status.channel) ?? `code ${status.channel}`;
+        const device = channelFromCode(status.channel, status.visualization);
+        const shown = device ?? otherModeName(status.channel, status.visualization) ?? `code ${status.channel}`;
         if (channel === 'noise_meter') {
           // The code the device reports under the noise meter is unknown: any code confirms and becomes the shadow.
           this.log(`channel confirmed: ${channel} (device reports channel code ${hexByte(status.channel)})`);
@@ -1411,7 +1415,7 @@ export class TimeboxController {
   /** Where the device is coming from, for the log of the clock re-send: off, the other mode, the known channel. */
   private originName(): string {
     if (!this.power) return 'off';
-    if (this.otherModeCode !== null) return otherModeName(this.otherModeCode) ?? `code ${this.otherModeCode}`;
+    if (this.otherModeCode !== null) return this.otherModeLabel ?? `code ${this.otherModeCode}`;
     return this.knownChannel ?? 'unknown';
   }
 
@@ -1679,8 +1683,12 @@ export class TimeboxController {
       let reported = channelCode('lighting');
       let failure: 'unconfirmed' | 'lost' | null = null;
       try {
-        reported = decodeStatus(await this.link.request(queryStatus(), 0x46, this.channelConfirmMs)).channel;
-        const shown = channelFromCode(reported) ?? otherModeName(reported) ?? `code ${reported}`;
+        const status = decodeStatus(await this.link.request(queryStatus(), 0x46, this.channelConfirmMs));
+        reported = status.channel;
+        const shown =
+          channelFromCode(reported, status.visualization) ??
+          otherModeName(reported, status.visualization) ??
+          `code ${reported}`;
         this.log(`power off: device reports ${shown}`);
       } catch (e) {
         if (e instanceof RequestTimeoutError) this.log('power off confirm timeout');
@@ -1988,11 +1996,11 @@ export class TimeboxController {
 
   /**
    * The mode (`46` d0) the device reported: copy it to the tile if it is news. The first value of a run only sets the
-   * tile; a later change also fires the trigger. A removed mode (`02` cloud, `04` visualizer) clears the tile once and
-   * fires nothing; coming back to an offered mode writes the tile and fires the trigger even if it is the mode from
+   * tile; a later change also fires the trigger. A mode that is not offered (`02` cloud, `04` with a visualization other
+   * than the spectrum bars, i.e. visualizer; `visualization` is `46` d9) clears the tile once and fires nothing; coming back to an offered mode writes the tile and fires the trigger even if it is the mode from
    * before. Any other code (text, games, alarms, ...) leaves the tile unchanged and is logged once per new code.
    */
-  private deviceChannel(code: number): boolean {
+  private deviceChannel(code: number, visualization: number): boolean {
     if (this.stopped || this.channelInFlight > 0) return false;
     // A shown image is not a mode, and what `44` does to d0 is unmeasured (protocol section 4): the first report after the
     // image is its shadow and reports equal to it are ignored; a different known code means the device left the image.
@@ -2003,12 +2011,16 @@ export class TimeboxController {
         this.log(`image shadow: device reports channel code ${hexByte(code)}`);
         return false;
       }
-      if (code === this.imageShadow || (channelFromCode(code) === null && otherModeName(code) === null)) return false;
+      if (
+        code === this.imageShadow ||
+        (channelFromCode(code, visualization) === null && otherModeName(code, visualization) === null)
+      )
+        return false;
       this.log(`image ended (device mode change): channel code ${hexByte(this.imageShadow)} -> ${hexByte(code)}`);
       this.clearImage();
     }
-    const id = channelFromCode(code);
-    const other = otherModeName(code);
+    const id = channelFromCode(code, visualization);
+    const other = otherModeName(code, visualization);
     if (!this.power) {
       // Off: the device reports the "off shadow" code (adopted from the first report at a startup from off). Another
       // known code (a mode or a removed mode) means the panel was switched on at the device.
@@ -2051,6 +2063,7 @@ export class TimeboxController {
     const previous = this.knownChannel;
     this.knownChannel = id;
     this.otherModeCode = null;
+    this.otherModeLabel = null;
     this.log(`channel <- device: ${id}`);
     this.call(() => this.surface.setChannel(id));
     // The colour tile shows the colour of the mode that is shown now (the first status of a run included).
@@ -2064,6 +2077,7 @@ export class TimeboxController {
     if (this.otherModeCode === code) return;
     const entering = this.otherModeCode === null;
     this.otherModeCode = code;
+    this.otherModeLabel = name;
     this.log(`channel <- device: ${name} (mode not offered), tile cleared`);
     if (entering) this.call(() => this.surface.clearChannel());
   }

@@ -142,7 +142,7 @@ describe('power off', () => {
       await r.c.setPower(false);
       r.surface.channels.length = 0;
       r.surface.channelChanges.length = 0;
-      r.t.emitData(statusFrame(50, code));
+      r.t.emitData(statusFrame(50, code, { 9: 3 }));
       expect(r.c.isOn()).toBe(true);
       expect(r.surface.onoffs).toEqual([true, true]);
       expect(r.surface.logs).toContain('[device] power <- device: on');
