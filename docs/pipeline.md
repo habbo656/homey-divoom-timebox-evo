@@ -249,7 +249,8 @@ while it is private, the pipeline cannot start (its model jobs need the `agents`
 6. Runner (Mac, interactive session so that Bluetooth and camera permissions apply): register it with a neutral name and a
    work folder outside the home directory (`./config.sh --name hw-runner --work /Users/Shared/hw-runner/_work …`; quote nothing
    with `$HOME`, which `config.sh` stores literally; an existing registration can change `workFolder` in the runner's
-   `.runner` file), `scripts/runner/install-hook.sh <runner dir> <app slug>`, restart the runner, Homey key
+   `.runner` file), `scripts/runner/install-hook.sh <runner dir> <app slug>`, a `PATH` line with nvm's `bin` directory in
+   the runner's `.env` (see "Runner check"), restart the runner, Homey key
    in `~/.config/divoom-timebox/homey-api.env`, then run `runner-check`.
 
 7. Run metrics (#24): Settings → Pages → source "Deploy from a branch", branch `gh-pages`, folder `/`. The first
@@ -322,6 +323,11 @@ Verified on the hardware runner (2026-10-24): every check OK except `camera` (we
 must run interactively from a terminal (`run.sh`): only then do the Bluetooth and camera permissions of that terminal
 apply; as a launchd service (`svc.sh`) `ble`/`camera` fail. The repository volume stores no file modes, so scripts are
 called with `bash` or their mode is set with `git update-index --chmod=+x`.
+Jobs inherit the PATH of the shell that started `run.sh`, and a login `bash` does not load nvm from `.bashrc`: `tools`,
+`homey-run` and `homey-api` then fail with `node`, `npm` and `homey` missing (2026-11-06). The runner reads its `.env` at
+start, so set the PATH there, independent of the shell: run
+`printf '\nPATH=%s\n' "$HOME/.nvm/versions/node/<version>/bin:$PATH" >> .env` in the runner directory and restart it.
+Update the line when that Node version changes.
 
 **No personal or bench data in public output.** Logs, artifacts and comments of a public repository are public. The
 runner check prints states and counts only (no user, host, runner, camera, device names or tool versions); self-hosted

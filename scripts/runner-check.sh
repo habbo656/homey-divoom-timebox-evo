@@ -94,7 +94,10 @@ case "$mode" in
   token*)
     dev=$(scripts/homey-api.sh devices get-devices --jq '[.[]|select(.driverId|test("timebox";"i"))|{available,on:(.capabilitiesObj.onoff.value // null)}]' 2>/dev/null)
     rc=$?
-    if [ $rc -ne 0 ] || [ -z "$dev" ]; then
+    if ! command -v homey >/dev/null; then
+      say FAIL homey-api "homey CLI not on the PATH (see tools)"
+      say FAIL device "unknown (homey CLI not on the PATH)"
+    elif [ $rc -ne 0 ] || [ -z "$dev" ]; then
       say FAIL homey-api "request failed (Homey offline, wrong address or key?)"
       say FAIL device "unknown (Homey API not reachable)"
     else
