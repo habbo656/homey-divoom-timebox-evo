@@ -203,6 +203,13 @@ export class TimeboxDevice extends Homey.Device {
     return resolveTemperatureUnit(this.getSetting(TEMPERATURE_UNIT_SETTING)).unit;
   }
 
+  /** `getTemperatureUnit`, logging an invalid stored value. */
+  private getTemperatureUnitChecked(): TemperatureUnit {
+    const { unit, invalid } = resolveTemperatureUnit(this.getSetting(TEMPERATURE_UNIT_SETTING));
+    if (invalid) this.log(`[device] invalid ${TEMPERATURE_UNIT_SETTING} setting, using the default`);
+    return unit;
+  }
+
   /**
    * The device is always a light (#19). Homey keeps the stored class of devices paired while the manifest class was `other`,
    * so switch them over once; nothing happens when the class already is `light`. A failure only logs and never stops the setup.
@@ -277,6 +284,7 @@ export class TimeboxDevice extends Homey.Device {
         shownClockStyle: shown.style,
         powerOn: !this.hasCapability('onoff') || this.getCapabilityValue('onoff') !== false,
         storedChannel: this.getChannelCapability(),
+        temperatureUnit: this.getTemperatureUnitChecked(),
       },
     );
     this.controller = controller;
@@ -478,6 +486,11 @@ export class TimeboxDevice extends Homey.Device {
       const weather = resolveWeatherSettings(newSettings);
       for (const key of weather.invalid) this.log(`[device] invalid ${key} setting, using the default`);
       this.weatherUpdater?.configure(weather.settings);
+    }
+    if (changedKeys.includes(TEMPERATURE_UNIT_SETTING)) {
+      const { unit, invalid } = resolveTemperatureUnit(newSettings[TEMPERATURE_UNIT_SETTING]);
+      if (invalid) this.log(`[device] invalid ${TEMPERATURE_UNIT_SETTING} setting, using the default`);
+      if (this.controller) void this.controller.setTemperatureUnit(unit);
     }
     // Not awaited: the controller never rejects, and the save must not wait for the Timebox.
     if (clockSettings) {
