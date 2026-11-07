@@ -21,7 +21,8 @@ Devices paired earlier get the three capabilities in `onInit` (`MIGRATED_CAPABIL
 - The device volume is the only truth: mute = (VV 0). There is no separate mute state.
 - `restoreVolume` = the last non-zero VV seen or sent, kept in the device store key `volume_restore` (so a restart while
   muted still restores it). Unmute sends it (`restoreLevel`: a stored integer 1..15, otherwise `DEFAULT_UNMUTE_LEVEL` = 8,
-  tile about 0.53).
+  tile about 0.53). So after `volume_set` 0, unmute restores the last non-zero volume (e.g. 3), not 8; 8 is only the
+  fallback without a stored non-zero volume (hardware test, 2026-11-07).
 - `volumeToLevel` throws `ArgumentError` (`invalid_number`/`invalid_range`, field `volume`) for a non-number or a value
   outside 0..1.
 

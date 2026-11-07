@@ -92,7 +92,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/device/weather.ts` | pure weather model: condition ids, `parseTemperatureArg` (°C or °F), `parseTemperatureUnitArg`, `resolveTemperatureUnit`, `defaultTemperatureUnit`, `clampTemperature`, `weatherCommand`, `WeatherUpdate` / `mergeWeather` (partial updates with defaults), `wmoToCondition`, `resolveWeatherSettings` | #30, #98 | done |
 | `src/device/openMeteo.ts` | Open-Meteo client (`fetchCurrentWeather`, `OpenMeteoError`) and the Homey-free `WeatherUpdater` (schedule, retry, abort) | #30 | done |
 | `src/device/text.ts` | Homey-free `fillPlaceholders` for `{name}` tokens in locale strings; used for `text_too_long` and the argument errors (#108) | #21, #108 | done |
-| `src/device/TimeboxDevice.ts` | glue: capability listeners (`dim`, `onoff`, colour, channel), link setup, settings, triggers (connected, disconnected, mode changed, countdown ended, audio started/stopped #4), volume/mute listeners,  Flow action glue (incl. `showNotificationIcon`, #5), `DEBUG` device link | #4, #5, #22, #24, #25, #26, #27, #101 | done |
+| `src/device/TimeboxDevice.ts` | glue: capability listeners (`dim`, `onoff`, colour, channel), link setup, settings, triggers (connected, disconnected, mode changed, countdown ended, audio started/stopped #4), volume/mute listeners, Flow action glue (incl. `showNotificationIcon`, #5), `DEBUG` device link | #4, #5, #22, #24, #25, #26, #27, #101 | done |
 | `src/protocol/envelope.ts` | `FE EF AA 55` envelope + sequence counter | #19 | done |
 | `src/protocol/replies.ts` | SPP frame splitting, reply/notification parsing | #19 | done |
 | `src/protocol/errors.ts`, `hex.ts` | error types, hex helpers | #19 | done |
