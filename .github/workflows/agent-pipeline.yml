@@ -108,6 +108,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     outputs:
       plan: ${{ steps.ps.outputs.state }}
     steps:
@@ -156,6 +157,8 @@ jobs:
     environment: agents
     permissions:
       contents: read
+      issues: read
+      pull-requests: read
     outputs:
       ok: ${{ steps.c.outputs.ok }}
       limited: ${{ steps.c.outputs.limited }}
@@ -189,6 +192,7 @@ jobs:
           VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
         with:
           prompt-file: .github/agent/refine.md
+          read-token: ${{ github.token }}
           schema-file: .github/agent/refine.schema.json
           model: opus
           tools: Read,Grep,Glob,Bash,Skill
@@ -440,6 +444,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     outputs:
       ok: ${{ steps.c.outputs.ok }}
       limited: ${{ steps.c.outputs.limited }}
@@ -502,6 +507,7 @@ jobs:
           VAR_MILESTONE_CONTEXT: ${{ runner.temp }}/ctx/milestone.md
         with:
           prompt-file: .github/agent/develop.md
+          read-token: ${{ github.token }}
           schema-file: .github/agent/develop.schema.json
           model: sonnet
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -711,6 +717,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     outputs:
       ok: ${{ steps.c.outputs.ok }}
     steps:
@@ -741,6 +748,7 @@ jobs:
           VAR_CONTEXT: ${{ runner.temp }}/ctx/context.md
         with:
           prompt-file: .github/agent/review.md
+          read-token: ${{ github.token }}
           schema-file: .github/agent/review.schema.json
           model: sonnet
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

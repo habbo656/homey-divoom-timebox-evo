@@ -1,7 +1,8 @@
 name: claude
 description: >
-  Run Claude Code headless on a prompt file and return its structured output. The model gets no GitHub token (the
-  checkout must use persist-credentials: false) and runs under .github/agent/ci-settings.json on top of the project
+  Run Claude Code headless on a prompt file and return its structured output. The model gets no GitHub write token (the
+  checkout must use persist-credentials: false), at most a read-only one for scripts/agent/gh-read.sh (input read-token),
+  and runs under .github/agent/ci-settings.json on top of the project
   settings (which must carry the allow rules: a CI checkout is an untrusted workspace, so Claude Code ignores the
   project's permissions.allow); its structured result is scrubbed (scripts/agent/scrub.py) and workflow steps outside this action publish it.
   It also writes the session's metrics record (numbers and enums only; stage = the prompt file's name).
@@ -24,6 +25,11 @@ inputs:
   oauth-token:
     description: CLAUDE_CODE_OAUTH_TOKEN (claude setup-token)
     required: true
+  read-token:
+    description: >
+      The job's GITHUB_TOKEN for scripts/agent/gh-read.sh, as GH_READ_TOKEN. Only from a job whose permissions are all
+      read and that runs on a GitHub-hosted runner (docs/pipeline.md, security model). Default: none.
+    default: ""
   cli-version:
     description: "@anthropic-ai/claude-code version installed when no claude CLI is present"
     default: "2.1.285"
@@ -55,6 +61,7 @@ runs:
       shell: bash
       env:
         CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+        GH_READ_TOKEN: ${{ inputs.read-token }}
         # Subagents (and long Bash commands) run in the foreground: a headless session that backgrounds them ends its
         # turn and returns the result before they report back, so their work is lost.
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
