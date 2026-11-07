@@ -17,6 +17,7 @@ import {
   setDateTime,
   setHot,
   setLighting,
+  setTemperatureUnit,
   setWeather,
   startNoiseMeter,
   staticImage,
@@ -342,6 +343,19 @@ describe('setWeather', () => {
 
   it.each([0, 2, 4, 7, 10, 256, 1.5, NaN])('rejects type %s', (type) => {
     expect(() => setWeather({ temperature: 10, type })).toThrow(RangeError);
+  });
+});
+
+describe('setTemperatureUnit', () => {
+  it.each([
+    ['celsius', '2b 00'],
+    ['fahrenheit', '2b 01'],
+  ] as const)('encodes %s', (unit, hex) => {
+    expect(toHex(setTemperatureUnit(unit))).toBe(hex);
+  });
+
+  it.each(['kelvin', '', 0, 1, null, undefined])('rejects %s', (unit) => {
+    expect(() => setTemperatureUnit(unit as 'celsius')).toThrow(RangeError);
   });
 });
 
