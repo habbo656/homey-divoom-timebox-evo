@@ -50,7 +50,7 @@ BLE probe (`scripts/probe/ble.py`, no Homey app holding the link), Evo on the cl
 |---|---|
 | Baseline | `2b ff` -> `01 06 00 04 2b 55 00 8a 00 02` (unit 0); `46` d1 `00`; `5f 18 01` shows `24 C` |
 | `2b 01` | `2b ff` -> `2b 55 01` (unit 1); `46` d1 `01`; the page that is already shown turns into `75 F` **without a new `5f`** (the Evo redraws at once, the order of `2b` and `5f` does not matter) |
-| Conversion | **The Evo converts the `5f` value itself**: 24 °C shows `75 F`, -5 °C (`5f fb 08`) shows `23 F` with the minus-free value, 99 °C (`5f 63 01`) shows `199 F` (three digits fit the layout; 210 F was expected, so the display clamps at 199 F, inferred from this one point, the exact clamp point was not probed) |
+| Conversion | **The Evo converts the `5f` value itself**: 24 °C shows `75 F`, -5 °C (`5f fb 08`) shows `23 F`, 99 °C (`5f 63 01`) shows `199 F` (three digits fit the layout; 210 F was expected, so the display clamps at 199 F, inferred from this one point, the exact clamp point was not probed) |
 | `2b 00` | back to `24 C`; `2b ff` -> unit 0; `46` d1 `00` |
 | Persistence | the unit survives a `45 00` clock frame (also after `26 00`) and a BLE disconnect, 10 s wait and reconnect (`2b ff` -> 1, `46` d1 `01` straight away). A power cycle was not tested |
 | Off panel | after the off frame `45 01 ff 00 00 32 00 00 00 00 00`, `2b 00` and `2b 01` leave the panel dark; `46` d0 stays `01`, d8 stays `00`: **`2b` does not wake the panel** |
