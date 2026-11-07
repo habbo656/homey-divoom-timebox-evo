@@ -322,7 +322,9 @@ export type TemperatureUnit = (typeof TEMPERATURE_UNITS)[number];
  * `5f` itself, redraws at once and keeps the unit across clock frames and reconnects.
  */
 export function setTemperatureUnit(unit: TemperatureUnit): Uint8Array {
-  return Uint8Array.of(0x2b, oneOf('unit', unit, TEMPERATURE_UNITS) === 'fahrenheit' ? 1 : 0);
+  const code = TEMPERATURE_UNITS.indexOf(unit); // the index is the wire value: celsius 0, fahrenheit 1
+  if (code < 0) throw new RangeError(`unit must be one of ${TEMPERATURE_UNITS.join(', ')}, got ${String(unit)}`);
+  return Uint8Array.of(0x2b, code);
 }
 
 /** Highest minutes value of the countdown: 99:59 counts down correctly, 100 is clamped to 99:59 (protocol section 5.6). */
