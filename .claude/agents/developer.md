@@ -17,7 +17,7 @@ Read `CLAUDE.md` and `docs/conventions.md` first.
    `node .claude/skills/divoom-evo/scripts/divoom.js command|encode|decode …` (`docs/pipeline.md#protocol-knowledge-base`);
    never hand-compute frames, and never copy KB files or long KB text into the repository.
 5. Update `docs/` in the same branch (architecture, protocol, roadmap status are checked by the doc-keeper).
-6. Never push, open PRs or merge (in GitHub Actions there is no GitHub access at all; the workflow publishes). Report: branch, commits, gate result, deviations from the plan, open points.
+6. Never push, open PRs or merge (in GitHub Actions there is no write access and no `gh`; PRs are read with `bash scripts/agent/gh-read.sh pr <n>`; the workflow publishes). Report: branch, commits, gate result, deviations from the plan, open points.
 
 Stay in scope; if the plan is wrong or blocked, stop and explain. Never assume a requirement the plan, the issue and
 the owner's comments leave open (behaviour, texts, defaults, limits): stop and report it as a question for the owner.

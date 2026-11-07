@@ -30,9 +30,10 @@ Only the repository owner can start or steer anything; labels or comments by any
 |---|---|---|
 | issue | label `agent:approved` or comment `/agent approve` | screen the issue, record the approval, start the pipeline (one issue at a time, roadmap order) |
 | issue | `/agent override` | approve although the screen flagged it (`security:flagged`) |
-| issue | `/agent answer <text>` | answer the planner's or developer's questions, or change the plan (`agent:needs-owner`); the pipeline plans again |
+| issue / PR | `/agent answer <text>` | answer the planner's or developer's questions, or change the plan or its test scenario (`agent:needs-owner`); the pipeline plans again |
 | issue | `/agent go` | confirm a plan or research request that waits for the owner (risk high or size XL); it starts |
-| issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, TimeBox not reachable for research, pairing timeout, 3 red rounds) |
+| issue / PR | `/agent retry` | resume after `agent:blocked` / `agent:needs-owner` (hardware not ready, TimeBox not reachable for research, pairing timeout, 3 red rounds). With text after it, it counts as `/agent answer`: the pipeline plans again |
+| PR | plain comment, review, inline comment | starts nothing; the refine, develop and review sessions of the next run read it (`scripts/agent/gh-read.sh`) |
 | issue | `/agent stop` | label `agent:blocked`; nothing runs until `/agent retry` |
 | PR | `/agent approve-diff` | allow hardware test and merge of exactly the current head of a PR that touches protected paths |
 | any issue | `/agent next` | start the next approved roadmap issue |
@@ -61,8 +62,9 @@ Pipeline jobs (`agent-pipeline.yml`):
 2. **guard** — `scripts/agent/issue.sh verify`: open, `agent:approved` set by the owner (or by the bot for issues it
    filed from an owner verdict), title + body unchanged since the approval (sha256 in the approval record), not
    `agent:blocked` / `security:flagged`. Writes the agent input: body plus the comments of the owner and the bot only.
-   Decides the plan state (`scripts/agent/issue.sh plan-state`, kind `issue` only): `refine` when there is no plan yet
-   or an owner `/agent answer`, new questions or a research report came after the newest plan or research request;
+   Decides the plan state (`scripts/agent/issue.sh plan-state`, kind `issue` only; comments of the issue and its agent
+   PRs): `refine` when there is no plan yet
+   or an owner `/agent answer` (or `/agent retry` with text), new questions or a research report came after the newest plan or research request;
    `wait` when that step waits for `/agent go`; `research` when a research request is the newest step; `ready`
    otherwise. Fix rounds therefore reuse the plan.
 3. <a id="refine"></a>**refine** (ubuntu, read-only, only in state `refine`) — the KB skill, then `.github/agent/refine.md`:
@@ -111,6 +113,9 @@ Pipeline jobs (`agent-pipeline.yml`):
    request rated like the plan and dispatches the issue. The agents commit after every finished step; the bundle and upload steps run also after a failed,
    cancelled or timed-out session (the model step has its own timeout below the job's), from `$RUNNER_TEMP/develop-out`
    (outside the checkout, so the commit of leftover changes never picks up the result file).
+   Findings often only point to the PR (hardware and review reports), so refine and develop read it first with
+   `scripts/agent/gh-read.sh`. Prompts, action and script come from the checked-out agent branch: a branch from before a
+   pipeline change keeps the old ones until `main` is merged into it by the owner (the bot has no Workflows permission).
 7. **publish** (deterministic, skipped when develop did not start) — **checkpoint first, whatever the outcome**
    (`ready`, `blocked`, `needs_owner`, no result, usage limit): pushes the branch's commits (fast-forward only, no PR
    yet), so the next run continues the branch instead of redoing the work (for a UAT issue it also posts the `[auto]`
@@ -191,15 +196,21 @@ The repository is public: anyone can open issues, comment and send fork PRs, and
 public. Layers, from the outside in:
 1. **Owner-only triggers.** `route.sh` acts only on events whose sender is the owner. The pipeline reads an issue only
    after the owner approved it; the guard re-checks the label event's actor and the content hash on every run, and an
-   edit by anyone else revokes the approval. Comments by other users never reach a model (`issue.sh context`).
+   edit by anyone else revokes the approval. Comments by other users never reach a model through the context
+   (`issue.sh context`) or the read script (`gh-read.sh`, layer 3).
 2. **Injection screen.** On approval the title, body and owner comments go through `.github/agent/screen.md` — a model
    with **no tools** and a fixed JSON verdict — plus a regex heuristic (instructions to AIs, secrets, exfiltration URLs,
    `curl`/`eval`/base64, workflow paths, zero-width/bidi characters). Either flag → `security:flagged`, nothing runs
    until the owner overrides. The screen is defence in depth, not a guarantee: the layers below assume it can fail.
-3. **Models cannot write to GitHub.** Model jobs get `contents: read` (and `issues: read`), checkouts without persisted
+3. **Models cannot write to GitHub.** Model jobs get `contents: read` (and `issues: read`, `pull-requests: read`), checkouts without persisted
    credentials, `GH_TOKEN` unset, and `.github/agent/ci-settings.json` (no `gh`, `git push`, `curl`, `env`, web tools,
    `npm install`, edits of `.github/`, `.claude/`, `CLAUDE.md`). Their output is JSON and a git bundle; deterministic jobs
-   validate and publish it. Their input (issue context) lies in `$RUNNER_TEMP/ctx/`, outside the checkout so that it is
+   validate and publish it. The refine, develop and review sessions (GitHub-hosted, never the Mac or the screen) read
+   issues and PRs live with `bash scripts/agent/gh-read.sh issue|pr N` (ADR 0017): the job's read-only token as
+   `GH_READ_TOKEN`, fixed queries, no host or path argument, and only the owner's and the bot's title, body, comments,
+   reviews and inline comments come back. The token is in the session's environment, so the filter guards against
+   mistakes and casual injection, not against a session that writes its own HTTP code; such a session can read other
+   users' public text but not write, and the token ends with the job. Their input (issue context) lies in `$RUNNER_TEMP/ctx/`, outside the checkout so that it is
    never committed; headless Claude Code refuses reads outside its working directory, so `.github/actions/claude`
    passes the folder of every `VAR_*` file with `--add-dir` (only folders below `$RUNNER_TEMP`, never `$RUNNER_TEMP`
    itself).

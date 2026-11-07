@@ -14,7 +14,9 @@
 #   issue.sh marker N NAME          body of the newest bot comment carrying <!-- agent-NAME … -->
 #   issue.sh markers N NAME         number of such bot comments
 #   issue.sh plan-state N           state=refine|research|ready|wait, the newest plan's or research request's
-#                                   hw/risk/size/gate, research_rounds (comments.py)
+#                                   hw/risk/size/gate, research_rounds (comments.py); reads the comments of the
+#                                   issue and of its agent PRs (an owner answer may be on either)
+#   issue.sh prs N                  numbers of the issue's agent PRs: branch agent/issue-N-*, not from a fork
 set -euo pipefail
 : "${GITHUB_REPOSITORY:?}"
 OWNER=${OWNER:-${GITHUB_REPOSITORY%%/*}}
@@ -27,6 +29,10 @@ cmd=${1:?command}; n=${2:?issue number}
 
 hash() { gh issue view "$n" --json title,body --jq '.title + "\n\n" + .body' | shasum -a 256 | cut -d' ' -f1; }
 comments() { local m=$1; shift; gh api "repos/$GITHUB_REPOSITORY/issues/$n/comments" --paginate | python3 "$here/comments.py" "$m" "$OWNER" "$BOT" "$@"; }
+agent_prs() {
+  gh pr list --state all --limit 1000 --json number,headRefName,isCrossRepository \
+    --jq ".[] | select((.isCrossRepository | not) and (.headRefName | startswith(\"agent/issue-$n-\"))) | .number"
+}
 
 case "$cmd" in
   hash) hash ;;
@@ -62,7 +68,13 @@ case "$cmd" in
   say) gh issue comment "$n" --body "@$OWNER ${3:?text}" >/dev/null ;;
   marker) comments marker "${3:?name}" ;;
   markers) comments markers "${3:?name}" ;;
-  plan-state) comments plan-state ;;
+  prs) agent_prs ;;
+  plan-state)
+    prs=$(agent_prs)
+    { gh api "repos/$GITHUB_REPOSITORY/issues/$n/comments" --paginate
+      for p in $prs; do gh api "repos/$GITHUB_REPOSITORY/issues/$p/comments" --paginate; done
+    } | python3 "$here/comments.py" plan-state "$OWNER" "$BOT"
+    ;;
   verify)
     info=$(gh issue view "$n" --json state,labels --jq '.state + " ," + ([.labels[].name] | join(",")) + ","')
     state=${info%% *}; labels=${info#* }
@@ -80,5 +92,5 @@ case "$cmd" in
     [ "$rec" = "$(hash)" ] || { echo "VERIFY FAIL: #$n changed after the approval (hash mismatch)"; exit 1; }
     echo "VERIFY OK: #$n approved (label by $actor), content unchanged since the approval"
     ;;
-  *) echo "usage: issue.sh hash|context|approve|revoke|verify|say|marker|markers|plan-state N …" >&2; exit 2 ;;
+  *) echo "usage: issue.sh hash|context|approve|revoke|verify|say|marker|markers|plan-state|prs N …" >&2; exit 2 ;;
 esac
