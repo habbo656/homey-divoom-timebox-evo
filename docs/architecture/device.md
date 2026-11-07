@@ -5,14 +5,14 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
 - **Device layer** (#22; `src/device/TimeboxController.ts`, `TimeboxDevice.ts`) — each device owns one `ConnectionManager`
   on a `BleTransport` for the peripheral UUID in `getData().id`. The logic is in the Homey-free `TimeboxController`
   (same pattern as `pairing.ts`): the link is injected as `LinkLike` (a subset of `ConnectionManager`), everything Homey
-  does through `DeviceSurface` (`setDim`, `setOnOff(on)`, `setLightColor(hue, saturation)`, `saveClockColor(color)`, `setChannel(id)`, `onChannelChanged(id)`, `setAvailable`, `setUnavailable(msg)`, `onOnlineChanged(online)`, `log`,
+  does through `DeviceSurface` (`setDim`, `setOnOff(on)`, `setLightColor(hue, saturation)`, `saveClockColor(color)`, `setChannel(id)`, `onChannelChanged(id)`, `setVolume(v)`, `setMute(m)`, `setAudioPlaying(p)`, `saveRestoreVolume(level)`, `onAudioPlayingChanged(p)` (#4), `setAvailable`, `setUnavailable(msg)`, `onOnlineChanged(online)`, `log`,
   `error`; a throwing or rejecting surface call is logged, never propagated into the link logic). `TimeboxDevice` is
   glue: `onInit` registers the `dim` capability listener FIRST (a change before it exists fails with `Missing Capability
   Listener: dim`; the listener answers readably if the controller is not built yet), then migrates devices paired before
-  #24 and #26 (`addCapability` of `timebox_channel`, `onoff`, `light_hue` and `light_saturation` if missing, each in its own try/catch: a
+  #24, #26 and #4 (`addCapability` of `timebox_channel`, `onoff`, `light_hue`, `light_saturation`, `volume_set`, `volume_mute` and `timebox_audio_playing` if missing, each in its own try/catch: a
   failure is logged and does not stop the setup; `setCapabilityOptions('onoff', {setOnDim: false})` if the stored options differ, because the manifest option only applies to newly paired devices)
   migrates the removed `clock_color` setting to the device store (`migrateClockColor`, see "Clock face"),
-  and registers the `onoff`, `light_hue`/`light_saturation` and `timebox_channel` listeners, builds `BleTransport` (wrapped
+  and registers the `onoff`, `light_hue`/`light_saturation`, `timebox_channel` and `volume_set`/`volume_mute` listeners (see [audio.md](audio.md)), builds `BleTransport` (wrapped
   in `FaultTransport` only when `DEBUG === '1'`), the `ConnectionManager` with the fixed `STATUS_POLL_INTERVAL_MS` (60 s, no setting since #70) and the
   controller (messages from `homey.__('device.*')`), then calls `start()` on a local reference (`onUninit`/`onDeleted`
   may clear the field while the dev link is attached; `start()` after `stop()` is a no-op). The setup is wrapped in
@@ -51,6 +51,7 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
 
   - Hardware 2026-10-06: the dim effect is visible after an Evo reboot; before that the panel did not visibly dim although
     the value was stored (#49, `docs/divoom-protocol.md` section 11).
+  - Audio reads (#4): the first status of a session and then one status per 55 s start `09` and `0b` requests; details, surface calls and logs in [audio.md](audio.md).
   - Status sync: a decoded `46` (`status` event) or a `31 55 BB` report (`reply` kind `brightness`, ok, >= 1 data byte)
     updates `dim` with `brightnessToDim` (clamped to 0..100, the raw value is logged when it was clamped). Reports are
     ignored while a change is in flight (no echo loop, no stale value during a set) and an unchanged brightness makes no
