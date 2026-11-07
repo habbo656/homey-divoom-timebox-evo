@@ -69,7 +69,8 @@
       "saturation": "Saturation",
       "fit": "Fit",
       "url": "URL",
-      "icon": "Icon"
+      "icon": "Icon",
+      "volume": "Volume"
     }
   }
 }
