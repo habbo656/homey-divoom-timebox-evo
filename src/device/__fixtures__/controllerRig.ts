@@ -37,6 +37,14 @@ export class FakeSurface implements DeviceSurface {
   channelClears = 0;
   /** Every availability/trigger call in order, e.g. `available`, `unavailable:<message>`, `online:true`. */
   calls: string[] = [];
+  /** Every `setVolume` (tile write of `volume_set`), `setMute` (`volume_mute`) and `setAudioPlaying` call (#4). */
+  volumes: number[] = [];
+  mutes: boolean[] = [];
+  playing: boolean[] = [];
+  /** Every `saveRestoreVolume` call (the persisted volume unmute restores). */
+  savedRestoreVolumes: number[] = [];
+  /** Every `onAudioPlayingChanged` call (the "Audio started/stopped playing" triggers). */
+  playingChanges: boolean[] = [];
   logs: string[] = [];
   /** The Homey time zone reported to the controller (change it to simulate a zone change). */
   zone = 'Europe/Berlin';
@@ -70,6 +78,21 @@ export class FakeSurface implements DeviceSurface {
   onCountdownEnded() {
     this.countdownEnds++;
   }
+  setVolume(volume: number) {
+    this.volumes.push(volume);
+  }
+  setMute(muted: boolean) {
+    this.mutes.push(muted);
+  }
+  setAudioPlaying(playing: boolean) {
+    this.playing.push(playing);
+  }
+  saveRestoreVolume(level: number) {
+    this.savedRestoreVolumes.push(level);
+  }
+  onAudioPlayingChanged(playing: boolean) {
+    this.playingChanges.push(playing);
+  }
   setAvailable() {
     this.calls.push('available');
   }
@@ -98,6 +121,8 @@ export class FakeSurface implements DeviceSurface {
  * payload) and acknowledged with `18 55` unless `ackTime` is false. `bd 17 PP` selects the custom page (stored in
  * `customPage`, no reply, as on the Evo) and `bd 17 ff` is answered with `bd 55 17 PP` unless `answerPage` is false.
  * `50 TT` (notification icon) is recorded in `icons` and answered with `50 55` unless `answerIcon` is false.
+ * `08 VV` sets the volume (clamped to 15, recorded in `volumeSets`, no reply) and lights the panel (d8 `01`, research #4);
+ * `09` is answered with `09 55 VV` unless `answerVolume` is false and `0b` with `0b 55 PP` (`playing`) unless `answerPlay` is false.
  */
 export function evo(t: MockTransport, initial = 50) {
   const state = {
@@ -122,6 +147,13 @@ export function evo(t: MockTransport, initial = 50) {
     icons: [] as number[],
     answerIcon: true,
     times: [] as number[][],
+    /** The speaker volume 0..15 (`09 55 VV`), set by `08 VV`. */
+    volume: 5,
+    volumeSets: [] as number[],
+    answerVolume: true,
+    /** The play status byte of `0b 55 PP` (`00` idle, `01` playing). */
+    playing: 0,
+    answerPlay: true,
   };
   const status = () =>
     statusFrame(state.brightness, state.channel, {
@@ -174,6 +206,14 @@ export function evo(t: MockTransport, initial = 50) {
       state.icons.push(w[12]);
       return state.answerIcon ? [replyFrame(0x50)] : undefined;
     }
+    if (op === 0x08) {
+      state.volume = Math.min(w[12], 15);
+      state.volumeSets.push(w[12]);
+      state.power = true;
+      return undefined;
+    }
+    if (op === 0x09) return state.answerVolume ? [replyFrame(0x09, state.volume)] : undefined;
+    if (op === 0x0b) return state.answerPlay ? [replyFrame(0x0b, state.playing)] : undefined;
     if (op === 0x46 && state.answer) return [status()];
     return undefined;
   };

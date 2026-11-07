@@ -1,5 +1,7 @@
 import Homey from 'homey';
 import {
+  FLOW_TRIGGER_AUDIO_STARTED,
+  FLOW_TRIGGER_AUDIO_STOPPED,
   FLOW_TRIGGER_CHANNEL_CHANGED,
   FLOW_TRIGGER_CONNECTED,
   FLOW_TRIGGER_COUNTDOWN_ENDED,
@@ -56,6 +58,10 @@ const CLOCK_COLOR_STORE = 'clock_color';
 const CLOCK_SHOWN_STYLE_STORE = 'clock_shown_style';
 /** Store flag: the temperature unit setting got its first value from Homey's unit system (#7). */
 const TEMPERATURE_UNIT_INITIALISED_STORE = 'temperature_unit_initialised';
+/** The read-only "Audio playing" capability (`0b` play status, #4). */
+const AUDIO_PLAYING_CAPABILITY = 'timebox_audio_playing';
+/** Store key of the volume unmute restores (a device level 1..15, #4): the last non-zero volume seen or sent. */
+const VOLUME_RESTORE_STORE = 'volume_restore';
 
 /**
  * Homey glue around `TimeboxController` (docs/architecture.md, "Device layer"): builds the BLE link of this device,
@@ -257,6 +263,11 @@ export class TimeboxDevice extends Homey.Device {
       clearChannel: () => this.setCapabilityValue(CHANNEL_CAPABILITY, null),
       onChannelChanged: (id) => this.fireChannelTrigger(id),
       onCountdownEnded: () => this.fireCountdownEndedTrigger(),
+      setVolume: (volume) => this.setCapabilityValue('volume_set', volume),
+      setMute: (muted) => this.setCapabilityValue('volume_mute', muted),
+      setAudioPlaying: (playing) => this.setCapabilityValue(AUDIO_PLAYING_CAPABILITY, playing),
+      saveRestoreVolume: (level) => this.setStoreValue(VOLUME_RESTORE_STORE, level),
+      onAudioPlayingChanged: (playing) => this.fireAudioTrigger(playing),
       setAvailable: () => this.setAvailable(),
       setUnavailable: (message) => this.setUnavailable(message),
       timeZone: () => this.homey.clock.getTimezone(),
@@ -285,6 +296,7 @@ export class TimeboxDevice extends Homey.Device {
         powerOn: !this.hasCapability('onoff') || this.getCapabilityValue('onoff') !== false,
         storedChannel: this.getChannelCapability(),
         temperatureUnit: this.getTemperatureUnitChecked(),
+        restoreVolume: this.getStoredRestoreVolume(),
       },
     );
     this.controller = controller;
@@ -457,6 +469,18 @@ export class TimeboxDevice extends Homey.Device {
   private async fireCountdownEndedTrigger(): Promise<void> {
     this.log(`[device] flow trigger ${FLOW_TRIGGER_COUNTDOWN_ENDED}`);
     await this.homey.flow.getDeviceTriggerCard(FLOW_TRIGGER_COUNTDOWN_ENDED).trigger(this);
+  }
+
+  private async fireAudioTrigger(playing: boolean): Promise<void> {
+    const id = playing ? FLOW_TRIGGER_AUDIO_STARTED : FLOW_TRIGGER_AUDIO_STOPPED;
+    this.log(`[device] flow trigger ${id}`);
+    await this.homey.flow.getDeviceTriggerCard(id).trigger(this);
+  }
+
+  /** The stored volume unmute restores, or null if none (the controller checks the range). */
+  private getStoredRestoreVolume(): number | null {
+    const stored: unknown = this.getStoreValue(VOLUME_RESTORE_STORE);
+    return typeof stored === 'number' ? stored : null;
   }
 
   private async fireConnectionTrigger(online: boolean): Promise<void> {

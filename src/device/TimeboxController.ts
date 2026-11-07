@@ -7,12 +7,15 @@ import {
   MAX_TEXT_UNITS,
   nativeText,
   queryCustomPage,
+  queryPlayStatus,
   queryStatus,
+  queryVolume,
   setBrightness,
   setCustomPage,
   setDateTime,
   setHot,
   setTemperatureUnit as temperatureUnitCommand,
+  setVolume as volumeCommand,
   startCountdown as countdownStartCommand,
   stopCountdown as countdownStopCommand,
   stopNativeText,
@@ -22,8 +25,12 @@ import { toHex } from '../protocol/hex';
 import type { Reply } from '../protocol/replies';
 import {
   COUNTDOWN_REPORT_OPCODE,
+  PLAY_STATUS_OPCODE,
+  VOLUME_OPCODE,
   decodeCustomPage,
+  decodePlayStatus,
   decodeStatus,
+  decodeVolume,
   isCountdownEnd,
   isCustomPageReply,
 } from '../protocol/status';
@@ -52,6 +59,7 @@ import {
   utcOffsetMinutes,
 } from './timeSync';
 import type { LastSync } from './timeSync';
+import { levelToVolume, restoreLevel, volumeToLevel } from './volume';
 import { mergeWeather, weatherCommand } from './weather';
 import type { Weather, WeatherSource, WeatherUpdate } from './weather';
 
@@ -81,6 +89,14 @@ export const MAX_OFF_RESENDS = 3;
 export const CLOCK_RESEND_DELAY_MS = 1_500;
 /** How long the `18` time command waits for its `18 55` acknowledgement. */
 export const TIME_SYNC_CONFIRM_TIMEOUT_MS = 5_000;
+/**
+ * The audio reads (`09` volume, `0b` play status, #4) follow the 60 s status poll: they run after the first status of a
+ * session and after every later status at least this long after the last read (a little less than the poll interval, so
+ * every poll reads, but the extra `46` replies of confirms and unsolicited reports do not).
+ */
+export const AUDIO_READ_INTERVAL_MS = 55_000;
+/** How long each audio read (`09`, `0b`) and the `09` read-back that confirms a volume change wait for the reply. */
+export const AUDIO_REQUEST_TIMEOUT_MS = 5_000;
 
 /** What `switchTo` takes besides the channel: the overrides of `channelCommand` and the custom page of "Show custom page". */
 type SwitchOverride = ChannelOverride & {
@@ -122,6 +138,16 @@ export interface DeviceSurface {
   onChannelChanged(id: ChannelId): void | Promise<void>;
   /** The device reported the end of a countdown (`71 55 03 01 01 00`): fire the "countdown ended" trigger. */
   onCountdownEnded(): void | Promise<void>;
+  /** Write the capability value `volume_set` (0..1) to Homey (#4). */
+  setVolume(volume: number): void | Promise<void>;
+  /** Write the capability value `volume_mute` to Homey (#4): true exactly while the device volume is 0. */
+  setMute(muted: boolean): void | Promise<void>;
+  /** Write the capability value `timebox_audio_playing` to Homey (#4, `0b` play status). */
+  setAudioPlaying(playing: boolean): void | Promise<void>;
+  /** Persist the volume unmute restores (device store `volume_restore`, a device level 1..15). A failure is logged, never propagated. */
+  saveRestoreVolume(level: number): void | Promise<void>;
+  /** The play status changed within a session (not on its first read): fire "Audio started playing" / "Audio stopped playing". */
+  onAudioPlayingChanged(playing: boolean): void | Promise<void>;
   setAvailable(): void | Promise<void>;
   setUnavailable(message: string): void | Promise<void>;
   /** The IANA time zone of the Homey (`homey.clock.getTimezone()`), asked for at every time sync. */
@@ -212,6 +238,10 @@ export interface TimeboxControllerOptions {
   storedChannel?: ChannelId | null;
   /** The temperature unit of the clock's temperature page, sent at every connect and when it changes (#7; default °C). */
   temperatureUnit?: TemperatureUnit;
+  /** The stored volume unmute restores (device store `volume_restore`, #4); anything but 1..15 restores `DEFAULT_UNMUTE_LEVEL`. */
+  restoreVolume?: number | null;
+  /** How long each audio read and the volume read-back wait (default `AUDIO_REQUEST_TIMEOUT_MS`). */
+  audioRequestTimeoutMs?: number;
 }
 
 const rgbIsBlack = (c: Rgb): boolean => c.r === 0 && c.g === 0 && c.b === 0;
@@ -425,6 +455,28 @@ export class TimeboxController {
   /** Number of native text sends in progress (frames queued, `textActive` not set yet): the weather waits like for a running text. */
   private textSending = 0;
 
+  /** The device volume 0..15 as last reported, sent or confirmed (#4); null until known. The only truth: mute = (volume 0). */
+  private knownVolume: number | null = null;
+  /** The device level the `volume_set` tile shows (written only when it changes); null until written. */
+  private tileVolume: number | null = null;
+  /** The value the `volume_mute` tile shows (written only when it changes); null until written. */
+  private tileMute: boolean | null = null;
+  /** The last non-zero volume seen or sent: what unmute restores (persisted as `volume_restore`). */
+  private restoreVolume: number | null;
+  /** Number of `setVolume`/`setMute` calls that have not finished; `09` reports are ignored meanwhile (no echo loop). */
+  private volumeInFlight = 0;
+  /** Incremented by every volume or mute change; only the newest one writes the tiles. */
+  private volumeGeneration = 0;
+  /** The `0b` play status as last reported (memory only); null until the first read of this run. */
+  private audioPlaying: boolean | null = null;
+  /** The current session has read the play status once: only a later change fires the triggers. */
+  private playKnown = false;
+  /** When the last audio read of this session started; null before the first one. */
+  private lastAudioReadAt: number | null = null;
+  /** An audio read is in progress (the next status does not start another one). */
+  private audioReading = false;
+  private readonly audioTimeoutMs: number;
+
   private readonly onStatus = (status: DeviceStatus): void => {
     const firstOfSession = !this.answered;
     this.sessionAnswered();
@@ -453,12 +505,15 @@ export class TimeboxController {
       void this.flushWeather('connect');
     }
     if (firstOfSession && !this.stopped) void this.sendHotAtConnect();
+    if (this.audioReadDue(firstOfSession)) void this.readAudio();
   };
   private readonly onConnected = (): void => {
     this.answered = false;
+    this.audioSessionStarted();
   };
   private readonly onDisconnected = (reason: string): void => {
     this.answered = false;
+    this.audioSessionStarted();
     this.lastReason = reason;
     this.armGrace();
   };
@@ -471,6 +526,8 @@ export class TimeboxController {
   private readonly onReply = (reply: Reply): void => {
     if (reply.kind === 'brightness' && reply.ok && reply.data.length >= 1) this.deviceBrightness(reply.data[0]);
     else if (reply.cmd === COUNTDOWN_REPORT_OPCODE) this.countdownReport(reply);
+    else if (reply.cmd === VOLUME_OPCODE) this.volumeReport(reply);
+    else if (reply.cmd === PLAY_STATUS_OPCODE) this.playStatusReport(reply);
   };
 
   constructor(link: LinkLike, surface: DeviceSurface, messages: DeviceMessages, opts: TimeboxControllerOptions = {}) {
@@ -493,6 +550,8 @@ export class TimeboxController {
     this.clockStyleOverride = opts.shownClockStyle ?? null;
     this.power = opts.powerOn ?? true;
     this.unit = opts.temperatureUnit ?? 'celsius';
+    this.restoreVolume = opts.restoreVolume ?? null;
+    this.audioTimeoutMs = opts.audioRequestTimeoutMs ?? AUDIO_REQUEST_TIMEOUT_MS;
     // Started from "off": the channel from before off is the stored one, "power on" returns to it without a trigger.
     if (!this.power) this.knownChannel = opts.storedChannel ?? null;
   }
@@ -1928,6 +1987,192 @@ export class TimeboxController {
       }
     } finally {
       this.unitSending = false;
+    }
+  }
+
+  // --- volume and audio (#4) -------------------------------------------------------------------------------------
+
+  /**
+   * Capability listener of `volume_set` (0..1): sends `08 VV` (VV = round(v * 15), `volumeToLevel`), then confirms with a
+   * `09` read-back. The device volume is the only truth for mute: a volume above 0 turns `volume_mute` off (a change while
+   * muted unmutes), volume 0 turns it on. It is sent while the panel is off too: `08` lights the panel (research #4,
+   * accepted by the owner) and the self-wake check of the next status poll sends the off again (#29). Rejects with an
+   * `ArgumentError` outside 0..1, with the readable `notConnected` error without a live link (nothing is queued) and with
+   * `notConfirmed` if the read-back does not come in time (`notConnected` if the link is lost meanwhile); both tiles are
+   * then written to the requested volume. A change superseded by a newer volume or mute change resolves and writes
+   * nothing; a mismatch resolves (the next poll reads the device value). It does not write `volume_set`: Homey does that
+   * when this promise resolves.
+   */
+  async setVolume(volume: number): Promise<void> {
+    const level = volumeToLevel(volume);
+    await this.sendVolume(level, 'volume', `volume -> ${level}`);
+  }
+
+  /**
+   * Capability listener of `volume_mute`. On sends `08 00` and shows 0 on `volume_set` (the last non-zero volume stays
+   * stored for unmute); off sends the stored volume (`restoreLevel`: the last non-zero one seen or sent, else
+   * `DEFAULT_UNMUTE_LEVEL`) and shows it. Rejects like `setVolume`, and with a `RangeError` for a value that is not a
+   * boolean. It does not write `volume_mute`: Homey does that when this promise resolves.
+   */
+  async setMute(muted: boolean): Promise<void> {
+    if (typeof muted !== 'boolean') throw new RangeError(`volume_mute must be a boolean, got ${String(muted)}`);
+    const level = muted ? 0 : restoreLevel(this.restoreVolume);
+    await this.sendVolume(level, 'mute', `mute -> ${muted ? 'on' : 'off'}`);
+  }
+
+  /** The Flow condition "Audio is playing": the last `0b` play status of this run (false before the first read). */
+  isAudioPlaying(): boolean {
+    return this.audioPlaying === true;
+  }
+
+  /**
+   * The shared path of `setVolume` and `setMute`: send `08 VV`, confirm with `09` and write the tile Homey does not write
+   * (`owner` is the capability of the listener). `09` reports are ignored while it runs.
+   */
+  private async sendVolume(level: number, owner: 'volume' | 'mute', label: string): Promise<void> {
+    const command = volumeCommand(level);
+    if (this.stopped || this.link.state !== 'connected') throw new Error(this.messages.notConnected);
+    const generation = ++this.volumeGeneration;
+    this.volumeInFlight++;
+    try {
+      try {
+        await this.sendBounded(command);
+      } catch (e) {
+        if (e instanceof NotConnectedError || e instanceof LinkLostError) throw new Error(this.messages.notConnected);
+        throw e;
+      }
+      this.log(`${label}: ${toHex(command)}`);
+      this.rememberVolume(level);
+      if (generation !== this.volumeGeneration) {
+        this.log(`volume ${level} superseded by a newer change`);
+        return;
+      }
+      let failure: 'unconfirmed' | 'lost' | null = null;
+      try {
+        const device = decodeVolume(await this.link.request(queryVolume(), VOLUME_OPCODE, this.audioTimeoutMs));
+        if (device === level) this.log(`volume confirmed: ${device}`);
+        else this.log(`volume mismatch: device ${device}, requested ${level}`);
+      } catch (e) {
+        if (e instanceof RequestTimeoutError) this.log('volume confirm timeout');
+        else this.log(`volume confirm failed: ${errorText(e)}`);
+        failure = this.confirmFailure(e);
+      }
+      if (generation !== this.volumeGeneration) {
+        this.log(`volume ${level} superseded by a newer change`);
+        return;
+      }
+      if (failure !== null) {
+        // Homey does not store the value of a rejected listener: write both tiles to the requested volume.
+        this.showVolume(level, null, true);
+        throw new Error(failure === 'lost' ? this.messages.notConnected : this.messages.notConfirmed);
+      }
+      this.showVolume(level, owner);
+    } finally {
+      this.volumeInFlight--;
+    }
+  }
+
+  /** The device has (or was sent) volume `level`: remember it, and a non-zero one as the volume unmute restores. */
+  private rememberVolume(level: number): void {
+    this.knownVolume = level;
+    if (level === 0 || level === this.restoreVolume || this.stopped) return;
+    this.restoreVolume = level;
+    this.call(() => this.surface.saveRestoreVolume(level));
+  }
+
+  /**
+   * Write the `volume_set` (device level as 0..1) and `volume_mute` (level 0) tiles if they show something else; `owner`
+   * is left out (Homey writes the capability of a listener itself). `force` writes both (a rejected listener).
+   */
+  private showVolume(level: number, owner: 'volume' | 'mute' | null, force = false): void {
+    if (this.stopped) return;
+    const muted = level === 0;
+    if (owner !== 'volume' && (force || this.tileVolume !== level)) {
+      this.call(() => this.surface.setVolume(levelToVolume(level)));
+    }
+    if (owner !== 'mute' && (force || this.tileMute !== muted)) this.call(() => this.surface.setMute(muted));
+    this.tileVolume = level;
+    this.tileMute = muted;
+  }
+
+  /** A `09 55 VV` frame (an audio read or a push): copy the volume to the tiles if it is news. Ignored while a change runs. */
+  private volumeReport(reply: Reply): void {
+    if (this.stopped || this.volumeInFlight > 0) return;
+    let level: number;
+    try {
+      level = decodeVolume(reply);
+    } catch (e) {
+      this.log(`volume report ignored: ${errorText(e)}`);
+      return;
+    }
+    if (level !== this.knownVolume) this.log(`volume <- device: ${level}`);
+    this.rememberVolume(level);
+    this.showVolume(level, null);
+  }
+
+  /**
+   * A `0b 55 PP` frame: copy the play status to `timebox_audio_playing` if it is news. Only a change after a value already
+   * read in this session fires the triggers (the first read after a start or reconnect only updates the tile). An
+   * unknown PP is logged and changes nothing.
+   */
+  private playStatusReport(reply: Reply): void {
+    if (this.stopped) return;
+    let playing: boolean | null;
+    try {
+      playing = decodePlayStatus(reply);
+    } catch (e) {
+      this.log(`play status report ignored: ${errorText(e)}`);
+      return;
+    }
+    if (playing === null) {
+      this.log(`play status ${hexByte(reply.data[0])} is not known, tile unchanged`);
+      return;
+    }
+    const known = this.playKnown;
+    this.playKnown = true;
+    if (playing === this.audioPlaying) return;
+    this.audioPlaying = playing;
+    this.log(`audio playing <- device: ${playing ? 'yes' : 'no'}`);
+    const value = playing;
+    this.call(() => this.surface.setAudioPlaying(value));
+    if (known) this.call(() => this.surface.onAudioPlayingChanged(value));
+  }
+
+  /** A new session starts (or the old one ended): its first status reads the audio state, and that read fires nothing. */
+  private audioSessionStarted(): void {
+    this.playKnown = false;
+    this.lastAudioReadAt = null;
+  }
+
+  /** Whether a status reply starts the audio reads: the first one of a session, then one per `AUDIO_READ_INTERVAL_MS`. */
+  private audioReadDue(firstOfSession: boolean): boolean {
+    if (this.stopped || this.audioReading) return false;
+    if (firstOfSession || this.lastAudioReadAt === null) return true;
+    return this.now() - this.lastAudioReadAt >= AUDIO_READ_INTERVAL_MS;
+  }
+
+  /**
+   * Read the volume (`09`) and the play status (`0b`), one after the other. The replies are handled by `onReply` like any
+   * report. A failure is only logged (it never counts as a missed poll); a lost link skips the second read. Never rejects.
+   */
+  private async readAudio(): Promise<void> {
+    this.audioReading = true;
+    this.lastAudioReadAt = this.now();
+    const reads = [
+      ['volume', queryVolume(), VOLUME_OPCODE],
+      ['play status', queryPlayStatus(), PLAY_STATUS_OPCODE],
+    ] as const;
+    try {
+      for (const [what, query, opcode] of reads) {
+        try {
+          await this.link.request(query, opcode, this.audioTimeoutMs);
+        } catch (e) {
+          this.log(`audio read failed: ${what}: ${errorText(e)}`);
+          if (this.stopped || this.link.state !== 'connected') return;
+        }
+      }
+    } finally {
+      this.audioReading = false;
     }
   }
 
