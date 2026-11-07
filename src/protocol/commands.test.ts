@@ -7,8 +7,11 @@ import {
   MAX_TEXT_UNITS,
   nativeText,
   notificationIcon,
+  MAX_VOLUME,
   queryCustomPage,
+  queryPlayStatus,
   queryStatus,
+  queryVolume,
   setBrightness,
   setChannel,
   setVisualization,
@@ -18,6 +21,7 @@ import {
   setHot,
   setLighting,
   setTemperatureUnit,
+  setVolume,
   setWeather,
   startNoiseMeter,
   staticImage,
@@ -31,7 +35,15 @@ import {
 import { envelope } from './envelope';
 import { fromHex, toHex } from './hex';
 import { decodeSppFrame } from './replies';
-import { IMAGE_PAYLOAD, NOTIFICATION_TELEGRAM_ENVELOPE, NOTIFICATION_TELEGRAM_SPP_FRAME } from './__fixtures__/golden';
+import {
+  IMAGE_PAYLOAD,
+  NOTIFICATION_TELEGRAM_ENVELOPE,
+  NOTIFICATION_TELEGRAM_SPP_FRAME,
+  QUERY_PLAY_STATUS_SPP_FRAME,
+  QUERY_VOLUME_SPP_FRAME,
+  SET_VOLUME_5_ENVELOPE,
+  SET_VOLUME_5_SPP_FRAME,
+} from './__fixtures__/golden';
 
 describe('setBrightness', () => {
   it.each([
@@ -480,4 +492,40 @@ describe('notificationIcon (#5)', () => {
       expect(() => notificationIcon(code)).toThrow(RangeError);
     },
   );
+});
+
+describe('setVolume (#4)', () => {
+  it.each([
+    [0, '08 00'],
+    [1, '08 01'],
+    [8, '08 08'],
+    [15, '08 0f'],
+  ])('encodes volume %i', (level, hex) => {
+    expect(toHex(setVolume(level))).toBe(hex);
+  });
+
+  it('has 16 levels, 0..15', () => {
+    expect(MAX_VOLUME).toBe(15);
+  });
+
+  it('matches the golden vectors for volume 5 in the BLE envelope and as SPP frame', () => {
+    expect(toHex(envelope(setVolume(5), 0x0101))).toBe(SET_VOLUME_5_ENVELOPE);
+    expect(decodeSppFrame(fromHex(SET_VOLUME_5_SPP_FRAME))).toEqual(setVolume(5));
+  });
+
+  it.each([-1, 16, 255, 0.5, NaN, Infinity, '1' as unknown as number, undefined as unknown as number])(
+    'rejects %s (the firmware would clamp, the app never sends it)',
+    (level) => {
+      expect(() => setVolume(level)).toThrow(RangeError);
+    },
+  );
+});
+
+describe('queryVolume and queryPlayStatus (#4)', () => {
+  it('encodes 09 and 0b, matching the golden SPP frames', () => {
+    expect(toHex(queryVolume())).toBe('09');
+    expect(toHex(queryPlayStatus())).toBe('0b');
+    expect(decodeSppFrame(fromHex(QUERY_VOLUME_SPP_FRAME))).toEqual(queryVolume());
+    expect(decodeSppFrame(fromHex(QUERY_PLAY_STATUS_SPP_FRAME))).toEqual(queryPlayStatus());
+  });
 });

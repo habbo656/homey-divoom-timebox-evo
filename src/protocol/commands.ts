@@ -327,6 +327,27 @@ export function setTemperatureUnit(unit: TemperatureUnit): Uint8Array {
   return Uint8Array.of(0x2b, code);
 }
 
+/** Highest speaker volume `VV` of `08 VV` (VERIFIED, protocol section 5.3: 0..15, the firmware clamps larger values). */
+export const MAX_VOLUME = 15;
+
+/**
+ * `08 VV`: set the speaker volume 0..15 (VERIFIED, protocol section 5.3). The device sends no reply and no push; read
+ * the value back with `queryVolume`. It lights a panel that is off, with the previous lighting (research #4).
+ */
+export function setVolume(level: number): Uint8Array {
+  return Uint8Array.of(0x08, intInRange('volume', level, 0, MAX_VOLUME));
+}
+
+/** `09`: read the speaker volume (VERIFIED), answered with `09 55 VV` (see `decodeVolume`). Does not light an off panel. */
+export function queryVolume(): Uint8Array {
+  return Uint8Array.of(0x09);
+}
+
+/** `0b`: read the audio play status (VERIFIED), answered with `0b 55 PP` (see `decodePlayStatus`). Does not light an off panel. */
+export function queryPlayStatus(): Uint8Array {
+  return Uint8Array.of(0x0b);
+}
+
 /** Highest minutes value of the countdown: 99:59 counts down correctly, 100 is clamped to 99:59 (protocol section 5.6). */
 export const COUNTDOWN_MAX_MINUTES = 99;
 
