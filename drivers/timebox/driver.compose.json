@@ -9,7 +9,10 @@
     "dim",
     "light_hue",
     "light_saturation",
-    "timebox_channel"
+    "timebox_channel",
+    "volume_set",
+    "volume_mute",
+    "timebox_audio_playing"
   ],
   "capabilitiesOptions": {
     "onoff": {

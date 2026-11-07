@@ -2,14 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { FrameError, ProtocolError } from './errors';
 import { fromHex } from './hex';
 import { decodeSppFrame, parseReply, type Reply } from './replies';
-import { MIN_STATUS_DATA, decodeCustomPage, decodeStatus, isCountdownEnd, isCustomPageReply } from './status';
+import {
+  MIN_STATUS_DATA,
+  decodeCustomPage,
+  decodePlayStatus,
+  decodeStatus,
+  decodeVolume,
+  isCountdownEnd,
+  isCustomPageReply,
+} from './status';
 import {
   COUNTDOWN_END,
   COUNTDOWN_END_BD_1E,
   COUNTDOWN_END_BD_32,
   REPLY_BRIGHTNESS,
   REPLY_CUSTOM_PAGE_2,
+  REPLY_PLAY_STATUS_IDLE,
+  REPLY_PLAY_STATUS_PLAYING,
   REPLY_STATUS,
+  REPLY_VOLUME_3,
+  REPLY_VOLUME_5,
   STATUS_CLOCK_B20_GREEN,
   STATUS_CLOCK_B50,
   STATUS_LIGHTING_GREEN_B100,
@@ -200,5 +212,67 @@ describe('isCustomPageReply', () => {
     expect(isCustomPageReply(reply(COUNTDOWN_END_BD_1E))).toBe(false);
     expect(isCustomPageReply(frame([0x04, 0xbd, 0x55]))).toBe(false);
     expect(isCustomPageReply(frame([0x04, 0x46, 0x55, 0x17, 0x01]))).toBe(false);
+  });
+});
+
+describe('decodeVolume (#4)', () => {
+  const make = (data: number[], cmd = 0x09, ok = true): Reply => ({
+    cmd,
+    ok,
+    data: Uint8Array.from(data),
+    kind: 'other',
+  });
+
+  it('decodes the research captures 09 55 05 and 09 55 03', () => {
+    expect(decodeVolume(reply(REPLY_VOLUME_5))).toBe(5);
+    expect(decodeVolume(reply(REPLY_VOLUME_3))).toBe(3);
+  });
+
+  it.each([0, 1, 8, 15])('returns volume %i', (v) => {
+    expect(decodeVolume(make([v]))).toBe(v);
+  });
+
+  it('ignores extra trailing bytes', () => {
+    expect(decodeVolume(make([7, 0]))).toBe(7);
+  });
+
+  it.each([16, 0x80, 0xff])('rejects %i (above 15) with ProtocolError', (v) => {
+    expect(() => decodeVolume(make([v]))).toThrow(ProtocolError);
+  });
+
+  it('rejects a reply without data with FrameError', () => {
+    expect(() => decodeVolume(make([]))).toThrow(FrameError);
+  });
+
+  it('rejects another opcode and a status byte other than 55', () => {
+    expect(() => decodeVolume(reply(REPLY_PLAY_STATUS_IDLE))).toThrow(ProtocolError);
+    expect(() => decodeVolume(make([5], 0x09, false))).toThrow(ProtocolError);
+  });
+});
+
+describe('decodePlayStatus (#4)', () => {
+  const make = (data: number[], cmd = 0x0b, ok = true): Reply => ({
+    cmd,
+    ok,
+    data: Uint8Array.from(data),
+    kind: 'other',
+  });
+
+  it('decodes 0b 55 00 (research capture) as not playing and 0b 55 01 as playing', () => {
+    expect(decodePlayStatus(reply(REPLY_PLAY_STATUS_IDLE))).toBe(false);
+    expect(decodePlayStatus(reply(REPLY_PLAY_STATUS_PLAYING))).toBe(true);
+  });
+
+  it.each([0x02, 0x55, 0xff])('returns null for the unknown byte %i', (b) => {
+    expect(decodePlayStatus(make([b]))).toBeNull();
+  });
+
+  it('rejects a reply without data with FrameError', () => {
+    expect(() => decodePlayStatus(make([]))).toThrow(FrameError);
+  });
+
+  it('rejects another opcode and a status byte other than 55', () => {
+    expect(() => decodePlayStatus(reply(REPLY_VOLUME_5))).toThrow(ProtocolError);
+    expect(() => decodePlayStatus(make([1], 0x0b, false))).toThrow(ProtocolError);
   });
 });

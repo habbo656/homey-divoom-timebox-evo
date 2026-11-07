@@ -69,7 +69,8 @@
       "saturation": "Sättigung",
       "fit": "Einpassen",
       "url": "URL",
-      "icon": "Symbol"
+      "icon": "Symbol",
+      "volume": "Lautstärke"
     }
   }
 }

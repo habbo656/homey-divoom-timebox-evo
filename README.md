@@ -17,6 +17,7 @@ start a pizza countdown in the kitchen, or put a snapshot of your doorbell camer
 - Start and stop a countdown, and start a Flow when it ends ("Countdown ended" trigger).
 - Show an image from an image tag (for example a camera snapshot) or from a URL, scaled to 16x16.
 - Show an app notification icon (for example Telegram, WhatsApp or a missed call) for about 2 seconds as a short signal from a Flow.
+- Set and mute the speaker volume, see whether audio plays on the speaker (checked every 60 seconds), and start a Flow when audio starts or stops playing.
 - React to the display being connected or disconnected (triggers and a condition).
 - Automatic time sync with the time of your Homey.
 

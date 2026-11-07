@@ -74,3 +74,22 @@ export const COUNTDOWN_END_BD_32 = '01 09 00 04 bd 55 13 01 32 00 65 01 02';
 export const COUNTDOWN_END_BD_1E = '01 09 00 04 bd 55 13 01 1e 00 51 01 02';
 /** `bd 55 17 01`: the answer of `bd 17 ff`, custom page 2. */
 export const REPLY_CUSTOM_PAGE_2 = '01 07 00 04 bd 55 17 01 35 01 02';
+
+// Audio frames (#4). Replies are real captures of the hardware research of #4 (2026-11-07, scripts/probe/ble.py), copied
+// verbatim; the play status `01` frame is computed with scripts/probe/divoom.py frame() and decoded by the protocol KB.
+/** `08 05` (set volume 5) as SPP frame (KB `encode setVolume [5] --spp` and scripts/probe/divoom.py frame()). */
+export const SET_VOLUME_5_SPP_FRAME = '01 04 00 08 05 11 00 02';
+/** `08 05` in the BLE envelope with seq 0x0101 (scripts/probe/divoom.py ble_envelope()). */
+export const SET_VOLUME_5_ENVELOPE = 'fe ef aa 55 09 00 01 01 00 00 00 08 05 18 00';
+/** `09` (get volume) as SPP frame (KB `encode getVolume --spp`). */
+export const QUERY_VOLUME_SPP_FRAME = '01 03 00 09 0c 00 02';
+/** `0b` (get play status) as SPP frame (KB `raw 0x0b --spp`). */
+export const QUERY_PLAY_STATUS_SPP_FRAME = '01 03 00 0b 0e 00 02';
+/** `09 55 05`: the volume is 5 (research #4, P0). */
+export const REPLY_VOLUME_5 = '01 06 00 04 09 55 05 6d 00 02';
+/** `09 55 03`: the volume is 3 (research #4, P1). */
+export const REPLY_VOLUME_3 = '01 06 00 04 09 55 03 6b 00 02';
+/** `0b 55 00`: no audio plays (research #4, P0). */
+export const REPLY_PLAY_STATUS_IDLE = '01 06 00 04 0b 55 00 6a 00 02';
+/** `0b 55 01`: audio plays (computed). */
+export const REPLY_PLAY_STATUS_PLAYING = '01 06 00 04 0b 55 01 6b 00 02';

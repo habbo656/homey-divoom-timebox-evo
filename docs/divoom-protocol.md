@@ -243,9 +243,9 @@ Measured with the webcam microphone in front of the Evo (RMS of 2–3 s windows,
 
 | Payload | Function | Result |
 |---|---|---|
-| `08 VV` | set volume 0..15 | **VERIFIED**: RMS 0 → 0.00015 (silent), 1 → 0.001, 4 → 0.008, 8 → 0.013, 15 → 0.075. No reply frame; `09` reads the value back |
-| `09` | get volume | `09 55 VV` |
-| `0b` | get play status | `0b 55 01` while A2DP audio plays, `00` when idle |
+| `08 VV` | set volume 0..15 | **VERIFIED**: RMS 0 → 0.00015 (silent), 1 → 0.001, 4 → 0.008, 8 → 0.013, 15 → 0.075. No reply frame and no unsolicited frame afterwards; `09` reads the value back at once. **Lights a panel that is off** within 1 s (previous lighting), no visible change on a lit panel (#4, [audio.md](protocol/audio.md#63-volume-and-play-status-with-the-panel-lit-and-off-verified-2026-11-07-4)) |
+| `09` | get volume | `09 55 VV`. **VERIFIED**; does not light an off panel (#4) |
+| `0b` | get play status | `0b 55 01` while A2DP audio plays, `00` when idle. **VERIFIED**; does not light an off panel (#4) |
 | `0a PP` | play `01` / pause `00` | no audible effect on the A2DP stream; `0b` stays `01`. Probably controls the Evo's own player, not the phone/Mac (no AVRCP) |
 | `12 NN` | next `01` / previous `00` track | no audible effect on the A2DP stream |
 | `05 MM` | source mode: 0 Bluetooth, 1 FM, 2 line-in, 3 SD | `05 55`. Switching to FM caused at most a ~1 s dropout; the A2DP audio kept playing. FM itself was never audible (the Evo probably has no FM radio) |

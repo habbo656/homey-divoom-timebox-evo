@@ -37,6 +37,7 @@ export const ARGUMENT_FIELDS = [
   'fit',
   'url',
   'icon',
+  'volume',
 ] as const;
 export type ArgumentField = (typeof ARGUMENT_FIELDS)[number];
 

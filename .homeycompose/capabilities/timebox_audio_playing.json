@@ -1,0 +1,10 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Audio playing",
+    "de": "Audio läuft"
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor"
+}

@@ -70,6 +70,43 @@ export function decodeCustomPage(reply: Reply): number {
   return d[1];
 }
 
+/** Opcode of `09` (get volume): the answer and any unsolicited volume report are `09 55 VV`. */
+export const VOLUME_OPCODE = 0x09;
+/** Opcode of `0b` (get play status): the answer is `0b 55 PP`. */
+export const PLAY_STATUS_OPCODE = 0x0b;
+/** Highest volume the device reports (`09 55 VV`, VV 0..15, protocol section 5.3). */
+const MAX_REPORTED_VOLUME = 15;
+
+/**
+ * Decode `09 55 VV` (the answer of `09` or an unsolicited volume report) to the volume 0..15. Throws `ProtocolError` if
+ * the reply is not a successful `09` or VV is above 15, and `FrameError` if it has no data byte.
+ */
+export function decodeVolume(reply: Reply): number {
+  if (reply.cmd !== VOLUME_OPCODE) throw new ProtocolError(`not a volume reply: opcode ${reply.cmd.toString(16)}`);
+  if (!reply.ok) throw new ProtocolError('volume reply does not carry status byte 55');
+  const d = reply.data;
+  if (d.length < 1) throw new FrameError('volume reply has no data byte', d);
+  if (d[0] > MAX_REPORTED_VOLUME) throw new ProtocolError(`volume ${d[0]} is above ${MAX_REPORTED_VOLUME}`);
+  return d[0];
+}
+
+/**
+ * Decode `0b 55 PP` (the answer of `0b`) to the play status: `01` true (audio plays), `00` false, any other byte null
+ * (unknown, the caller logs it). Throws `ProtocolError` if the reply is not a successful `0b` and `FrameError` if it has
+ * no data byte.
+ */
+export function decodePlayStatus(reply: Reply): boolean | null {
+  if (reply.cmd !== PLAY_STATUS_OPCODE) {
+    throw new ProtocolError(`not a play status reply: opcode ${reply.cmd.toString(16)}`);
+  }
+  if (!reply.ok) throw new ProtocolError('play status reply does not carry status byte 55');
+  const d = reply.data;
+  if (d.length < 1) throw new FrameError('play status reply has no data byte', d);
+  if (d[0] === 0x01) return true;
+  if (d[0] === 0x00) return false;
+  return null;
+}
+
 /** Opcode of the countdown reports (`71`, section 2): the end of a countdown, `71 55 03 01 01 00`. */
 export const COUNTDOWN_REPORT_OPCODE = 0x71;
 /** Data bytes after the status byte of the countdown end report (`71 55 03 01 01 00`). */
