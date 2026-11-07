@@ -9,7 +9,7 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
     section 5.1) is sent whenever the stored value is pending and can be sent. Condition ids (`WEATHER_CONDITION_IDS`, stable, never translated):
     `clear`, `cloudy`, `thunder`, `rain`, `snow`, `fog`. Temperature: whole degrees Celsius within `TEMPERATURE_RANGE` (-99..99, what the display
     shows; the byte allows -128..127); `parseTemperatureArg` (Flow) rounds (`Math.round`, -0 becomes 0) and throws `ArgumentError` (a `RangeError`) outside the range after
-    rounding or for a non-number (`parseWeatherConditionId` likewise for an unknown condition); `clampTemperature` (Open-Meteo) rounds and clamps instead, logged. Fahrenheit (`2b`) is not supported (follow-up #7).
+    rounding or for a non-number (`parseWeatherConditionId` likewise for an unknown condition); `clampTemperature` (Open-Meteo) rounds and clamps instead, logged. The Flow card also takes °F (see "Temperature unit"); `5f` always carries °C.
     - Sources (#98): the Flow actions `timebox_set_temperature` (`device.setWeather({temperatureC})`) and `timebox_set_weather`
       (`device.setWeather({condition})`) set one part each, the automatic weather (Open-Meteo) always sets both. The last value wins, whoever set it.
       `TimeboxController.setWeather(update: WeatherUpdate, source: 'flow' | 'open-meteo')` first merges the update into the stored weather
@@ -40,8 +40,8 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
       in `invalid`, logged as `[device] invalid <key> setting, using the default`). `TimeboxDevice` configures the updater at the end of `setup()` (after `controller.start()`)
       and `onSettings` reconfigures it when a `weather_*` key changed; `stopController()` (`onDeleted`/`onUninit`) calls `updater.stop()`. The data is Open-Meteo's: the setting hint
       names "Weather data by Open-Meteo.com (CC BY 4.0)".
-    - Flow action `timebox_set_temperature` (title "Set temperature" / "Temperatur setzen"; `titleFormatted` "Set temperature to [[temperature]] °C"): number `temperature`
-      (min -99, max 99, step 1, rounded to whole degrees). Flow action `timebox_set_weather` ("Set weather" / "Wetter setzen"; "Set weather to [[condition]]"):
+    - Flow action `timebox_set_temperature` (title "Set temperature" / "Temperatur setzen"; `titleFormatted` "Set temperature to [[temperature]] [[unit]]"): number `temperature`
+      (min -146, max 210, step 1, rounded to whole degrees; the range of the chosen `unit`, see "Temperature unit"). Flow action `timebox_set_weather` ("Set weather" / "Wetter setzen"; "Set weather to [[condition]]"):
       dropdown `condition` (the six ids). Their hints say which clock page shows the value ("Show temperature" / "Show weather"), that it is sent once the
       Timebox is on and connected together with the last weather (clear if never set) / last temperature (0 °C if never set), to turn off "Show weather" /
       "Show temperature" if that part is not set, and that the automatic weather from Open-Meteo overwrites temperature and weather at each update. The
@@ -50,3 +50,24 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
       (once, when `setWeather` could not send), `weather send failed: <msg>`. Log prefix `[weather]` (WeatherUpdater): `automatic weather on (every N min)`, `automatic weather off`,
       `open-meteo: <t> °C (raw <x>), code <c> -> <cond>`, `open-meteo: temperature <r> °C out of range, clamped to <c> °C`, `open-meteo failed: <msg>; retry in N min`,
       `open-meteo: Homey has no location`, `open-meteo: unknown weather code <c>, not sent`.
+    - Temperature unit (#7; `setTemperatureUnit` in `src/protocol/commands.ts`, `resolveTemperatureUnit` / `defaultTemperatureUnit` in `src/device/weather.ts`,
+      `TimeboxController` unit state): `2b UU` (`00` °C, `01` °F, VERIFIED, [clock.md](../protocol/clock.md#temperature-unit-2b-evidence-7)) sets the unit of the
+      clock's temperature page. The Evo converts the `5f` °C value itself and redraws at once, so **`5f` and Open-Meteo stay in °C** and the app only sends the unit.
+      - Setting `temperature_unit` (last setting of the group "Weather", dropdown `celsius` "°C (Celsius)" / `fahrenheit` "°F (Fahrenheit)", manifest default `celsius`;
+        label "Temperature unit" / "Temperatureinheit"). `resolveTemperatureUnit(raw)` returns `{unit, invalid}` (missing: `celsius` silently, invalid: `celsius` and flagged).
+      - First value: a manifest default cannot depend on Homey's unit system, so `TimeboxDevice.initTemperatureUnit()` (before `setup()`, for new and already paired devices)
+        sets the setting once from `homey.i18n.getUnits()` (`defaultTemperatureUnit`: `imperial` gives `fahrenheit`, anything else `celsius`) and sets the store flag
+        `temperature_unit_initialised`; a later choice is kept. A failure only logs (`[device] could not initialise the temperature unit: <msg>`) and is retried at the next start.
+        Log: `[device] temperature unit initialised: <unit> (<units>)`.
+      - Controller: option `temperatureUnit` (the resolved setting), state `unit`, `unitPending`, `unitVersion`, `unitSending`. `TimeboxController.setTemperatureUnit(unit)` (called, not awaited,
+        by `onSettings` when `temperature_unit` changed) validates, stores, marks pending and flushes. `flushTemperatureUnit(origin)` uses the **same hold as the weather**
+        (`weatherHold()`: not connected, panel off, text, image, noise meter; `2b` does not wake an off panel, but a held unit is simply sent by the 60 s check once the panel is on),
+        `sendBounded` (the ack of a `2b` set was not seen, nothing waits for a reply), a version check (the newest unit wins, also across a send in flight) and the session counter of the weather
+        (a send of an older session never clears the pending flag of the new one). Flush points: the first status of every session (the unit is marked pending, then flushed **before** the weather: the device
+        keeps the unit, but a connect sends it again, which also overrides a unit set in the Divoom phone app), `setTemperatureUnit` and the 60 s interval.
+      - Log prefix `[device]`: `temperature unit -> °C|°F (<setting|connect|held>): 2b 0U`, `temperature unit held (<hold>)` (once, when `setTemperatureUnit` could not send), `temperature unit send failed: <msg>`.
+      - Flow action `timebox_set_temperature` has the dropdown `unit` (`device` "Device setting" / "Geräteeinstellung" first, `celsius` "°C", `fahrenheit` "°F"; `titleFormatted` "Set temperature to
+        [[temperature]] [[unit]]"); the number argument spans -146..210 (the °F range of -99..99 °C, `TEMPERATURE_RANGE_F`), the handler checks the range of the chosen unit. `parseTemperatureUnitArg(value)`:
+        missing (a Flow saved before) is `celsius`, an unknown id is an `ArgumentError` `invalid_choice` with field `unit`. `parseTemperatureArg(value, unit)` rounds, checks the range of the unit
+        (the error carries the °F min/max for °F) and converts °F to whole °C with `Math.round((F - 32) * 5 / 9)`, so the display can differ by 1 °F (76 °F is sent as 24 °C and shown as 75 °F; the hint says so).
+        `device` is resolved by `TimeboxDevice.getTemperatureUnit()` (the setting). The display clamps at 199 °F, irrelevant for weather (-99..99 °C).

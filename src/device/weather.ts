@@ -2,7 +2,8 @@
 // types, the temperature rules, the WMO weather code mapping of Open-Meteo and the weather settings. Pure, no Homey and
 // no link.
 import { ArgumentError, formatArgValue } from './argumentError';
-import { setWeather, WEATHER_TYPES } from '../protocol/commands';
+import { setWeather, TEMPERATURE_UNITS, WEATHER_TYPES } from '../protocol/commands';
+import type { TemperatureUnit } from '../protocol/commands';
 
 /** Condition ids as used by the Flow card (stable, never translated); the index into `WEATHER_TYPES` is the device type `WW`. */
 export const WEATHER_CONDITION_IDS = ['clear', 'cloudy', 'thunder', 'rain', 'snow', 'fog'] as const;
@@ -38,6 +39,31 @@ export type WeatherSource = 'flow' | 'open-meteo';
 /** The temperatures the Flow card accepts and Open-Meteo values are clamped to (whole degrees Celsius). */
 export const TEMPERATURE_RANGE = { min: -99, max: 99 } as const;
 
+/** The temperatures the Flow card accepts in °F: the range that matches `TEMPERATURE_RANGE` (-99..99 °C is -146.2..210.2 °F). */
+export const TEMPERATURE_RANGE_F = { min: -146, max: 210 } as const;
+
+/** The choices of the unit argument of the Flow card "Set temperature": the device setting or a fixed unit. */
+export const TEMPERATURE_UNIT_ARG_IDS = ['device', 'celsius', 'fahrenheit'] as const;
+export type TemperatureUnitArg = (typeof TEMPERATURE_UNIT_ARG_IDS)[number];
+
+/**
+ * Validate the unit argument of the Flow card "Set temperature". A missing value (a Flow saved before the argument
+ * existed) is Celsius, the old behaviour. Throws `ArgumentError` (a `RangeError`) listing the allowed ids otherwise.
+ */
+export function parseTemperatureUnitArg(value: unknown): TemperatureUnitArg {
+  if (value === undefined || value === null) return 'celsius';
+  const id = TEMPERATURE_UNIT_ARG_IDS.find((candidate) => candidate === value);
+  if (!id) {
+    throw new ArgumentError(
+      `unit must be one of ${TEMPERATURE_UNIT_ARG_IDS.join(', ')}, got ${String(value)}`,
+      'invalid_choice',
+      'unit',
+      { value: formatArgValue(value), allowed: TEMPERATURE_UNIT_ARG_IDS.join(', ') },
+    );
+  }
+  return id;
+}
+
 /** Validate a condition id from a Flow card. Throws `ArgumentError` (a `RangeError`) listing the allowed ids. */
 export function parseWeatherConditionId(value: unknown): WeatherCondition {
   const id = WEATHER_CONDITION_IDS.find((candidate) => candidate === value);
@@ -53,28 +79,33 @@ export function parseWeatherConditionId(value: unknown): WeatherCondition {
 }
 
 /**
- * Validate the temperature argument of the Flow card (a finite number, whole degrees Celsius after rounding, within
- * `TEMPERATURE_RANGE`). Returns it rounded; -0 becomes 0. Throws `ArgumentError` (a `RangeError`) for anything else.
+ * Validate the temperature argument of the Flow card (a finite number, whole degrees after rounding, within
+ * `TEMPERATURE_RANGE` in °C or `TEMPERATURE_RANGE_F` in °F) and return it as whole degrees Celsius: a value in °F is
+ * converted and rounded (the Evo shows it converted back, so it can differ by 1 °F, e.g. 76 °F shows as 75 °F). -0
+ * becomes 0. Throws `ArgumentError` (a `RangeError`) for anything else.
  */
-export function parseTemperatureArg(value: unknown): number {
+export function parseTemperatureArg(value: unknown, unit: TemperatureUnit = 'celsius'): number {
+  const fahrenheit = unit === 'fahrenheit';
+  const symbol = fahrenheit ? '°F' : '°C';
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new ArgumentError(
-      `temperature must be a number of degrees Celsius, got ${String(value)}`,
+      `temperature must be a number of degrees ${fahrenheit ? 'Fahrenheit' : 'Celsius'}, got ${String(value)}`,
       'invalid_number',
       'temperature',
       { value: formatArgValue(value) },
     );
   }
+  const range = fahrenheit ? TEMPERATURE_RANGE_F : TEMPERATURE_RANGE;
   const rounded = Math.round(value) + 0; // + 0 turns -0 into 0
-  if (rounded < TEMPERATURE_RANGE.min || rounded > TEMPERATURE_RANGE.max) {
+  if (rounded < range.min || rounded > range.max) {
     throw new ArgumentError(
-      `temperature must be within ${TEMPERATURE_RANGE.min}..${TEMPERATURE_RANGE.max} °C, got ${String(value)}`,
+      `temperature must be within ${range.min}..${range.max} ${symbol}, got ${String(value)}`,
       'invalid_range',
       'temperature',
-      { value: formatArgValue(value), min: TEMPERATURE_RANGE.min, max: TEMPERATURE_RANGE.max },
+      { value: formatArgValue(value), min: range.min, max: range.max },
     );
   }
-  return rounded;
+  return fahrenheit ? Math.round(((rounded - 32) * 5) / 9) + 0 : rounded;
 }
 
 /**
@@ -163,3 +194,22 @@ export function resolveWeatherSettings(settings: Readonly<Record<string, unknown
 }
 
 export const WEATHER_SETTING_KEYS = ['weather_auto', 'weather_interval'] as const;
+
+/** The device setting of the temperature unit (#7): `celsius` or `fahrenheit`. */
+export const TEMPERATURE_UNIT_SETTING = 'temperature_unit';
+export const DEFAULT_TEMPERATURE_UNIT: TemperatureUnit = 'celsius';
+
+/**
+ * The temperature unit described by the device setting `temperature_unit`. A missing value gives `celsius` silently; a
+ * present but invalid value also gives `celsius` and is flagged in `invalid`.
+ */
+export function resolveTemperatureUnit(raw: unknown): { unit: TemperatureUnit; invalid: boolean } {
+  if (raw === undefined || raw === null) return { unit: DEFAULT_TEMPERATURE_UNIT, invalid: false };
+  const unit = TEMPERATURE_UNITS.find((candidate) => candidate === raw);
+  return unit ? { unit, invalid: false } : { unit: DEFAULT_TEMPERATURE_UNIT, invalid: true };
+}
+
+/** The first value of the setting: from Homey's unit system (`homey.i18n.getUnits()`, `metric` or `imperial`), `imperial` gives `fahrenheit`. */
+export function defaultTemperatureUnit(units: unknown): TemperatureUnit {
+  return units === 'imperial' ? 'fahrenheit' : DEFAULT_TEMPERATURE_UNIT;
+}

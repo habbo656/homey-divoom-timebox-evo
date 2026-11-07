@@ -489,6 +489,51 @@ describe('registerTimeboxFlowCards', () => {
     ).rejects.toThrow('not connected text');
   });
 
+  it('set-temperature converts °F to whole °C, "device" follows the device setting, a missing unit is °C (#7)', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const run = actions.get(FLOW_ACTION_SET_TEMPERATURE)!;
+    const seen: unknown[] = [];
+    const unitOf = { current: 'celsius' as 'celsius' | 'fahrenheit' };
+    const device = {
+      setWeather: async (w: unknown) => void seen.push(w),
+      getTemperatureUnit: () => unitOf.current,
+    };
+    await run({ device, temperature: 76, unit: 'fahrenheit' });
+    await run({ device, temperature: 32, unit: 'fahrenheit' });
+    await run({ device, temperature: -146, unit: 'fahrenheit' });
+    await run({ device, temperature: 210, unit: 'fahrenheit' });
+    await run({ device, temperature: 21, unit: 'celsius' });
+    await run({ device, temperature: 21 }); // a Flow saved before the unit argument
+    await run({ device, temperature: 21, unit: null });
+    await run({ device, temperature: 21, unit: 'device' }); // the setting is °C
+    unitOf.current = 'fahrenheit';
+    await run({ device, temperature: 32, unit: 'device' });
+    await run({ device, temperature: 76, unit: 'device' });
+    expect(seen.map((w) => (w as { temperatureC: number }).temperatureC)).toEqual([
+      24, 0, -99, 99, 21, 21, 21, 21, 0, 24,
+    ]);
+  });
+
+  it('set-temperature rejects a temperature outside the range of its unit and an invalid unit before the device is called (#7)', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    let calls = 0;
+    const device = { setWeather: async () => void calls++, getTemperatureUnit: () => 'fahrenheit' as const };
+    const run = actions.get(FLOW_ACTION_SET_TEMPERATURE)!;
+    for (const args of [
+      { temperature: 211, unit: 'fahrenheit' },
+      { temperature: -147, unit: 'fahrenheit' },
+      { temperature: 100, unit: 'celsius' },
+      { temperature: 100 },
+      { temperature: 211, unit: 'device' }, // the setting is °F
+      { temperature: 21, unit: 'kelvin' },
+    ]) {
+      await expect(Promise.resolve().then(() => run({ device, ...args }))).rejects.toThrow(INVALID);
+    }
+    expect(calls).toBe(0);
+  });
+
   it('the weather cards reject bad input before the device is called', async () => {
     const { flow, actions } = fakeFlow();
     registerTimeboxFlowCards(flow, (key) => key);
@@ -637,9 +682,21 @@ describe('localised argument errors', () => {
       'set_temperature 150',
       FLOW_ACTION_SET_TEMPERATURE,
       { temperature: 150 },
-      'Temperatur (°C): 150 liegt außerhalb des erlaubten Bereichs von -99 bis 99.',
+      'Temperatur: 150 liegt außerhalb des erlaubten Bereichs von -99 bis 99.',
     ],
-    ['set_temperature NaN', FLOW_ACTION_SET_TEMPERATURE, { temperature: NaN }, 'Temperatur (°C): NaN ist keine Zahl.'],
+    ['set_temperature NaN', FLOW_ACTION_SET_TEMPERATURE, { temperature: NaN }, 'Temperatur: NaN ist keine Zahl.'],
+    [
+      'set_temperature 211 °F',
+      FLOW_ACTION_SET_TEMPERATURE,
+      { temperature: 211, unit: 'fahrenheit' },
+      'Temperatur: 211 liegt außerhalb des erlaubten Bereichs von -146 bis 210.',
+    ],
+    [
+      'set_temperature unit "kelvin"',
+      FLOW_ACTION_SET_TEMPERATURE,
+      { temperature: 5, unit: 'kelvin' },
+      'Einheit: "kelvin" ist keine gültige Auswahl. Erlaubt sind: device, celsius, fahrenheit.',
+    ],
     [
       'set_weather "sunny"',
       FLOW_ACTION_SET_WEATHER,

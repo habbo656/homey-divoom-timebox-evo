@@ -12,11 +12,12 @@ import {
   setCustomPage,
   setDateTime,
   setHot,
+  setTemperatureUnit as temperatureUnitCommand,
   startCountdown as countdownStartCommand,
   stopCountdown as countdownStopCommand,
   stopNativeText,
 } from '../protocol/commands';
-import type { CountdownTime } from '../protocol/commands';
+import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
 import { toHex } from '../protocol/hex';
 import type { Reply } from '../protocol/replies';
 import {
@@ -209,6 +210,8 @@ export interface TimeboxControllerOptions {
   powerOn?: boolean;
   /** The stored `timebox_channel` capability value: where "power on" returns to while no channel is known yet (default none, then the clock). */
   storedChannel?: ChannelId | null;
+  /** The temperature unit of the clock's temperature page, sent at every connect and when it changes (#7; default °C). */
+  temperatureUnit?: TemperatureUnit;
 }
 
 const rgbIsBlack = (c: Rgb): boolean => c.r === 0 && c.g === 0 && c.b === 0;
@@ -411,6 +414,14 @@ export class TimeboxController {
   private weatherSending = false;
   /** Incremented by the first status of every session: a weather send of an older session must not clear the pending flag of the new one. */
   private weatherSession = 0;
+  /** The unit of the temperature page (#7): the newest setting; the device forgets nothing known, but a session sends it again. */
+  private unit: TemperatureUnit;
+  /** The stored unit has not been (successfully) sent to the device of the current session yet. */
+  private unitPending = false;
+  /** Incremented by every `setTemperatureUnit`; a send that finds a newer version afterwards sends again. */
+  private unitVersion = 0;
+  /** A unit send is in progress (the next one is queued behind it by the version check). */
+  private unitSending = false;
   /** Number of native text sends in progress (frames queued, `textActive` not set yet): the weather waits like for a running text. */
   private textSending = 0;
 
@@ -424,6 +435,7 @@ export class TimeboxController {
     if (firstOfSession && !this.stopped) {
       this.weatherSession++;
       if (this.weather !== null) this.weatherPending = true;
+      this.unitPending = true; // the unit is sent at every connect (#7), the weather needs it afterwards
     }
     this.lastStatus = status;
     if (!this.powerReported && !this.stopped) {
@@ -436,7 +448,10 @@ export class TimeboxController {
     const wroteTile = this.deviceChannel(status.channel, status.visualization);
     if (colorChanged && !wroteTile && this.getChannel() === 'lighting') this.writeTile(this.knownColor);
     this.checkSelfWake(status);
-    if (firstOfSession) void this.flushWeather('connect');
+    if (firstOfSession) {
+      void this.flushTemperatureUnit('connect');
+      void this.flushWeather('connect');
+    }
     if (firstOfSession && !this.stopped) void this.sendHotAtConnect();
   };
   private readonly onConnected = (): void => {
@@ -477,6 +492,7 @@ export class TimeboxController {
     this.clockColor = opts.clockColor ?? DEFAULT_CLOCK_COLOR;
     this.clockStyleOverride = opts.shownClockStyle ?? null;
     this.power = opts.powerOn ?? true;
+    this.unit = opts.temperatureUnit ?? 'celsius';
     // Started from "off": the channel from before off is the stored one, "power on" returns to it without a trigger.
     if (!this.power) this.knownChannel = opts.storedChannel ?? null;
   }
@@ -505,6 +521,7 @@ export class TimeboxController {
     this.armGrace();
     this.timeTimer = setInterval(() => {
       this.timeCheck();
+      void this.flushTemperatureUnit('held');
       void this.flushWeather('held');
     }, this.timeCheckMs);
     this.link.start();
@@ -1850,6 +1867,67 @@ export class TimeboxController {
       }
     } finally {
       this.weatherSending = false;
+    }
+  }
+
+  // --- temperature unit (#7) --------------------------------------------------------------------------------------
+
+  /**
+   * Set the unit of the clock's temperature page (`2b UU`). Like the weather it is state: stored, sent at once when
+   * nothing holds it back (see `weatherHold`), otherwise by the first status of a session or the 60 s check. The Evo
+   * converts the Celsius value of `5f` itself, so only the unit is sent. Never rejects for an offline Timebox; a
+   * send failure is logged and the unit stays pending.
+   */
+  async setTemperatureUnit(unit: TemperatureUnit): Promise<void> {
+    temperatureUnitCommand(unit); // validates first: a RangeError stores and sends nothing
+    if (this.stopped) return;
+    this.unit = unit;
+    this.unitPending = true;
+    this.unitVersion++;
+    const hold = this.weatherHold();
+    if (hold !== null) {
+      this.log(`temperature unit held (${hold})`);
+      return;
+    }
+    await this.flushTemperatureUnit('setting');
+  }
+
+  /** Send the stored unit if it is pending and nothing holds it back; silent otherwise. Never rejects. */
+  private async flushTemperatureUnit(origin: string): Promise<void> {
+    if (this.stopped || !this.unitPending || this.unitSending) return;
+    if (this.weatherHold() !== null) return;
+    this.unitSending = true;
+    let label = origin;
+    try {
+      for (;;) {
+        const version = this.unitVersion;
+        const session = this.weatherSession;
+        const unit = this.unit;
+        const command = temperatureUnitCommand(unit);
+        let sentOk = false;
+        try {
+          await this.sendBounded(command);
+          sentOk = true;
+        } catch (e) {
+          this.log(`temperature unit send failed: ${errorText(e)}`);
+        }
+        if (this.stopped) return;
+        if (sentOk) {
+          this.log(`temperature unit -> ${unit === 'fahrenheit' ? '°F' : '°C'} (${label}): ${toHex(command)}`);
+          // Only a send of the current session counts: after a reconnect the new session still needs the unit.
+          if (version === this.unitVersion && session === this.weatherSession) {
+            this.unitPending = false;
+            return;
+          }
+        } else if (session === this.weatherSession) {
+          return; // stays pending: the next status or check tries again
+        }
+        // A newer unit arrived or a new session started during the send (its own flush was skipped while this one ran).
+        if (!this.unitPending || this.weatherHold() !== null) return;
+        label = session !== this.weatherSession ? 'connect' : 'setting';
+      }
+    } finally {
+      this.unitSending = false;
     }
   }
 

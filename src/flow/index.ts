@@ -13,9 +13,9 @@ import { parseNotificationIconId } from '../device/notification';
 import type { NotificationIconId } from '../device/notification';
 import { parseTextDurationArg, parseTextSpeedId } from '../device/scrollText';
 import type { TextRequest } from '../device/TimeboxController';
-import { parseTemperatureArg, parseWeatherConditionId } from '../device/weather';
+import { parseTemperatureArg, parseTemperatureUnitArg, parseWeatherConditionId } from '../device/weather';
 import type { WeatherUpdate } from '../device/weather';
-import type { CountdownTime } from '../protocol/commands';
+import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 
 export const FLOW_TRIGGER_CONNECTED = 'timebox_connected';
@@ -157,11 +157,17 @@ export interface WeatherSettableDevice {
    * show it; rejects only for invalid input.
    */
   setWeather(update: WeatherUpdate): Promise<void>;
+  /** The unit of the device setting `temperature_unit` (the unit choice "Device setting" of "Set temperature"). */
+  getTemperatureUnit(): TemperatureUnit;
 }
 
-/** The argument of the action "Set temperature": the temperature in °C, validated before use. */
+/**
+ * The arguments of the action "Set temperature": the temperature in the chosen unit (`device` is the device setting, a
+ * missing unit of a Flow saved before is °C), validated before use.
+ */
 export interface SetTemperatureArgs {
   temperature: unknown;
+  unit?: unknown;
 }
 
 /** The argument of the action "Set weather": the condition dropdown id, validated before use. */
@@ -309,9 +315,13 @@ export function registerTimeboxFlowCards(rawFlow: FlowLike, translate: (key: str
     });
   flow
     .getActionCard(FLOW_ACTION_SET_TEMPERATURE)
-    .registerRunListener(async ({ device, temperature }: { device: WeatherSettableDevice } & SetTemperatureArgs) => {
-      await device.setWeather({ temperatureC: parseTemperatureArg(temperature) });
-    });
+    .registerRunListener(
+      async ({ device, temperature, unit }: { device: WeatherSettableDevice } & SetTemperatureArgs) => {
+        const choice = parseTemperatureUnitArg(unit);
+        const resolved = choice === 'device' ? device.getTemperatureUnit() : choice;
+        await device.setWeather({ temperatureC: parseTemperatureArg(temperature, resolved) });
+      },
+    );
   flow
     .getActionCard(FLOW_ACTION_SHOW_NOTIFICATION_ICON)
     .registerRunListener(

@@ -41,3 +41,18 @@ Observation, not verified further: in the style 6 (small) series entered from th
 - D: clock to clock (full_screen to small) is correct. From a panel that is off the small frame shows the same dial; powering on and sending it again fixes it.
 - `46` d15 does not prove what is shown: it reports the requested style while the panel shows the dial, so the app's `clock face confirmed` log line is no evidence for the small style.
 - Workaround in the app: after a switch into the clock with style small from another mode or from off (the confirm result does not matter, a newer switch cancels it, a newer small-clock switch inside the gap schedules its own), the identical `45 00 ...` frame is sent once more 1.5 s later (`CLOCK_RESEND_DELAY_MS`, architecture, "Small clock re-send"). Not applied from another clock face or for the other styles. Limit: when the device itself switches into the small clock (the app sent nothing), or after the device left the clock by itself before a status poll showed it, the dial may show.
+
+## Temperature unit `2b`: evidence (#7)
+
+BLE probe (`scripts/probe/ble.py`, no Homey app holding the link), Evo on the clock `45 00 01 00 01 00 01 00 ff ff ff` (`26 00`, temperature page only, white), 2026-11-07. Photos judged on the runner.
+
+| Check | Result |
+|---|---|
+| Baseline | `2b ff` -> `01 06 00 04 2b 55 00 8a 00 02` (unit 0); `46` d1 `00`; `5f 18 01` shows `24 C` |
+| `2b 01` | `2b ff` -> `2b 55 01` (unit 1); `46` d1 `01`; the page that is already shown turns into `75 F` **without a new `5f`** (the Evo redraws at once, the order of `2b` and `5f` does not matter) |
+| Conversion | **The Evo converts the `5f` value itself**: 24 °C shows `75 F`, -5 °C (`5f fb 08`) shows `23 F`, 99 °C (`5f 63 01`) shows `199 F` (three digits fit the layout; 210 F was expected, so the display clamps at 199 F, inferred from this one point, the exact clamp point was not probed) |
+| `2b 00` | back to `24 C`; `2b ff` -> unit 0; `46` d1 `00` |
+| Persistence | the unit survives a `45 00` clock frame (also after `26 00`) and a BLE disconnect, 10 s wait and reconnect (`2b ff` -> 1, `46` d1 `01` straight away). A power cycle was not tested |
+| Off panel | after the off frame `45 01 ff 00 00 32 00 00 00 00 00`, `2b 00` and `2b 01` leave the panel dark; `46` d0 stays `01`, d8 stays `00`: **`2b` does not wake the panel** |
+
+The app therefore keeps sending `5f` in °C and only sends `2b` (on connect and when the setting changes, #7). The ack of a `2b` set never showed up in the probe output (only the answers to `2b ff`), so the app does not wait for a reply. Open: whether the set is acked, behaviour across a power cycle, the exact clamp point above 99 °C and negative values below -5 °C.

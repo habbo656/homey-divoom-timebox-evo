@@ -8,7 +8,14 @@ import { NOTIFICATION_ICON_IDS } from './device/notification';
 import type { ArgumentField } from './device/argumentError';
 import { TEXT_SPEED_IDS } from './device/scrollText';
 import { COUNTDOWN_MAX_MINUTES } from './protocol/commands';
-import { TEMPERATURE_RANGE, WEATHER_CONDITION_IDS, WEATHER_INTERVAL_IDS } from './device/weather';
+import {
+  TEMPERATURE_RANGE,
+  TEMPERATURE_RANGE_F,
+  TEMPERATURE_UNIT_ARG_IDS,
+  WEATHER_CONDITION_IDS,
+  WEATHER_INTERVAL_IDS,
+} from './device/weather';
+import { TEMPERATURE_UNITS } from './protocol/commands';
 import { FLOW_TRIGGER_COUNTDOWN_ENDED, registerTimeboxFlowCards } from './flow';
 import type { FlowLike } from './flow';
 
@@ -47,6 +54,7 @@ describe('driver manifest (#70)', () => {
       'time_sync',
       'weather_auto',
       'weather_interval',
+      'temperature_unit',
     ]);
     expect(settings.every((n) => n.type === 'group')).toBe(true);
     expect(settings).toHaveLength(2); // Clock, Weather: no "Advanced" group, no "Light" group (#19)
@@ -248,11 +256,28 @@ describe('weather (#30)', () => {
     return found!;
   };
 
-  it('declares Set temperature with the temperature number only', () => {
+  it('declares Set temperature with the temperature number and the unit dropdown (#7)', () => {
     expect(temperatureCard).toBeDefined();
-    expect(temperatureCard!.args!.map((a) => [a.name, a.type])).toEqual([['temperature', 'number']]);
+    expect(temperatureCard!.args!.map((a) => [a.name, a.type])).toEqual([
+      ['temperature', 'number'],
+      ['unit', 'dropdown'],
+    ]);
     const temperature = temperatureCard!.args![0];
-    expect([temperature.min, temperature.max]).toEqual([TEMPERATURE_RANGE.min, TEMPERATURE_RANGE.max]);
+    // the card takes the widest range (°F); the handler checks the range of the chosen unit
+    expect([temperature.min, temperature.max]).toEqual([TEMPERATURE_RANGE_F.min, TEMPERATURE_RANGE_F.max]);
+    expect(TEMPERATURE_RANGE.min).toBeGreaterThanOrEqual(TEMPERATURE_RANGE_F.min);
+    const unit = temperatureCard!.args![1];
+    expect(unit.values!.map((v) => v.id)).toEqual([...TEMPERATURE_UNIT_ARG_IDS]);
+    expect(unit.values!.map((v) => v.label)).toEqual([
+      { en: 'Device setting', de: 'Geräteeinstellung' },
+      { en: '°C', de: '°C' },
+      { en: '°F', de: '°F' },
+    ]);
+    expect(temperatureCard!.titleFormatted).toEqual({
+      en: 'Set temperature to [[temperature]] [[unit]]',
+      de: 'Temperatur auf [[temperature]] [[unit]] setzen',
+    });
+    expect(temperatureCard!.hint!.en).toContain('76 °F shows as 75 °F');
   });
 
   it('declares Set weather with the condition dropdown only', () => {
@@ -309,6 +334,23 @@ describe('weather (#30)', () => {
     expect(auto.hint!.de).toContain('Open-Meteo.com (CC BY 4.0)');
   });
 
+  it('offers the temperature unit as the last setting of the Weather group: celsius by default (#7)', () => {
+    const settings = readJson<SettingNode[]>('driver.settings.compose.json');
+    const weatherIds = settingIds(settings[1].children ?? []);
+    expect(weatherIds[weatherIds.length - 1]).toBe('temperature_unit');
+    const unit = setting('temperature_unit');
+    expect(unit.type).toBe('dropdown');
+    expect(unit.value).toBe('celsius');
+    expect(unit.values!.map((v) => v.id)).toEqual([...TEMPERATURE_UNITS]);
+    expect(unit.label).toEqual({ en: 'Temperature unit', de: 'Temperatureinheit' });
+    expect(unit.values!.map((v) => v.label)).toEqual([
+      { en: '°C (Celsius)', de: '°C (Celsius)' },
+      { en: '°F (Fahrenheit)', de: '°F (Fahrenheit)' },
+    ]);
+    expect(unit.hint!.en).toContain("Homey's unit system");
+    expect(unit.hint!.de).toContain('Einheitensystem');
+  });
+
   it('offers "Show animation pages" after the calendar: a checkbox, off by default, in the Clock group (#106)', () => {
     const settings = readJson<SettingNode[]>('driver.settings.compose.json');
     const clockGroup = settings[0].children ?? [];
@@ -354,9 +396,9 @@ describe('weather (#30)', () => {
     );
     const built = (id: string) => manifest.flow.actions.find((a) => a.id === id)!;
     expect(built('timebox_set_weather').args!.map((a) => a.name)).toEqual(['device', 'condition']);
-    expect(built('timebox_set_temperature').args!.map((a) => a.name)).toEqual(['device', 'temperature']);
+    expect(built('timebox_set_temperature').args!.map((a) => a.name)).toEqual(['device', 'temperature', 'unit']);
     expect(leaves(manifest.drivers[0].settings).map((s) => s.id)).toEqual(
-      expect.arrayContaining(['weather_auto', 'weather_interval']),
+      expect.arrayContaining(['weather_auto', 'weather_interval', 'temperature_unit']),
     );
   });
 });
@@ -598,6 +640,7 @@ describe('locales and argument errors (#108)', () => {
     'timebox_start_countdown.minutes': 'minutes',
     'timebox_start_countdown.seconds': 'seconds',
     'timebox_set_temperature.temperature': 'temperature',
+    'timebox_set_temperature.unit': 'unit',
     'timebox_set_weather.condition': 'condition',
     'timebox_show_notification_icon.icon': 'icon',
   };

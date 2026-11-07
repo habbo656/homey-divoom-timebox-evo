@@ -313,6 +313,20 @@ export function setWeather(o: WeatherPayload): Uint8Array {
   return Uint8Array.of(0x5f, temperature & 0xff, type);
 }
 
+/** Temperature units of `2b UU` (VERIFIED, #7): `00` Celsius, `01` Fahrenheit. */
+export const TEMPERATURE_UNITS = ['celsius', 'fahrenheit'] as const;
+export type TemperatureUnit = (typeof TEMPERATURE_UNITS)[number];
+
+/**
+ * `2b UU`: the unit of the clock's temperature page (protocol section 5.1, #7). The Evo converts the Celsius value of
+ * `5f` itself, redraws at once and keeps the unit across clock frames and reconnects.
+ */
+export function setTemperatureUnit(unit: TemperatureUnit): Uint8Array {
+  const code = TEMPERATURE_UNITS.indexOf(unit); // the index is the wire value: celsius 0, fahrenheit 1
+  if (code < 0) throw new RangeError(`unit must be one of ${TEMPERATURE_UNITS.join(', ')}, got ${String(unit)}`);
+  return Uint8Array.of(0x2b, code);
+}
+
 /** Highest minutes value of the countdown: 99:59 counts down correctly, 100 is clamped to 99:59 (protocol section 5.6). */
 export const COUNTDOWN_MAX_MINUTES = 99;
 

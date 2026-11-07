@@ -57,7 +57,7 @@ describe('localiseError', () => {
   it('localises temperature, colour and choice errors', () => {
     const temperature = range('temperature', 150, -99, 99);
     expect((localiseError(temperature, de) as Error).message).toBe(
-      'Temperatur (°C): 150 liegt außerhalb des erlaubten Bereichs von -99 bis 99.',
+      'Temperatur: 150 liegt außerhalb des erlaubten Bereichs von -99 bis 99.',
     );
     const colour = new ArgumentError('colour', 'invalid_color', 'color', { value: formatArgValue('red') });
     expect((localiseError(colour, de) as Error).message).toBe(

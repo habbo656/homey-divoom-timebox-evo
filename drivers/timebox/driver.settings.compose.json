@@ -192,6 +192,35 @@
             }
           }
         ]
+      },
+      {
+        "id": "temperature_unit",
+        "type": "dropdown",
+        "label": {
+          "en": "Temperature unit",
+          "de": "Temperatureinheit"
+        },
+        "hint": {
+          "en": "The unit of the clock's temperature page. The TimeBox converts the temperature itself. The first time, it is taken from your Homey's unit system.",
+          "de": "Die Einheit der Temperaturseite der Uhr. Die TimeBox rechnet die Temperatur selbst um. Beim ersten Mal wird sie aus dem Einheitensystem deines Homey übernommen."
+        },
+        "value": "celsius",
+        "values": [
+          {
+            "id": "celsius",
+            "label": {
+              "en": "°C (Celsius)",
+              "de": "°C (Celsius)"
+            }
+          },
+          {
+            "id": "fahrenheit",
+            "label": {
+              "en": "°F (Fahrenheit)",
+              "de": "°F (Fahrenheit)"
+            }
+          }
+        ]
       }
     ]
   }
