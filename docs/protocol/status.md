@@ -4,6 +4,8 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 3; opcode rows
 
 ## 3 Status 46: evidence
 
+d1 is the temperature unit (`00` °C, `01` °F, set with `2b UU`): `00` at baseline, `01` after `2b 01`, still `01` after a `45 00` clock frame, after a reconnect and while the panel is off (BLE probe 2026-11-07, #7; [clock.md](clock.md#temperature-unit-2b-evidence-7)).
+
 d0 stays `00` while the clock view shows animation pages (probe #106, section 5.1 "Animation pages": about 190 queries during the series, one per photo), so `46` does not tell the time page from an animation page and there is no cloud drift to react to.
 
 **Power off (`45 01 … 00`), probe 2026-10-06 (#26).** Mac BLE probe with a webcam photo after each step (`scripts/probe/ble.py`,

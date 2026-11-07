@@ -17,7 +17,7 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
   continuously, but only after a device reboot; after our app is installed and pairs, dimming stops working. Our
   commands match RomRider's node-divoom-timebox-evo PROTOCOL.md. Update 2026-10-06: after an Evo reboot the dim through `74` became visible on the owner's Evo, consistent with the clue above (the Evo needs a reboot after the official app/another client touched it). Owner decision: keep `dim` on `74`; the investigation
   (init state after pairing, `32` semantics) is tracked in #49.
-- `2b`/`2d` effects; game keys `17`/`21` (no effect seen in game 0; try other games); the memorial's own display (separate
+- `2d` effects (`2b` is verified, #7); game keys `17`/`21` (no effect seen in game 0; try other games); the memorial's own display (separate
   from the alarm); `46` d2/d18; the `50` notification text display; `5b`/`5c` encoded pictures. Native text SP 0 and above 50, other `6c` header variants and the cause of the one-off link loss (section 5.5) are untested.
 - Resolved by #48: a stale connection left by an earlier connect attempt is handed to the newer attempt and
   disconnected when that attempt's link ends, so it no longer matters whether Homey keeps one connection per peripheral
