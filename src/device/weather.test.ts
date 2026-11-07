@@ -6,10 +6,12 @@ import {
   DEFAULT_WEATHER_INTERVAL_MIN,
   mergeWeather,
   parseTemperatureArg,
+  parseTemperatureUnitArg,
   parseWeatherConditionId,
   resolveTemperatureUnit,
   resolveWeatherSettings,
   TEMPERATURE_RANGE,
+  TEMPERATURE_RANGE_F,
   WEATHER_CONDITION_IDS,
   WEATHER_INTERVAL_IDS,
   weatherCommand,
@@ -183,5 +185,71 @@ describe('temperature unit setting (#7)', () => {
     expect(defaultTemperatureUnit('metric')).toBe('celsius');
     expect(defaultTemperatureUnit(undefined)).toBe('celsius');
     expect(defaultTemperatureUnit('other')).toBe('celsius');
+  });
+});
+
+describe('temperature in °F (#7)', () => {
+  it.each([
+    [76, 24],
+    [32, 0],
+    [-146, -99],
+    [210, 99],
+    [75, 24],
+    [23, -5],
+    [31, -1],
+    [-40, -40],
+    [32.4, 0],
+    [-0.4, -18],
+  ])('converts %s °F to %s °C', (f, c) => {
+    expect(parseTemperatureArg(f, 'fahrenheit')).toBe(c);
+  });
+
+  it('never returns -0', () => {
+    expect(Object.is(parseTemperatureArg(32, 'fahrenheit'), -0)).toBe(false);
+    expect(Object.is(parseTemperatureArg(-0.4, 'celsius'), -0)).toBe(false);
+  });
+
+  it('keeps the whole range of °F within the range of °C', () => {
+    for (let f = TEMPERATURE_RANGE_F.min; f <= TEMPERATURE_RANGE_F.max; f++) {
+      const c = parseTemperatureArg(f, 'fahrenheit');
+      expect(c).toBeGreaterThanOrEqual(TEMPERATURE_RANGE.min);
+      expect(c).toBeLessThanOrEqual(TEMPERATURE_RANGE.max);
+    }
+  });
+
+  it.each([211, -147, 400, 210.6])('rejects %s °F with the °F range', (f) => {
+    expect(() => parseTemperatureArg(f, 'fahrenheit')).toThrow(RangeError);
+    expect(() => parseTemperatureArg(f, 'fahrenheit')).toThrow(/-146\.\.210 °F/);
+    try {
+      parseTemperatureArg(f, 'fahrenheit');
+    } catch (e) {
+      expect((e as { params: unknown }).params).toMatchObject({ min: -146, max: 210 });
+    }
+  });
+
+  it.each(['warm', NaN, undefined, null, Infinity])('rejects %s as a number', (v) => {
+    expect(() => parseTemperatureArg(v, 'fahrenheit')).toThrow(RangeError);
+  });
+
+  it('keeps °C as it was, also without a unit', () => {
+    expect(parseTemperatureArg(21)).toBe(21);
+    expect(parseTemperatureArg(21, 'celsius')).toBe(21);
+    expect(() => parseTemperatureArg(100)).toThrow(/-99\.\.99 °C/);
+    expect(() => parseTemperatureArg(100, 'celsius')).toThrow(RangeError);
+  });
+});
+
+describe('unit argument of the Flow card (#7)', () => {
+  it.each(['device', 'celsius', 'fahrenheit'] as const)('passes %s', (id) => {
+    expect(parseTemperatureUnitArg(id)).toBe(id);
+  });
+
+  it.each([undefined, null])('reads %s (a Flow saved before) as celsius', (v) => {
+    expect(parseTemperatureUnitArg(v)).toBe('celsius');
+  });
+
+  it.each(['kelvin', '', 'F', 0, true])('rejects %j and names the allowed ids', (v) => {
+    expect(() => parseTemperatureUnitArg(v)).toThrow(RangeError);
+    expect(() => parseTemperatureUnitArg(v)).toThrow(/device, celsius, fahrenheit/);
   });
 });

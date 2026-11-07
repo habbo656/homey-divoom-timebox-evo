@@ -27,6 +27,7 @@ export const ARGUMENT_FIELDS = [
   'seconds',
   'temperature',
   'condition',
+  'unit',
   'style',
   'page',
   'channel',

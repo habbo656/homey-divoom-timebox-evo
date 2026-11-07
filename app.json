@@ -784,12 +784,12 @@
           "de": "Temperatur setzen"
         },
         "titleFormatted": {
-          "en": "Set temperature to [[temperature]] °C",
-          "de": "Temperatur auf [[temperature]] °C setzen"
+          "en": "Set temperature to [[temperature]] [[unit]]",
+          "de": "Temperatur auf [[temperature]] [[unit]] setzen"
         },
         "hint": {
-          "en": "Sets the temperature the TimeBox shows on the clock's temperature page. It is shown when \"Show temperature\" is on in the device settings. The temperature is rounded to whole degrees. It is sent once the TimeBox is on and connected, together with the last weather (clear if it was never set). Turn off \"Show weather\" if you do not set the weather. Automatic weather from Open-Meteo overwrites temperature and weather at each update.",
-          "de": "Legt die Temperatur fest, die die TimeBox auf der Temperaturseite der Uhr zeigt. Sie erscheint, wenn in den Geräteeinstellungen „Temperatur anzeigen“ aktiv ist. Die Temperatur wird auf ganze Grad gerundet. Sie wird gesendet, sobald die TimeBox eingeschaltet und verbunden ist, zusammen mit dem zuletzt gesetzten Wetter (klar, falls nie eines gesetzt wurde). Schalte „Wetter anzeigen“ aus, wenn du das Wetter nicht setzt. Das automatische Wetter von Open-Meteo überschreibt Temperatur und Wetter bei jeder Aktualisierung."
+          "en": "Sets the temperature the TimeBox shows on the clock's temperature page. It is shown when \"Show temperature\" is on in the device settings. The temperature is rounded to whole degrees. It is sent once the TimeBox is on and connected, together with the last weather (clear if it was never set). Turn off \"Show weather\" if you do not set the weather. Automatic weather from Open-Meteo overwrites temperature and weather at each update. A temperature in °F is converted to whole °C for the TimeBox, so the display can differ by 1 °F (for example 76 °F shows as 75 °F).",
+          "de": "Legt die Temperatur fest, die die TimeBox auf der Temperaturseite der Uhr zeigt. Sie erscheint, wenn in den Geräteeinstellungen „Temperatur anzeigen“ aktiv ist. Die Temperatur wird auf ganze Grad gerundet. Sie wird gesendet, sobald die TimeBox eingeschaltet und verbunden ist, zusammen mit dem zuletzt gesetzten Wetter (klar, falls nie eines gesetzt wurde). Schalte „Wetter anzeigen“ aus, wenn du das Wetter nicht setzt. Das automatische Wetter von Open-Meteo überschreibt Temperatur und Wetter bei jeder Aktualisierung. Eine Temperatur in °F wird für die TimeBox in ganze °C umgerechnet, daher kann die Anzeige um 1 °F abweichen (zum Beispiel zeigt 76 °F als 75 °F)."
         },
         "args": [
           {
@@ -801,16 +801,47 @@
             "type": "number",
             "name": "temperature",
             "title": {
-              "en": "Temperature (°C)",
-              "de": "Temperatur (°C)"
+              "en": "Temperature",
+              "de": "Temperatur"
             },
-            "min": -99,
-            "max": 99,
+            "min": -146,
+            "max": 210,
             "step": 1,
             "placeholder": {
               "en": "21",
               "de": "21"
             }
+          },
+          {
+            "type": "dropdown",
+            "name": "unit",
+            "title": {
+              "en": "Unit",
+              "de": "Einheit"
+            },
+            "values": [
+              {
+                "id": "device",
+                "label": {
+                  "en": "Device setting",
+                  "de": "Geräteeinstellung"
+                }
+              },
+              {
+                "id": "celsius",
+                "label": {
+                  "en": "°C",
+                  "de": "°C"
+                }
+              },
+              {
+                "id": "fahrenheit",
+                "label": {
+                  "en": "°F",
+                  "de": "°F"
+                }
+              }
+            ]
           }
         ]
       },
