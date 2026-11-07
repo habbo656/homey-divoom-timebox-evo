@@ -152,8 +152,9 @@ export class TimeboxDevice extends Homey.Device {
       await this.localiseErrors(() => controller.setVolume(value));
     });
     this.registerCapabilityListener('volume_mute', async (value: boolean) => {
-      if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
-      await this.controller.setMute(value);
+      const controller = this.controller;
+      if (!controller) throw new Error(this.homey.__('device.error.not_connected'));
+      await this.localiseErrors(() => controller.setMute(value));
     });
 
     await this.migrateClockColor();
