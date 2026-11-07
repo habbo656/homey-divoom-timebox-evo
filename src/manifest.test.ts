@@ -16,7 +16,13 @@ import {
   WEATHER_INTERVAL_IDS,
 } from './device/weather';
 import { TEMPERATURE_UNITS } from './protocol/commands';
-import { FLOW_TRIGGER_COUNTDOWN_ENDED, registerTimeboxFlowCards } from './flow';
+import {
+  FLOW_CONDITION_AUDIO_IS_PLAYING,
+  FLOW_TRIGGER_AUDIO_STARTED,
+  FLOW_TRIGGER_AUDIO_STOPPED,
+  FLOW_TRIGGER_COUNTDOWN_ENDED,
+  registerTimeboxFlowCards,
+} from './flow';
 import type { FlowLike } from './flow';
 
 // The Homey Compose files of the driver are the manifest source: the settings the user sees and the Flow cards that exist.
@@ -144,6 +150,73 @@ describe('driver manifest (#70)', () => {
   it('has no "Sync time now" card', () => {
     const ids = [...flowCompose.triggers, ...flowCompose.conditions, ...flowCompose.actions].map((c) => c.id);
     expect(ids).not.toContain('timebox_sync_time');
+  });
+});
+
+// Volume and audio playing (#4): the capabilities and the cards the user sees.
+describe('volume and audio playing (#4)', () => {
+  interface TitledCard {
+    id: string;
+    title: Record<string, string>;
+    hint?: Record<string, string>;
+    tokens?: unknown[];
+    args?: unknown[];
+  }
+  const flow = readJson<{ triggers: TitledCard[]; conditions: TitledCard[] }>('driver.flow.compose.json');
+
+  it('declares volume_set, volume_mute and timebox_audio_playing in the driver and the built app.json', () => {
+    const capabilities = ['onoff', 'dim', 'light_hue', 'light_saturation', 'timebox_channel'];
+    const audio = ['volume_set', 'volume_mute', 'timebox_audio_playing'];
+    expect(readJson<{ capabilities: string[] }>('driver.compose.json').capabilities).toEqual([
+      ...capabilities,
+      ...audio,
+    ]);
+    const built = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8')) as {
+      drivers: { capabilities: string[] }[];
+      capabilities: Record<string, unknown>;
+    };
+    expect(built.drivers[0].capabilities).toEqual([...capabilities, ...audio]);
+    expect(Object.keys(built.capabilities)).toContain('timebox_audio_playing');
+  });
+
+  it('makes "Audio playing" a read-only boolean sensor in English and German', () => {
+    const capability = JSON.parse(
+      readFileSync(join(__dirname, '..', '.homeycompose', 'capabilities', 'timebox_audio_playing.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(capability).toMatchObject({
+      type: 'boolean',
+      getable: true,
+      setable: false,
+      uiComponent: 'sensor',
+      title: { en: 'Audio playing', de: 'Audio läuft' },
+    });
+  });
+
+  it.each([
+    ['timebox_audio_started', 'Audio started playing', 'Audio-Wiedergabe gestartet'],
+    ['timebox_audio_stopped', 'Audio stopped playing', 'Audio-Wiedergabe gestoppt'],
+  ])('declares the trigger %s without tokens, in English and German', (id, en, de) => {
+    const card = flow.triggers.find((t) => t.id === id);
+    expect(card).toBeDefined();
+    expect(card!.title).toEqual({ en, de });
+    expect(card!.hint!.en).toBeTruthy();
+    expect(card!.hint!.de).toBeTruthy();
+    expect(card!.tokens ?? []).toEqual([]);
+  });
+
+  it('declares the condition "Audio is / is not playing" without arguments, in English and German', () => {
+    const card = flow.conditions.find((c) => c.id === FLOW_CONDITION_AUDIO_IS_PLAYING);
+    expect(card).toBeDefined();
+    expect(card!.title).toEqual({ en: 'Audio !{{is|is not}} playing', de: 'Audio !{{wird|wird nicht}} abgespielt' });
+    expect(card!.hint!.en).toBeTruthy();
+    expect(card!.hint!.de).toBeTruthy();
+    expect(card!.args ?? []).toEqual([]);
+  });
+
+  it('uses the trigger ids the device fires', () => {
+    const ids = flow.triggers.map((t) => t.id);
+    expect(ids).toContain(FLOW_TRIGGER_AUDIO_STARTED);
+    expect(ids).toContain(FLOW_TRIGGER_AUDIO_STOPPED);
   });
 });
 

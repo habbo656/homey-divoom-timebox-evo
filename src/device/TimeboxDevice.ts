@@ -48,8 +48,17 @@ import type { WeatherUpdate } from './weather';
 
 /** The channel picker (`.homeycompose/capabilities/timebox_channel.json`). */
 const CHANNEL_CAPABILITY = 'timebox_channel';
+/** The read-only "Audio playing" capability (`0b` play status, #4). */
+const AUDIO_PLAYING_CAPABILITY = 'timebox_audio_playing';
 /** Capabilities added after the first release: devices paired earlier get them in `onInit`. */
-const MIGRATED_CAPABILITIES = ['onoff', 'light_hue', 'light_saturation'] as const;
+const MIGRATED_CAPABILITIES = [
+  'onoff',
+  'light_hue',
+  'light_saturation',
+  'volume_set',
+  'volume_mute',
+  AUDIO_PLAYING_CAPABILITY,
+] as const;
 /** The device class: the manifest class (#19); devices paired before keep the stored class `other` until migrated. */
 const DEVICE_CLASS = 'light';
 /** Store key of the clock colour (`#RRGGBB`): owned by the app, follows the tile colour picker in clock mode. */
@@ -58,8 +67,6 @@ const CLOCK_COLOR_STORE = 'clock_color';
 const CLOCK_SHOWN_STYLE_STORE = 'clock_shown_style';
 /** Store flag: the temperature unit setting got its first value from Homey's unit system (#7). */
 const TEMPERATURE_UNIT_INITIALISED_STORE = 'temperature_unit_initialised';
-/** The read-only "Audio playing" capability (`0b` play status, #4). */
-const AUDIO_PLAYING_CAPABILITY = 'timebox_audio_playing';
 /** Store key of the volume unmute restores (a device level 1..15, #4): the last non-zero volume seen or sent. */
 const VOLUME_RESTORE_STORE = 'volume_restore';
 
@@ -137,6 +144,16 @@ export class TimeboxDevice extends Homey.Device {
       if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
       const controller = this.controller;
       await this.localiseErrors(() => controller.setChannel(parseChannelId(value)));
+    });
+    // The speaker volume (#4): `volume_set` 0..1 is the device volume 0..15, `volume_mute` is the device volume 0.
+    this.registerCapabilityListener('volume_set', async (value: number) => {
+      if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+      const controller = this.controller;
+      await this.localiseErrors(() => controller.setVolume(value));
+    });
+    this.registerCapabilityListener('volume_mute', async (value: boolean) => {
+      if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+      await this.controller.setMute(value);
     });
 
     await this.migrateClockColor();
@@ -332,6 +349,11 @@ export class TimeboxDevice extends Homey.Device {
   getChannel(): ChannelId | null {
     if (this.controller?.onOtherMode()) return null;
     return this.controller?.getChannel() ?? this.getChannelCapability();
+  }
+
+  /** Used by the Flow condition "Audio is playing" (#4): the last play status read from the Timebox. */
+  isAudioPlaying(): boolean {
+    return this.controller?.isAudioPlaying() ?? false;
   }
 
   /** The value of the channel tile as a channel id (null if never set). */

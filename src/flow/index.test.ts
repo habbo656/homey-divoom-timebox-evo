@@ -16,6 +16,7 @@ import {
   FLOW_ACTION_START_COUNTDOWN,
   FLOW_ACTION_STOP_COUNTDOWN,
   FLOW_ACTION_STOP_TEXT,
+  FLOW_CONDITION_AUDIO_IS_PLAYING,
   FLOW_CONDITION_CHANNEL_IS,
   FLOW_CONDITION_IS_CONNECTED,
   registerTimeboxFlowCards,
@@ -51,10 +52,22 @@ describe('registerTimeboxFlowCards', () => {
   it('registers the is-connected condition, which returns device.isConnected()', async () => {
     const { flow, listeners } = fakeFlow();
     registerTimeboxFlowCards(flow, (key) => key);
-    expect([...listeners.keys()]).toEqual([FLOW_CONDITION_IS_CONNECTED, FLOW_CONDITION_CHANNEL_IS]);
+    expect([...listeners.keys()]).toEqual([
+      FLOW_CONDITION_IS_CONNECTED,
+      FLOW_CONDITION_CHANNEL_IS,
+      FLOW_CONDITION_AUDIO_IS_PLAYING,
+    ]);
     const run = listeners.get(FLOW_CONDITION_IS_CONNECTED)!;
     expect(await run({ device: { isConnected: () => true } })).toBe(true);
     expect(await run({ device: { isConnected: () => false } })).toBe(false);
+  });
+
+  it('registers the audio-is-playing condition, which returns device.isAudioPlaying() (#4)', async () => {
+    const { flow, listeners } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const run = listeners.get(FLOW_CONDITION_AUDIO_IS_PLAYING)!;
+    expect(await run({ device: { isAudioPlaying: () => true } })).toBe(true);
+    expect(await run({ device: { isAudioPlaying: () => false } })).toBe(false);
   });
 
   it('registers the action cards (no sync-time action)', () => {

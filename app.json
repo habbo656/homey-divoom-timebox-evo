@@ -124,6 +124,42 @@
             "filter": "driver_id=timebox"
           }
         ]
+      },
+      {
+        "id": "timebox_audio_started",
+        "title": {
+          "en": "Audio started playing",
+          "de": "Audio-Wiedergabe gestartet"
+        },
+        "hint": {
+          "en": "Triggers when the TimeBox reports that audio started playing on its speaker. The TimeBox is checked every 60 seconds, so it can trigger up to a minute late.",
+          "de": "Wird ausgelöst, wenn die TimeBox meldet, dass über ihren Lautsprecher Audio abgespielt wird. Die TimeBox wird alle 60 Sekunden abgefragt, daher kann es bis zu einer Minute später ausgelöst werden."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=timebox"
+          }
+        ]
+      },
+      {
+        "id": "timebox_audio_stopped",
+        "title": {
+          "en": "Audio stopped playing",
+          "de": "Audio-Wiedergabe gestoppt"
+        },
+        "hint": {
+          "en": "Triggers when the TimeBox reports that audio stopped playing on its speaker. The TimeBox is checked every 60 seconds, so it can trigger up to a minute late.",
+          "de": "Wird ausgelöst, wenn die TimeBox meldet, dass über ihren Lautsprecher kein Audio mehr abgespielt wird. Die TimeBox wird alle 60 Sekunden abgefragt, daher kann es bis zu einer Minute später ausgelöst werden."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=timebox"
+          }
+        ]
       }
     ],
     "conditions": [
@@ -209,6 +245,24 @@
                 }
               }
             ]
+          }
+        ]
+      },
+      {
+        "id": "timebox_audio_is_playing",
+        "title": {
+          "en": "Audio !{{is|is not}} playing",
+          "de": "Audio !{{wird|wird nicht}} abgespielt"
+        },
+        "hint": {
+          "en": "Checks whether audio is playing on the TimeBox speaker, as of the last check (every 60 seconds).",
+          "de": "Prüft, ob über den Lautsprecher der TimeBox Audio abgespielt wird, laut der letzten Abfrage (alle 60 Sekunden)."
+        },
+        "args": [
+          {
+            "type": "device",
+            "name": "device",
+            "filter": "driver_id=timebox"
           }
         ]
       }
@@ -1133,7 +1187,10 @@
         "dim",
         "light_hue",
         "light_saturation",
-        "timebox_channel"
+        "timebox_channel",
+        "volume_set",
+        "volume_mute",
+        "timebox_audio_playing"
       ],
       "capabilitiesOptions": {
         "onoff": {
@@ -1394,6 +1451,16 @@
     }
   ],
   "capabilities": {
+    "timebox_audio_playing": {
+      "type": "boolean",
+      "title": {
+        "en": "Audio playing",
+        "de": "Audio läuft"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor"
+    },
     "timebox_channel": {
       "type": "enum",
       "title": {

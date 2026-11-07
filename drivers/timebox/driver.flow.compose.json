@@ -57,6 +57,28 @@
         "en": "Triggers when the TimeBox reports that a countdown has ended, also one that a mode change, a text or turning the TimeBox off had hidden, and one that was started on the TimeBox itself or in the Divoom app. It does not trigger when you use \"Stop countdown\".",
         "de": "Wird ausgelöst, wenn die TimeBox meldet, dass ein Countdown abgelaufen ist, auch einer, den ein Moduswechsel, ein Text oder das Ausschalten der TimeBox verdeckt hatte, und einer, der an der TimeBox selbst oder in der Divoom-App gestartet wurde. Wird nicht ausgelöst, wenn du \"Countdown beenden\" benutzt."
       }
+    },
+    {
+      "id": "timebox_audio_started",
+      "title": {
+        "en": "Audio started playing",
+        "de": "Audio-Wiedergabe gestartet"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox reports that audio started playing on its speaker. The TimeBox is checked every 60 seconds, so it can trigger up to a minute late.",
+        "de": "Wird ausgelöst, wenn die TimeBox meldet, dass über ihren Lautsprecher Audio abgespielt wird. Die TimeBox wird alle 60 Sekunden abgefragt, daher kann es bis zu einer Minute später ausgelöst werden."
+      }
+    },
+    {
+      "id": "timebox_audio_stopped",
+      "title": {
+        "en": "Audio stopped playing",
+        "de": "Audio-Wiedergabe gestoppt"
+      },
+      "hint": {
+        "en": "Triggers when the TimeBox reports that audio stopped playing on its speaker. The TimeBox is checked every 60 seconds, so it can trigger up to a minute late.",
+        "de": "Wird ausgelöst, wenn die TimeBox meldet, dass über ihren Lautsprecher kein Audio mehr abgespielt wird. Die TimeBox wird alle 60 Sekunden abgefragt, daher kann es bis zu einer Minute später ausgelöst werden."
+      }
     }
   ],
   "conditions": [
@@ -132,6 +154,17 @@
           ]
         }
       ]
+    },
+    {
+      "id": "timebox_audio_is_playing",
+      "title": {
+        "en": "Audio !{{is|is not}} playing",
+        "de": "Audio !{{wird|wird nicht}} abgespielt"
+      },
+      "hint": {
+        "en": "Checks whether audio is playing on the TimeBox speaker, as of the last check (every 60 seconds).",
+        "de": "Prüft, ob über den Lautsprecher der TimeBox Audio abgespielt wird, laut der letzten Abfrage (alle 60 Sekunden)."
+      }
     }
   ],
   "actions": [

@@ -26,6 +26,7 @@ export const FLOW_TRIGGER_AUDIO_STARTED = 'timebox_audio_started';
 export const FLOW_TRIGGER_AUDIO_STOPPED = 'timebox_audio_stopped';
 export const FLOW_CONDITION_IS_CONNECTED = 'timebox_is_connected';
 export const FLOW_CONDITION_CHANNEL_IS = 'timebox_channel_is';
+export const FLOW_CONDITION_AUDIO_IS_PLAYING = 'timebox_audio_is_playing';
 export const FLOW_ACTION_SET_CHANNEL = 'timebox_set_channel';
 export const FLOW_ACTION_SHOW_CLOCK = 'timebox_show_clock';
 export const FLOW_ACTION_SET_LIGHTING = 'timebox_set_lighting';
@@ -49,6 +50,12 @@ export interface ConnectableDevice {
 export interface ChannelReadableDevice {
   /** The channel the device is on, or null while unknown. */
   getChannel(): ChannelId | null;
+}
+
+/** What the condition "Audio is playing" needs from the device argument (#4). */
+export interface AudioReadableDevice {
+  /** Whether the last play status read from the Timebox says audio plays. */
+  isAudioPlaying(): boolean;
 }
 
 /** What the action "Switch channel" needs from the device argument. */
@@ -250,6 +257,9 @@ export function registerTimeboxFlowCards(rawFlow: FlowLike, translate: (key: str
     .registerRunListener(({ device, channel }: { device: ChannelReadableDevice } & ChannelArg) => {
       return device.getChannel() === parseChannelId(channel);
     });
+  flow
+    .getConditionCard(FLOW_CONDITION_AUDIO_IS_PLAYING)
+    .registerRunListener(({ device }: { device: AudioReadableDevice }) => device.isAudioPlaying());
   flow
     .getActionCard(FLOW_ACTION_SET_CHANNEL)
     .registerRunListener(async ({ device, channel }: { device: ChannelSwitchableDevice } & ChannelArg) => {
