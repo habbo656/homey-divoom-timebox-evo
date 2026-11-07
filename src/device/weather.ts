@@ -2,7 +2,8 @@
 // types, the temperature rules, the WMO weather code mapping of Open-Meteo and the weather settings. Pure, no Homey and
 // no link.
 import { ArgumentError, formatArgValue } from './argumentError';
-import { setWeather, WEATHER_TYPES } from '../protocol/commands';
+import { setWeather, TEMPERATURE_UNITS, WEATHER_TYPES } from '../protocol/commands';
+import type { TemperatureUnit } from '../protocol/commands';
 
 /** Condition ids as used by the Flow card (stable, never translated); the index into `WEATHER_TYPES` is the device type `WW`. */
 export const WEATHER_CONDITION_IDS = ['clear', 'cloudy', 'thunder', 'rain', 'snow', 'fog'] as const;
@@ -163,3 +164,22 @@ export function resolveWeatherSettings(settings: Readonly<Record<string, unknown
 }
 
 export const WEATHER_SETTING_KEYS = ['weather_auto', 'weather_interval'] as const;
+
+/** The device setting of the temperature unit (#7): `celsius` or `fahrenheit`. */
+export const TEMPERATURE_UNIT_SETTING = 'temperature_unit';
+export const DEFAULT_TEMPERATURE_UNIT: TemperatureUnit = 'celsius';
+
+/**
+ * The temperature unit described by the device setting `temperature_unit`. A missing value gives `celsius` silently; a
+ * present but invalid value also gives `celsius` and is flagged in `invalid`.
+ */
+export function resolveTemperatureUnit(raw: unknown): { unit: TemperatureUnit; invalid: boolean } {
+  if (raw === undefined || raw === null) return { unit: DEFAULT_TEMPERATURE_UNIT, invalid: false };
+  const unit = TEMPERATURE_UNITS.find((candidate) => candidate === raw);
+  return unit ? { unit, invalid: false } : { unit: DEFAULT_TEMPERATURE_UNIT, invalid: true };
+}
+
+/** The first value of the setting: from Homey's unit system (`homey.i18n.getUnits()`, `metric` or `imperial`), `imperial` gives `fahrenheit`. */
+export function defaultTemperatureUnit(units: unknown): TemperatureUnit {
+  return units === 'imperial' ? 'fahrenheit' : DEFAULT_TEMPERATURE_UNIT;
+}

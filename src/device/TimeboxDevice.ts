@@ -24,7 +24,7 @@ import {
   resolveStoredShownStyle,
 } from './clock';
 import type { ClockSettings } from './clock';
-import type { CountdownTime } from '../protocol/commands';
+import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 import { localiseError } from './argumentError';
 import { onoffSetOnDimDisabled } from './lighting';
@@ -35,7 +35,13 @@ import type { ImageFit } from './image';
 import { downloadImage, loadImageToken, urlForLog } from './imageSource';
 import type { ImageFetchLike } from './imageSource';
 import type { NotificationIconId } from './notification';
-import { resolveWeatherSettings, WEATHER_SETTING_KEYS } from './weather';
+import {
+  defaultTemperatureUnit,
+  resolveTemperatureUnit,
+  resolveWeatherSettings,
+  TEMPERATURE_UNIT_SETTING,
+  WEATHER_SETTING_KEYS,
+} from './weather';
 import type { WeatherUpdate } from './weather';
 
 /** The channel picker (`.homeycompose/capabilities/timebox_channel.json`). */
@@ -48,6 +54,8 @@ const DEVICE_CLASS = 'light';
 const CLOCK_COLOR_STORE = 'clock_color';
 /** Store key of the clock style of the last "Show clock" (a style id): restored at power on; absent = the style of the settings. */
 const CLOCK_SHOWN_STYLE_STORE = 'clock_shown_style';
+/** Store flag: the temperature unit setting got its first value from Homey's unit system (#7). */
+const TEMPERATURE_UNIT_INITIALISED_STORE = 'temperature_unit_initialised';
 
 /**
  * Homey glue around `TimeboxController` (docs/architecture.md, "Device layer"): builds the BLE link of this device,
@@ -129,6 +137,8 @@ export class TimeboxDevice extends Homey.Device {
 
     await this.migrateDeviceClass();
 
+    await this.initTemperatureUnit();
+
     try {
       await this.setup();
     } catch (e) {
@@ -168,6 +178,29 @@ export class TimeboxDevice extends Homey.Device {
     } catch (e) {
       this.error(`[device] could not migrate the clock colour: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+
+  /**
+   * The first value of the setting `temperature_unit` comes from Homey's unit system (#7: metric gives °C, imperial °F).
+   * A manifest default cannot depend on it, so the app sets it once (also for devices paired before); the flag in the
+   * store keeps a later choice. A failure only logs and never stops the setup.
+   */
+  private async initTemperatureUnit(): Promise<void> {
+    try {
+      if (this.getStoreValue(TEMPERATURE_UNIT_INITIALISED_STORE)) return;
+      const units = this.homey.i18n.getUnits();
+      const unit = defaultTemperatureUnit(units);
+      await this.setSettings({ [TEMPERATURE_UNIT_SETTING]: unit });
+      await this.setStoreValue(TEMPERATURE_UNIT_INITIALISED_STORE, true);
+      this.log(`[device] temperature unit initialised: ${unit} (${units})`);
+    } catch (e) {
+      this.error(`[device] could not initialise the temperature unit: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** The unit of the setting `temperature_unit` (°C when missing or invalid). */
+  getTemperatureUnit(): TemperatureUnit {
+    return resolveTemperatureUnit(this.getSetting(TEMPERATURE_UNIT_SETTING)).unit;
   }
 
   /**

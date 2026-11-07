@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { toHex } from '../protocol/hex';
 import {
   clampTemperature,
+  defaultTemperatureUnit,
   DEFAULT_WEATHER_INTERVAL_MIN,
   mergeWeather,
   parseTemperatureArg,
   parseWeatherConditionId,
+  resolveTemperatureUnit,
   resolveWeatherSettings,
   TEMPERATURE_RANGE,
   WEATHER_CONDITION_IDS,
@@ -157,5 +159,29 @@ describe('mergeWeather', () => {
     expect(() => mergeWeather(null, { temperatureC: 1.5 })).toThrow(RangeError);
     expect(() => mergeWeather(null, { temperatureC: 200 })).toThrow(RangeError);
     expect(() => mergeWeather(null, { condition: 'sunny' as never })).toThrow(RangeError);
+  });
+});
+
+describe('temperature unit setting (#7)', () => {
+  it.each([
+    ['celsius', 'celsius'],
+    ['fahrenheit', 'fahrenheit'],
+  ] as const)('resolves %s', (raw, unit) => {
+    expect(resolveTemperatureUnit(raw)).toEqual({ unit, invalid: false });
+  });
+
+  it.each([undefined, null])('uses celsius silently for %s', (raw) => {
+    expect(resolveTemperatureUnit(raw)).toEqual({ unit: 'celsius', invalid: false });
+  });
+
+  it.each(['kelvin', '', 'Celsius', 0, 1, true, {}])('uses celsius and flags %j', (raw) => {
+    expect(resolveTemperatureUnit(raw)).toEqual({ unit: 'celsius', invalid: true });
+  });
+
+  it('takes the first value from the unit system of Homey', () => {
+    expect(defaultTemperatureUnit('imperial')).toBe('fahrenheit');
+    expect(defaultTemperatureUnit('metric')).toBe('celsius');
+    expect(defaultTemperatureUnit(undefined)).toBe('celsius');
+    expect(defaultTemperatureUnit('other')).toBe('celsius');
   });
 });

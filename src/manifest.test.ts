@@ -9,6 +9,7 @@ import type { ArgumentField } from './device/argumentError';
 import { TEXT_SPEED_IDS } from './device/scrollText';
 import { COUNTDOWN_MAX_MINUTES } from './protocol/commands';
 import { TEMPERATURE_RANGE, WEATHER_CONDITION_IDS, WEATHER_INTERVAL_IDS } from './device/weather';
+import { TEMPERATURE_UNITS } from './protocol/commands';
 import { FLOW_TRIGGER_COUNTDOWN_ENDED, registerTimeboxFlowCards } from './flow';
 import type { FlowLike } from './flow';
 
@@ -47,6 +48,7 @@ describe('driver manifest (#70)', () => {
       'time_sync',
       'weather_auto',
       'weather_interval',
+      'temperature_unit',
     ]);
     expect(settings.every((n) => n.type === 'group')).toBe(true);
     expect(settings).toHaveLength(2); // Clock, Weather: no "Advanced" group, no "Light" group (#19)
@@ -309,6 +311,23 @@ describe('weather (#30)', () => {
     expect(auto.hint!.de).toContain('Open-Meteo.com (CC BY 4.0)');
   });
 
+  it('offers the temperature unit as the last setting of the Weather group: celsius by default (#7)', () => {
+    const settings = readJson<SettingNode[]>('driver.settings.compose.json');
+    const weatherIds = settingIds(settings[1].children ?? []);
+    expect(weatherIds[weatherIds.length - 1]).toBe('temperature_unit');
+    const unit = setting('temperature_unit');
+    expect(unit.type).toBe('dropdown');
+    expect(unit.value).toBe('celsius');
+    expect(unit.values!.map((v) => v.id)).toEqual([...TEMPERATURE_UNITS]);
+    expect(unit.label).toEqual({ en: 'Temperature unit', de: 'Temperatureinheit' });
+    expect(unit.values!.map((v) => v.label)).toEqual([
+      { en: '°C (Celsius)', de: '°C (Celsius)' },
+      { en: '°F (Fahrenheit)', de: '°F (Fahrenheit)' },
+    ]);
+    expect(unit.hint!.en).toContain("Homey's unit system");
+    expect(unit.hint!.de).toContain('Einheitensystem');
+  });
+
   it('offers "Show animation pages" after the calendar: a checkbox, off by default, in the Clock group (#106)', () => {
     const settings = readJson<SettingNode[]>('driver.settings.compose.json');
     const clockGroup = settings[0].children ?? [];
@@ -356,7 +375,7 @@ describe('weather (#30)', () => {
     expect(built('timebox_set_weather').args!.map((a) => a.name)).toEqual(['device', 'condition']);
     expect(built('timebox_set_temperature').args!.map((a) => a.name)).toEqual(['device', 'temperature']);
     expect(leaves(manifest.drivers[0].settings).map((s) => s.id)).toEqual(
-      expect.arrayContaining(['weather_auto', 'weather_interval']),
+      expect.arrayContaining(['weather_auto', 'weather_interval', 'temperature_unit']),
     );
   });
 });
