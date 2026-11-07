@@ -40,8 +40,8 @@ _Part of [architecture](../architecture.md); moved from "Weather (#30)" (#120)._
       in `invalid`, logged as `[device] invalid <key> setting, using the default`). `TimeboxDevice` configures the updater at the end of `setup()` (after `controller.start()`)
       and `onSettings` reconfigures it when a `weather_*` key changed; `stopController()` (`onDeleted`/`onUninit`) calls `updater.stop()`. The data is Open-Meteo's: the setting hint
       names "Weather data by Open-Meteo.com (CC BY 4.0)".
-    - Flow action `timebox_set_temperature` (title "Set temperature" / "Temperatur setzen"; `titleFormatted` "Set temperature to [[temperature]] °C"): number `temperature`
-      (min -99, max 99, step 1, rounded to whole degrees). Flow action `timebox_set_weather` ("Set weather" / "Wetter setzen"; "Set weather to [[condition]]"):
+    - Flow action `timebox_set_temperature` (title "Set temperature" / "Temperatur setzen"; `titleFormatted` "Set temperature to [[temperature]] [[unit]]"): number `temperature`
+      (min -146, max 210, step 1, rounded to whole degrees; the range of the chosen `unit`, see "Temperature unit"). Flow action `timebox_set_weather` ("Set weather" / "Wetter setzen"; "Set weather to [[condition]]"):
       dropdown `condition` (the six ids). Their hints say which clock page shows the value ("Show temperature" / "Show weather"), that it is sent once the
       Timebox is on and connected together with the last weather (clear if never set) / last temperature (0 °C if never set), to turn off "Show weather" /
       "Show temperature" if that part is not set, and that the automatic weather from Open-Meteo overwrites temperature and weather at each update. The
