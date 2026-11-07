@@ -6,6 +6,7 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
 
 - Long-run link stability on the Homey is no longer open (#36, `docs/testing/stability.md`: 220 min without a disconnect). Still unmeasured: the BLE MTU on the Homey (20-byte writes work) and what happens to the link when the Evo is power-cycled or leaves the range during a long run (owner cases M1, M2).
 
+- Unsolicited `31 55 32`/`45 55 01` frames (#4, [status.md](status.md#unsolicited-frames-after-a-lighting-power-change-4)): measured only after `45 01` power changes; other triggers are untested.
 - Audio: what `0a`/`12` control (the Evo's own player? an AVRCP variant?); whether `a5`/`a3` previews need other args.
 - `46` bytes d1, d2, d7..d9, d11, d15+; the ZZ byte in `44 55 ZZ`.
 - `26 0X` (#106): whether it also affects other Divoom gallery behaviour (cloud channel `45 02`) is untested; the source of the opcode name ("hot") is unverified; the factory value after a device reset is assumed `01` (it was `01` before the first probe). The photo series do not tell whether the `channel <- device: cloud` drift seen in the UAT log is a separate effect: `46` d0 stayed `00` throughout on the Mac.
@@ -33,7 +34,7 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
 - Does the link stay up for hours on Homey's BLE stack? (The Mac held 30 min without keep-alives, see 1.1.)
 - Static image `44` (#31): persistence (> 75 s), `46` d0 unchanged after `44`, the end of a native text by `44` and the end of the image by a text, a mode command, power off and a mode change made at the device are measured (hardware test #31). Still open: the effect of `5f`, `26 0X`, `74 32` and `18` on a shown image, `44` over a countdown or with the panel off (M3, M5, M6 in [images.md](images.md#static-image-behaviour-31)); branch B2 stays the conservative assumption.
 - Milestone 1.2.0 (planned 2026-10-18, answered by the issues' hardware probes): noise meter `72 02 01` (#3; open until the #3 hardware test: d0 under the noise meter, see [status.md](status.md); also open: the effect of `5f`, `26` and native text on it); unsolicited `09`
-  frames on a volume change at the phone (#4); the full `50 TT` icon list beyond TT 1 and 3 (#5; code table with status in [notifications.md](notifications.md), photographed in the #5 hardware test); whether the Evo stays reachable over BLE after
+  frames on a volume change at the phone (#4; the research of 2026-11-07 found none after `08` from Homey, section 6.3 in [audio.md](audio.md); the phone/Mac case needs an A2DP stream and stays open, the app polls `09` every 60 s meanwhile, [architecture/audio.md](../architecture/audio.md)); the full `50 TT` icon list beyond TT 1 and 3 (#5; code table with status in [notifications.md](notifications.md), photographed in the #5 hardware test); whether the Evo stays reachable over BLE after
   the auto power-off `ab` fires (owner-attended test), what `46` reports then and during a sleep light `40`, and what a sleep-light stop returns to; whether the sleep light's mode, FM and volume bytes (MO, FL FH, VV) change the speaker
   volume or play sound (interacts with #4); whether startup channel values 4–6 of `8a 01 CC` are custom pages 0–2 (#6).
 - Self-wake while off (#29, [status.md](status.md#spontaneous-power-on-after-off-29)): the firmware lights an off panel by
