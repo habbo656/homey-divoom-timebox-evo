@@ -31,4 +31,23 @@ Over BLE, Homey can **set and read the volume** (`08`/`09`, 0..15, verified by m
 (`0b`). Play/pause and next/previous (`0a`, `12`) do not control the A2DP source. Source modes, FM and the sound previews
 had no audible effect. Useful Homey audio features are therefore limited to a volume capability (plus a "playing"
 indicator). Because of the AVRCP sync, a volume set from Homey also moves the volume slider of the connected phone or
-computer, and the other way round. Poll `09` to keep the capability in sync; unsolicited `09` frames on such a change were not observed (open question, #4).
+computer, and the other way round. Poll `09` to keep the capability in sync; unsolicited `09` frames after `08` were not observed (section 6.3). Unsolicited `09` frames on a volume change at the phone are still unmeasured.
+
+### 6.3 Volume and play status with the panel lit and off: VERIFIED 2026-11-07 (#4)
+
+Hardware research for #4 (Mac BLE probe, webcam photos, nothing else holding the link). Baseline: lighting mode, red
+`ff0000`, brightness `32`, panel on, volume `05`, play status `00`. All changed values were restored (volume `05`, lighting
+as before).
+
+| Probe | Result |
+|---|---|
+| `09` and `0b` while the panel is off (twice each, 1 s apart) | replies `09 55 03`, `0b 55 00`, no other frame. **They do not light the panel**: photo dark, `46` d8 stays `00`. The status poll can read both while the panel is off |
+| `08 03` on the lit panel | no reply, no unsolicited frame within 3.5 s, also none for a repeated `08 03`. **No overlay or visible change** on the panel (photos 0.5 s and 3.5 s). `46` unchanged (d0 `01`, d8 `01`) |
+| `08 05` while the panel is off | no reply, no unsolicited frame within 6 s. **The panel lights within 1 s** with the previous lighting (red, whole panel; first photo at 1 s, so it may be earlier). `46` d8 reads `01`, d0 `01`, colour and brightness unchanged |
+| `09` sent right after `08` (no wait) | returns the new value (`08 03` then `09` gave `03`, `08 05` then `09` gave `05`): the read-back delay is below about 0.1 s |
+| `45 01 … 00` / `45 01 … 01` (lighting off / on) | three unsolicited frames after each, see [status.md](status.md#unsolicited-frames-after-a-lighting-power-change-4) |
+
+So there is no echo or push after `08`: the `09` read-back is the only confirm, and no echo filter is needed. `08` cannot
+change the volume without lighting a panel that is off. App behaviour (owner decision, option b): the app sends `08`
+anyway and the self-wake check of the next poll switches the panel off again (up to 60 s lit), see
+[architecture/audio.md](../architecture/audio.md).

@@ -29,6 +29,15 @@ lit by `74 3c`). It was `01` in the clock view before the first off. So d8 reads
 not a reliable on/off flag: `74` lights the panel without changing it, and what a device-side power button does to it is
 untested. The app keeps the power state itself (#26, see below) and uses d8 only to detect the self-wake while off (#29, below).
 
+### Unsolicited frames after a lighting power change (#4)
+
+Hardware research for #4, 2026-11-07 (Mac BLE probe). After `45 01 ff 00 00 32 00 00 00 00 00` (lighting off) and after
+`45 01 ff 00 00 32 00 01 00 00 00` (lighting on) the device pushed the same three frames, in this order, besides the reply
+to the command: `31 55 32 c2 00`, `45 55 01 a5 00`, `31 55 32 c2 00` (shown as data after the opcode; `45 55 01` is the
+normal `45` acknowledgement; the power-off table above already lists `31 55 32` as unsolicited). Measured only for the
+`45 01` power change, on and off; whether other opcodes send `31` or `45` pushes is untested. The app does not use them
+(the `46` status, not these frames, is its source).
+
 ### Spontaneous power on after off (#29)
 
 Hardware research, 2026-11-05 (CET), Mac BLE probe with webcam photos in `.hwtest/main/` (not in the repository). The unit
