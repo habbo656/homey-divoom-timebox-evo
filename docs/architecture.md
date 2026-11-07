@@ -3,7 +3,7 @@
 Homey app (SDK v3, TypeScript strict, Homey Compose) for the Divoom Timebox Evo. The app is being rebuilt on the
 verified protocol (ADR 0005, `docs/roadmap.md`). Milestone 0.2.0 (core: skeleton, protocol, BLE transport, pairing,
 device layer with `dim`, availability, Flow cards and automatic time sync, #18-#23, #46) is implemented; milestone 0.3.0
-(display and modes: mode picker #24 (reduced to clock, lighting, custom in #68), clock face #25, power and lighting #26, custom pages #27)
+(display and modes: mode picker #24 (reduced to clock, lighting, custom in #68; noise meter #3, equalizer #2), clock face #25, power and lighting #26, custom pages #27)
 is accepted (2026-10-07); milestone 0.4.0 (native text #28, weather and temperature #30/#98, countdown #33) is accepted (2026-10-07); milestone 0.5.0
 (images: static image from a token or URL #31 is implemented; the "Countdown ended" Flow trigger #101, added by the owner on 2026-10-08, is implemented and hardware-tested, 2026-10-08) is accepted (2026-10-08; follow-up #129); milestone 1.0.0 (App Store release: store assets #92/#142, stability #36, store readiness #37, release process #38, "TimeBox" spelling #133) is accepted (2026-10-16); milestone 1.1.0 (bugfixes after the release: #147, #141/#151, #125, #48, #62, #60, #129, #94) is accepted (2026-10-18) (module status table below).
 
@@ -66,7 +66,7 @@ Each area file holds the verbatim text of its former section; code comments cite
 Protocol modules built so far: `errors.ts` (`ProtocolError`, `FrameError`), `hex.ts` (`fromHex`, `toHex`),
 `envelope.ts` (`envelope(payload, seq)`, `SequenceCounter` — one instance per connection, `reset()` on connect),
 `replies.ts` (`splitFrames`, `decodeSppFrame`, `parseReply`), `validate.ts` (argument checks: `intInRange`, `u8`, `le16`,
-`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `startNoiseMeter`, `notificationIcon`; return
+`rgb`, `oneOf`, all throw `RangeError`), `commands.ts` (`setBrightness`, `queryStatus`, `setChannel`, `setLighting`, `setCustomPage`, `queryCustomPage`, `setClock`, `setHot`, `setDateTime`, `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `startNoiseMeter`, `setVisualization`, `notificationIcon`; return
 the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `DeviceStatus`, `decodeCustomPage(reply)` -> raw page byte of `bd 55 17 PP`, `isCountdownEnd(reply)` for the unsolicited `71 55 03 01 01 00`, `isCustomPageReply(reply)` as the `accept` filter of the `bd 17 ff` read).
 
 ## Module status
@@ -77,7 +77,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/device/TimeboxDriver.ts` | `onPair` wiring | #46 | done (pairing part of #22) |
 | `src/device/pairing.ts` | candidate selection, verify, pair session events | #46 | done (pairing part of #22) |
 | `src/device/TimeboxController.ts` | Homey-free device logic: `dim` (held while the panel is off and sent at power on, #62), power (`onoff`) and lighting colour, channel switching and sync, noise meter tracking (#3, noise shadow), clock face (incl. the small clock re-send, `CLOCK_RESEND_DELAY_MS`), native text (`showText`, `stopText`), countdown (`startCountdown`, `stopCountdown`, the "countdown ended" report `countdownReport`, which also sets `onoff` true when the end display lights a panel that was off, #125), the off sent again when the panel lights itself while off (`checkSelfWake`, #29), static image (`showImage`, `showImageFrom`), notification icon (`showNotificationIcon`, #5), weather state (`setWeather`, hold/flush), status sync, availability with grace, fixed status poll, time sync | #5, #22, #23, #24, #25, #26, #27, #28, #30, #31, #33, #62, #88, #101, #125, #141, #151, #29 | done |
-| `src/device/channel.ts` | pure channel model: ids, `46` d0 codes (the noise meter has none), `channelCommand`, custom page ids, `otherModeName` | #24, #27, #68, #3 | done |
+| `src/device/channel.ts` | pure channel model: ids, `46` d0 codes (the noise meter has none; the equalizer is d0 `04` with d9 `00`), `channelCommand`, custom page ids, `otherModeName` | #24, #27, #68, #3, #2 | done |
 | `src/device/lighting.ts` | pure lighting model: hue/saturation <-> RGB, `powerOffCommand` | #26 | done |
 | `src/device/clock.ts` | pure clock face model: style ids, hex colour parsing, `resolveClockSettings` (incl. `clock_animations`), `resolveStoredClockColor`, `resolveStoredShownStyle`, `CLOCK_HOUR24` | #25, #85 | done |
 | `src/device/timeSync.ts` | pure time sync helpers: local time in an IANA zone, UTC offset, `autoSyncReason` | #23 | done |
@@ -94,7 +94,7 @@ the payload, wrap with `envelope()`), `status.ts` (`decodeStatus(reply)` -> `Dev
 | `src/protocol/envelope.ts` | `FE EF AA 55` envelope + sequence counter | #19 | done |
 | `src/protocol/replies.ts` | SPP frame splitting, reply/notification parsing | #19 | done |
 | `src/protocol/errors.ts`, `hex.ts` | error types, hex helpers | #19 | done |
-| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`, `startNoiseMeter`, `notificationIcon`), argument validation | #20, #28, #30, #31, #33, #106, #3, #5 | done |
+| `src/protocol/commands.ts`, `validate.ts` | verified command builders (incl. `nativeText`, `stopNativeText`, `setWeather`, `startCountdown`, `stopCountdown`, `staticImage`, `setHot`, `startNoiseMeter`, `setVisualization`, `notificationIcon`), argument validation | #20, #28, #30, #31, #33, #106, #3, #5, #2 | done |
 | `src/protocol/status.ts` | status `46` decoding, `bd 17` custom page decoding, `isCountdownEnd` (`71 55 03 01 01 00`) and `isCustomPageReply` | #20, #101 | done |
 | `src/transport/Transport.ts`, `errors.ts`, `chunk.ts` | transport interface + `TransportError`, manager errors, 20-byte chunking | #21 | done |
 | `src/transport/ConnectionManager.ts` | queue, request/reply (optional `accept` filter), polling, reconnect backoff, `connectFailed` event, timing option validation | #21, #22, #101, #48 | done |

@@ -94,7 +94,7 @@ export class FakeSurface implements DeviceSurface {
  * Simulates the Evo: `74 BB` sets the brightness and reports it unsolicited (`46` and `31`), `45` switches the channel
  * and powers the panel on, except `45 01 … 00`, which is the off command (d0 `01`, power false; `power` is reported in d8)
  * (`45 01 RRGGBB …` also stores the colour, the full `45 00 …` the clock style and colour) and is answered with `45 55 NN`, `46` is
- * answered with the channel and colour of the state (d9, the last visualization, is a constant), `18` (time) is recorded in `times` (the 9-byte
+ * answered with the channel and colour of the state (d9, the last visualization, starts at 3 and is set by `45 04 NN`), `18` (time) is recorded in `times` (the 9-byte
  * payload) and acknowledged with `18 55` unless `ackTime` is false. `bd 17 PP` selects the custom page (stored in
  * `customPage`, no reply, as on the Evo) and `bd 17 ff` is answered with `bd 55 17 PP` unless `answerPage` is false.
  * `50 TT` (notification icon) is recorded in `icons` and answered with `50 55` unless `answerIcon` is false.
@@ -103,6 +103,8 @@ export function evo(t: MockTransport, initial = 50) {
   const state = {
     brightness: initial,
     channel: 0,
+    /** The last visualization index (d9 of `46`), set by `45 04 NN`. */
+    visualization: 3,
     /** The power byte of the last `45` command (d8 of `46`). */
     power: true,
     color: [0, 0, 0],
@@ -127,7 +129,7 @@ export function evo(t: MockTransport, initial = 50) {
       4: state.color[1],
       5: state.color[2],
       8: state.power ? 1 : 0,
-      9: 3,
+      9: state.visualization,
       12: state.clockColor[0],
       13: state.clockColor[1],
       14: state.clockColor[2],
@@ -147,6 +149,7 @@ export function evo(t: MockTransport, initial = 50) {
     }
     if (op === 0x45) {
       state.channel = w[12];
+      if (w[12] === 0x04) state.visualization = w[13];
       state.power = !(w[12] === 0x01 && w[18] === 0x00);
       if (w[12] === 0x01) state.color = [w[13], w[14], w[15]];
       if (w[12] === 0x00 && w.length > 19) {

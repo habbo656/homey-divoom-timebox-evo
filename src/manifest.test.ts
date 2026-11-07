@@ -100,6 +100,25 @@ describe('driver manifest (#70)', () => {
     }
   });
 
+  it('offers the equalizer in the mode picker and both mode dropdowns with English and German labels (#2)', () => {
+    type Value = { id: string; title?: Record<string, string>; label?: Record<string, string> };
+    const capability = JSON.parse(
+      readFileSync(join(__dirname, '..', '.homeycompose', 'capabilities', 'timebox_channel.json'), 'utf8'),
+    ) as { values: Value[] };
+    const flow = readJson<{
+      conditions: { args?: { values?: Value[] }[] }[];
+      actions: { args?: { values?: Value[] }[] }[];
+    }>('driver.flow.compose.json');
+    const dropdowns = [...flow.conditions, ...flow.actions]
+      .flatMap((card) => card.args ?? [])
+      .flatMap((arg) => arg.values ?? [])
+      .filter((value) => value.id === 'equalizer');
+    expect(dropdowns).toHaveLength(2);
+    for (const value of [...dropdowns, capability.values.find((v) => v.id === 'equalizer')]) {
+      expect(value?.label ?? value?.title).toEqual({ en: 'Equalizer', de: 'Equalizer' });
+    }
+  });
+
   it('declares the "Countdown ended" trigger without tokens, in English and German (#101)', () => {
     const triggers = readJson<{
       triggers: { id: string; title: Record<string, string>; hint?: Record<string, string>; tokens?: unknown[] }[];

@@ -2,12 +2,12 @@
 // codes of `46` d0 and the command that switches to a mode. Pure, no Homey and no link.
 import { ArgumentError, formatArgValue } from './argumentError';
 import type { ArgumentField } from './argumentError';
-import { setChannel, setClock, setLighting, startNoiseMeter } from '../protocol/commands';
+import { setChannel, setClock, setLighting, setVisualization, startNoiseMeter } from '../protocol/commands';
 import type { DeviceStatus, Rgb } from '../protocol/status';
 import type { ClockFace } from './clock';
 
 /** The enum values of the capability (stable ids, never translated). */
-export const CHANNEL_IDS = ['clock', 'lighting', 'custom', 'noise_meter'] as const;
+export const CHANNEL_IDS = ['clock', 'lighting', 'custom', 'noise_meter', 'equalizer'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
 /** A mode with a device code in `46` d0. The noise meter has none: the device reports no known code under it. */
@@ -18,22 +18,32 @@ const CODES: Record<CodedChannelId, number> = {
   clock: 0x00,
   lighting: 0x01,
   custom: 0x05,
+  equalizer: 0x04,
 };
+
+/** The visualization index (`46` d9, `45 04 NN`) of the spectrum bars, the one visualization the app offers as Equalizer. */
+const EQUALIZER_VISUALIZATION = 0;
 
 export function channelCode(id: CodedChannelId): number {
   return CODES[id];
 }
 
-/** The mode of a `46` d0 code, or null for a code that is not one of the three coded modes (cloud, visualizer, text, games, alarms, ...). Never the noise meter. */
-export function channelFromCode(code: number): CodedChannelId | null {
+/**
+ * The mode of a `46` d0 code and d9 (the last visualization index), or null for a code that is not one of the coded
+ * modes (cloud, another visualization, text, games, alarms, ...). `04` is the equalizer only with d9 `00` (the spectrum
+ * bars). Never the noise meter.
+ */
+export function channelFromCode(code: number, visualization: number): CodedChannelId | null {
   const coded = Object.keys(CODES) as CodedChannelId[];
-  return coded.find((id) => CODES[id] === code) ?? null;
+  const id = coded.find((candidate) => CODES[candidate] === code) ?? null;
+  if (id === 'equalizer' && visualization !== EQUALIZER_VISUALIZATION) return null;
+  return id;
 }
 
-/** The name of a mode that the device can show but the app does not offer: `02` cloud, `04` visualizer; null for any other code. */
-export function otherModeName(code: number): 'cloud' | 'visualizer' | null {
+/** The name of a mode that the device can show but the app does not offer: `02` cloud, `04` with d9 other than `00` visualizer; null for any other code. */
+export function otherModeName(code: number, visualization: number): 'cloud' | 'visualizer' | null {
   if (code === 0x02) return 'cloud';
-  if (code === 0x04) return 'visualizer';
+  if (code === 0x04 && visualization !== EQUALIZER_VISUALIZATION) return 'visualizer';
   return null;
 }
 
@@ -90,7 +100,8 @@ export interface ChannelOverride {
  *   an `lighting` override replaces the colour (as given; #26);
  * - clock: the full form `45 00 HH TT 01 WW EE CC RR GG BB` built from `clock` (the clock face; #25);
  * - custom: `45 05` (the custom page is a second command, see `setCustomPage`);
- * - noise_meter: `72 02 01`.
+ * - noise_meter: `72 02 01`;
+ * - equalizer: `45 04 00` (the spectrum bars).
  */
 export function channelCommand(
   id: ChannelId,
@@ -116,6 +127,8 @@ export function channelCommand(
       return setClock(clock);
     case 'noise_meter':
       return startNoiseMeter();
+    case 'equalizer':
+      return setVisualization(EQUALIZER_VISUALIZATION);
     default:
       return setChannel(CODES[id]);
   }

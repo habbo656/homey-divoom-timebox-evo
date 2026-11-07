@@ -96,7 +96,7 @@ describe('setChannel', () => {
     r.t.autoReply = (w) => (opcodeOf(w) === 0x46 ? [statusFrame(50, 0x0a)] : undefined);
     await r.c.setChannel('lighting');
     expect(r.surface.logs).toContain('[device] channel mismatch: device code 10, requested lighting');
-    r.t.autoReply = (w) => (opcodeOf(w) === 0x46 ? [statusFrame(50, 4)] : undefined);
+    r.t.autoReply = (w) => (opcodeOf(w) === 0x46 ? [statusFrame(50, 4, { 9: 3 })] : undefined);
     await r.c.setChannel('clock');
     expect(r.surface.logs).toContain('[device] channel mismatch: device visualizer, requested clock');
     r.t.autoReply = (w) => (opcodeOf(w) === 0x46 ? [statusFrame(50, 0)] : undefined);
@@ -296,8 +296,8 @@ describe('modes that are not offered (cloud 02, visualizer 04)', () => {
   it('logs the next removed mode once more but neither clears again nor fires', async () => {
     const r = await online(0);
     r.t.emitData(statusFrame(50, 2));
-    r.t.emitData(statusFrame(50, 4));
-    r.t.emitData(statusFrame(50, 4));
+    r.t.emitData(statusFrame(50, 4, { 9: 3 }));
+    r.t.emitData(statusFrame(50, 4, { 9: 3 }));
     expect(r.surface.channelClears).toBe(1);
     expect(r.surface.channelChanges).toEqual([]);
     expect(otherLogs(r)).toEqual([
@@ -316,7 +316,7 @@ describe('modes that are not offered (cloud 02, visualizer 04)', () => {
     expect(r.surface.channelChanges).toEqual(['clock']);
     expect(r.c.getChannel()).toBe('clock');
     expect(r.c.onOtherMode()).toBe(false);
-    r.t.emitData(statusFrame(50, 4));
+    r.t.emitData(statusFrame(50, 4, { 9: 3 }));
     r.t.emitData(statusFrame(50, 1));
     expect(r.surface.channelChanges).toEqual(['clock', 'lighting']);
   });

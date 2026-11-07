@@ -25,10 +25,19 @@ export function queryStatus(): Uint8Array {
 
 /**
  * `45 NN`: switch to the clock (`00`), cloud (`02`), custom (`05`) or scoreboard (`06`) channel (VERIFIED). Lighting
- * (`01`) and visualization (`04`) need further arguments and `03` does nothing on the Evo, so they are rejected here.
+ * (`01`) and visualization (`04`, see `setVisualization`) need further arguments and `03` does nothing on the Evo, so
+ * they are rejected here.
  */
 export function setChannel(channel: number): Uint8Array {
   return Uint8Array.of(0x45, oneOf('channel', channel, SIMPLE_CHANNELS));
+}
+
+/** Highest visualization index `NN` of `45 04 NN` (VERIFIED, protocol section 5.1: 12 visualizations, 0..11). */
+export const MAX_VISUALIZATION = 11;
+
+/** `45 04 NN`: switch to the visualization channel with visualization `NN` 0..11 (VERIFIED); `00` is the spectrum bars. */
+export function setVisualization(index: number): Uint8Array {
+  return Uint8Array.of(0x45, 0x04, intInRange('visualization', index, 0, MAX_VISUALIZATION));
 }
 
 export interface Lighting {
