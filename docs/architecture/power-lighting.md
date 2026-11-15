@@ -23,7 +23,12 @@ _Part of [architecture](../architecture.md); moved from "Power and lighting" (#1
       adopted). While off, reports with that code are ignored. Any other known d0 means the panel was switched on at the
       device: `onoff` is set true (`power <- device: on`, `DeviceSurface.setOnOff(true)`) and the channel sync continues as
       usual; an unknown code (text, games) leaves the state alone. A hidden countdown's end frame while off also sets `onoff`
-      true and drops the shadow, because the end display lights the panel (#125, [countdown.md](countdown.md)).
+      true and drops the shadow, because the end display lights the panel (#125, [countdown.md](countdown.md)). So does a
+      sleep light started from Homey while off (#6): it lights the panel and `46` d8 flips to `01`, so `panelLitByDevice`
+      sets `onoff` true before the self-wake check could send the off again; the held dim is queued before the `40`. The
+      stop of such a sleep light leaves the lit lighting colour (`onoff` stays true, following the device); a power off
+      during a sleep light only darkens the panel and sends no stop, the timer keeps running and powers the unit off at
+      its end ([sleep-light.md](sleep-light.md)).
     - Self-wake while off (#29): the firmware can light a panel that is off by itself, about 14 to 35 min after the off, in the
       lighting mode ([status.md](../protocol/status.md#spontaneous-power-on-after-off-29)). `46` then still reports the shadow
       d0, but d8 (`powerByte`) is `01`. `checkSelfWake` runs on every decoded report (poll and unsolicited): when `onoff` is

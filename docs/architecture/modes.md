@@ -17,6 +17,11 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
     switch from Homey (tile or Flow) also fires the trigger. A mode change also writes the colour of the new mode to the
     colour tile (see "Active-mode colour"). Two quick changes: the newest confirms (`channel <id>
     superseded by a newer change`), reports are ignored while a change is in flight (`channelInFlight`, no echo loop).
+    - Sleep light (#6): while a sleep light started from Homey may still run, `switchTo` (and Show text, Show image, Start
+      countdown) first queues its stop (`sleep light stop before lighting|mode <id>`), in the same turn as the first frame
+      of the change, so the change also ends the sleep timer (a `45` alone only replaces the sleep light on the panel and
+      the timer would still power the unit off). The mode tile is not touched by the sleep light itself (`46` does not show
+      it); see [sleep-light.md](sleep-light.md).
     - Unconfirmed change (#141): `switchTo` (the single path of the mode tile, Switch mode, Show clock, Set lighting, Show custom page,
       the colour tile and power on) keeps the optimistic state and the trigger, as the device probably took the command. If
       the `46` confirm fails, the action rejects after the confirm timeout (5 s): with the localised
