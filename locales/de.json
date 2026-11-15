@@ -70,7 +70,9 @@
       "fit": "Einpassen",
       "url": "URL",
       "icon": "Symbol",
-      "volume": "Lautstärke"
+      "volume": "Lautstärke",
+      "brightness": "Helligkeit",
+      "sound": "Klang"
     }
   }
 }
