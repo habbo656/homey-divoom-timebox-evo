@@ -93,3 +93,18 @@ export const REPLY_VOLUME_3 = '01 06 00 04 09 55 03 6b 00 02';
 export const REPLY_PLAY_STATUS_IDLE = '01 06 00 04 0b 55 00 6a 00 02';
 /** `0b 55 01`: audio plays (computed). */
 export const REPLY_PLAY_STATUS_PLAYING = '01 06 00 04 0b 55 01 6b 00 02';
+
+// Sleep light frames (#6). Replies are real captures of the hardware research of #6 (2026-11-15, scripts/probe/ble.py),
+// copied verbatim; the command frames come from the protocol KB (`encode startSleep … --spp`, `encode getSleep --spp`).
+/** `40 05 00 ff 00 00 00 ff 00 00 32` (5 min, phone audio, on, volume 0, red, brightness 0x32) as SPP frame (KB). */
+export const START_SLEEP_RED_SPP_FRAME = '01 0d 00 40 05 00 ff 00 00 00 ff 00 00 32 82 02 02';
+/** `40 05 00 00 00 00 00 00 00 00 00` (the stop) as SPP frame (KB). */
+export const STOP_SLEEP_SPP_FRAME = '01 0d 00 40 05 00 00 00 00 00 00 00 00 00 52 00 02';
+/** `a2` (get sleep scene) as SPP frame (KB `encode getSleep --spp`). */
+export const QUERY_SLEEP_SCENE_SPP_FRAME = '01 03 00 a2 a5 00 02';
+/** `a2 55 05 00 ff 00 00 00 ff 00 00 32`: a red sleep light runs (research #6, step 2). */
+export const REPLY_SLEEP_RUNNING_RED = '01 0f 00 04 a2 55 05 00 ff 00 00 00 ff 00 00 32 3f 03 02';
+/** `a2 55 05 00 00 00 00 00 ff 00 00 32`: the answer of the stop, on/off `00`, the rest kept (research #6, step 4). */
+export const REPLY_SLEEP_STOPPED_RED = '01 0f 00 04 a2 55 05 00 00 00 00 00 ff 00 00 32 40 02 02';
+/** `a2 55 05 01 00 00 00 64 00 00 ff 32`: the stop after sound 1, volume 0x64, blue (research #6, Q3). */
+export const REPLY_SLEEP_STOPPED_SOUND_1 = '01 0f 00 04 a2 55 05 01 00 00 00 64 00 00 ff 32 a5 02 02';

@@ -4,12 +4,14 @@ import {
   COUNTDOWN_MAX_MINUTES,
   CLOCK_STYLES,
   MAX_NOTIFICATION_ICON,
+  MAX_SLEEP_SOUND,
   MAX_TEXT_UNITS,
   nativeText,
   notificationIcon,
   MAX_VOLUME,
   queryCustomPage,
   queryPlayStatus,
+  querySleepScene,
   queryStatus,
   queryVolume,
   setBrightness,
@@ -23,6 +25,9 @@ import {
   setTemperatureUnit,
   setVolume,
   setWeather,
+  SLEEP_MAX_MINUTES,
+  startSleepLight,
+  stopSleepLight,
   startNoiseMeter,
   staticImage,
   startCountdown,
@@ -40,9 +45,12 @@ import {
   NOTIFICATION_TELEGRAM_ENVELOPE,
   NOTIFICATION_TELEGRAM_SPP_FRAME,
   QUERY_PLAY_STATUS_SPP_FRAME,
+  QUERY_SLEEP_SCENE_SPP_FRAME,
   QUERY_VOLUME_SPP_FRAME,
   SET_VOLUME_5_ENVELOPE,
   SET_VOLUME_5_SPP_FRAME,
+  START_SLEEP_RED_SPP_FRAME,
+  STOP_SLEEP_SPP_FRAME,
 } from './__fixtures__/golden';
 
 describe('setBrightness', () => {
@@ -527,5 +535,51 @@ describe('queryVolume and queryPlayStatus (#4)', () => {
     expect(toHex(queryPlayStatus())).toBe('0b');
     expect(decodeSppFrame(fromHex(QUERY_VOLUME_SPP_FRAME))).toEqual(queryVolume());
     expect(decodeSppFrame(fromHex(QUERY_PLAY_STATUS_SPP_FRAME))).toEqual(queryPlayStatus());
+  });
+});
+
+describe('sleep light (#6)', () => {
+  const red = { minutes: 5, sound: 0, volume: 0, color: { r: 0xff, g: 0, b: 0 }, brightness: 0x32 };
+
+  it('encodes the start as 40 MI MO ff 00 00 VV RR GG BB BR', () => {
+    expect(toHex(startSleepLight(red))).toBe('40 05 00 ff 00 00 00 ff 00 00 32');
+    expect(
+      toHex(startSleepLight({ minutes: 240, sound: 23, volume: 100, color: { r: 1, g: 2, b: 3 }, brightness: 100 })),
+    ).toBe('40 f0 17 ff 00 00 64 01 02 03 64');
+    expect(toHex(startSleepLight({ ...red, minutes: 1, sound: 1, volume: 1, brightness: 1 }))).toBe(
+      '40 01 01 ff 00 00 01 ff 00 00 01',
+    );
+  });
+
+  it('matches the golden SPP frames of the start, the stop and the read', () => {
+    expect(decodeSppFrame(fromHex(START_SLEEP_RED_SPP_FRAME))).toEqual(startSleepLight(red));
+    expect(decodeSppFrame(fromHex(STOP_SLEEP_SPP_FRAME))).toEqual(stopSleepLight());
+    expect(decodeSppFrame(fromHex(QUERY_SLEEP_SCENE_SPP_FRAME))).toEqual(querySleepScene());
+  });
+
+  it('encodes the stop exactly as measured and the read as a2', () => {
+    expect(toHex(stopSleepLight())).toBe('40 05 00 00 00 00 00 00 00 00 00');
+    expect(toHex(querySleepScene())).toBe('a2');
+  });
+
+  it('has the limits 1..240 minutes and sounds 0..23', () => {
+    expect(SLEEP_MAX_MINUTES).toBe(240);
+    expect(MAX_SLEEP_SOUND).toBe(23);
+  });
+
+  it.each([
+    ['minutes', { minutes: 0 }],
+    ['minutes', { minutes: 241 }],
+    ['minutes', { minutes: 1.5 }],
+    ['sound', { sound: -1 }],
+    ['sound', { sound: 24 }],
+    ['volume', { volume: 101 }],
+    ['volume', { volume: NaN }],
+    ['brightness', { brightness: 101 }],
+    ['brightness', { brightness: -1 }],
+    ['color', { color: { r: 256, g: 0, b: 0 } }],
+    ['minutes', { minutes: '5' as unknown as number }],
+  ])('rejects an invalid %s with RangeError', (_name, change) => {
+    expect(() => startSleepLight({ ...red, ...change })).toThrow(RangeError);
   });
 });

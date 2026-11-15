@@ -6,10 +6,12 @@ import {
   MIN_STATUS_DATA,
   decodeCustomPage,
   decodePlayStatus,
+  decodeSleepScene,
   decodeStatus,
   decodeVolume,
   isCountdownEnd,
   isCustomPageReply,
+  isSleepStopReply,
 } from './status';
 import {
   COUNTDOWN_END,
@@ -19,6 +21,9 @@ import {
   REPLY_CUSTOM_PAGE_2,
   REPLY_PLAY_STATUS_IDLE,
   REPLY_PLAY_STATUS_PLAYING,
+  REPLY_SLEEP_RUNNING_RED,
+  REPLY_SLEEP_STOPPED_RED,
+  REPLY_SLEEP_STOPPED_SOUND_1,
   REPLY_STATUS,
   REPLY_VOLUME_3,
   REPLY_VOLUME_5,
@@ -274,5 +279,62 @@ describe('decodePlayStatus (#4)', () => {
   it('rejects another opcode and a status byte other than 55', () => {
     expect(() => decodePlayStatus(reply(REPLY_VOLUME_5))).toThrow(ProtocolError);
     expect(() => decodePlayStatus(make([1], 0x0b, false))).toThrow(ProtocolError);
+  });
+});
+
+describe('decodeSleepScene and isSleepStopReply (#6)', () => {
+  const make = (data: number[], cmd = 0xa2, ok = true): Reply => ({
+    cmd,
+    ok,
+    data: Uint8Array.from(data),
+    kind: 'other',
+  });
+
+  it('decodes the research capture of a running red sleep light', () => {
+    expect(decodeSleepScene(reply(REPLY_SLEEP_RUNNING_RED))).toEqual({
+      minutes: 5,
+      sound: 0,
+      on: true,
+      volume: 0,
+      color: { r: 0xff, g: 0, b: 0 },
+      brightness: 0x32,
+    });
+  });
+
+  it('decodes the research captures of the stop answer (on/off 00, the rest kept)', () => {
+    expect(decodeSleepScene(reply(REPLY_SLEEP_STOPPED_RED))).toMatchObject({ minutes: 5, on: false, brightness: 0x32 });
+    expect(decodeSleepScene(reply(REPLY_SLEEP_STOPPED_SOUND_1))).toEqual({
+      minutes: 5,
+      sound: 1,
+      on: false,
+      volume: 0x64,
+      color: { r: 0, g: 0, b: 0xff },
+      brightness: 0x32,
+    });
+  });
+
+  it('ignores extra trailing bytes', () => {
+    expect(decodeSleepScene(make([1, 2, 0xff, 0, 0, 3, 4, 5, 6, 7, 9])).brightness).toBe(7);
+  });
+
+  it('rejects another opcode and a status byte other than 55', () => {
+    expect(() => decodeSleepScene(reply(REPLY_VOLUME_5))).toThrow(ProtocolError);
+    expect(() => decodeSleepScene(make([5, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0xa2, false))).toThrow(ProtocolError);
+  });
+
+  it.each([[[]], [[5, 0, 0, 0, 0, 0, 0, 0, 0]]])('rejects %j (fewer than 10 data bytes) with FrameError', (data) => {
+    expect(() => decodeSleepScene(make(data))).toThrow(FrameError);
+  });
+
+  it('tells the stop answer (on/off 00) from a read while a sleep light runs', () => {
+    expect(isSleepStopReply(reply(REPLY_SLEEP_STOPPED_RED))).toBe(true);
+    expect(isSleepStopReply(reply(REPLY_SLEEP_STOPPED_SOUND_1))).toBe(true);
+    expect(isSleepStopReply(reply(REPLY_SLEEP_RUNNING_RED))).toBe(false);
+  });
+
+  it('refuses short, failed and other frames', () => {
+    expect(isSleepStopReply(make([5, 0, 0]))).toBe(false);
+    expect(isSleepStopReply(make([5, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0xa2, false))).toBe(false);
+    expect(isSleepStopReply(make([5, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0x46))).toBe(false);
   });
 });
