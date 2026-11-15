@@ -23,17 +23,20 @@ const status = (hex: string): DeviceStatus => decodeStatus(parseReply(decodeSppF
 
 describe('channel ids and codes', () => {
   it('maps every id to its device code and back', () => {
-    const coded = CHANNEL_IDS.filter((id): id is CodedChannelId => id !== 'noise_meter');
+    const coded = CHANNEL_IDS.filter((id): id is CodedChannelId => id !== 'noise_meter' && id !== 'scoreboard');
     expect(coded.map(channelCode)).toEqual([0, 1, 5, 4]);
     for (const id of coded) expect(channelFromCode(channelCode(id), 0)).toBe(id);
   });
 
-  it('lists the modes in a stable order, the equalizer last', () => {
-    expect([...CHANNEL_IDS]).toEqual(['clock', 'lighting', 'custom', 'noise_meter', 'equalizer']);
+  it('lists the modes in a stable order, the scoreboard last', () => {
+    expect([...CHANNEL_IDS]).toEqual(['clock', 'lighting', 'custom', 'noise_meter', 'equalizer', 'scoreboard']);
   });
 
-  it('never maps a device code to the noise meter', () => {
-    for (let code = 0; code <= 255; code++) expect(channelFromCode(code, 0)).not.toBe('noise_meter');
+  it('never maps a device code to the noise meter or the scoreboard', () => {
+    for (let code = 0; code <= 255; code++) {
+      expect(channelFromCode(code, 0)).not.toBe('noise_meter');
+      expect(channelFromCode(code, 0)).not.toBe('scoreboard');
+    }
   });
 
   it.each([2, 3, 6, 7, 8, 0xff, -1, 1.5, NaN])('has no mode for code %s', (code) => {
@@ -63,7 +66,7 @@ describe('channel ids and codes', () => {
 
   it('parses valid ids and rejects everything else, also the removed modes', () => {
     for (const id of CHANNEL_IDS) expect(parseChannelId(id)).toBe(id);
-    for (const bad of ['', 'Clock', 'game', 'text', 'cloud', 'visualizer', 'scoreboard', 1, null, undefined, {}]) {
+    for (const bad of ['', 'Clock', 'game', 'text', 'cloud', 'visualizer', 'score', 1, null, undefined, {}]) {
       expect(() => parseChannelId(bad)).toThrow(RangeError);
     }
   });
@@ -73,6 +76,11 @@ describe('channelCommand', () => {
   it('noise_meter: 72 02 01, whatever the stored state', () => {
     expect(toHex(channelCommand('noise_meter', null, null, FACE))).toBe('72 02 01');
     expect(toHex(channelCommand('noise_meter', status(STATUS_CLOCK_B50), 50, FACE))).toBe('72 02 01');
+  });
+
+  it('scoreboard: 45 06, whatever the stored state', () => {
+    expect(toHex(channelCommand('scoreboard', null, null, FACE))).toBe('45 06');
+    expect(toHex(channelCommand('scoreboard', status(STATUS_CLOCK_B50), 50, FACE))).toBe('45 06');
   });
 
   it('equalizer: 45 04 00, whatever the stored state', () => {

@@ -3,7 +3,11 @@ import { translator } from '../device/__fixtures__/translator';
 import { ImageError } from '../device/imageError';
 import { prepareText } from '../device/scrollText';
 import {
+  FLOW_ACTION_DECREASE_SCORE,
+  FLOW_ACTION_INCREASE_SCORE,
+  FLOW_ACTION_RESET_SCORE,
   FLOW_ACTION_SET_CHANNEL,
+  FLOW_ACTION_SET_SCORE,
   FLOW_ACTION_SET_LIGHTING,
   FLOW_ACTION_SET_TEMPERATURE,
   FLOW_ACTION_SET_WEATHER,
@@ -91,6 +95,10 @@ describe('registerTimeboxFlowCards', () => {
       FLOW_ACTION_SHOW_NOTIFICATION_ICON,
       FLOW_ACTION_START_SLEEP_LIGHT,
       FLOW_ACTION_STOP_SLEEP_LIGHT,
+      FLOW_ACTION_SET_SCORE,
+      FLOW_ACTION_INCREASE_SCORE,
+      FLOW_ACTION_DECREASE_SCORE,
+      FLOW_ACTION_RESET_SCORE,
     ]);
   });
 
@@ -671,6 +679,98 @@ describe('Start and Stop sleep light (#6)', () => {
   });
 });
 
+describe('Scoreboard actions (#40)', () => {
+  function setup() {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const calls: unknown[][] = [];
+    const device = {
+      setScore: async (update: unknown) => void calls.push(['set', update]),
+      changeScore: async (team: unknown, step: unknown, direction: unknown) =>
+        void calls.push(['change', team, step, direction]),
+      resetScores: async () => void calls.push(['reset']),
+    };
+    return { actions, calls, device };
+  }
+
+  it('set score passes the rounded and clamped values on, an empty one as null', async () => {
+    const { actions, calls, device } = setup();
+    const run = actions.get(FLOW_ACTION_SET_SCORE)!;
+    await run({ device, red: 12, blue: 34 });
+    await run({ device, red: 5 });
+    await run({ device, blue: 7.4 });
+    await run({ device, red: 5000, blue: -3 });
+    await run({ device, red: '', blue: null });
+    expect(calls).toEqual([
+      ['set', { red: 12, blue: 34 }],
+      ['set', { red: 5, blue: null }],
+      ['set', { red: null, blue: 7 }],
+      ['set', { red: 999, blue: 0 }],
+      ['set', { red: null, blue: null }],
+    ]);
+  });
+
+  it('increase and decrease pass the team, the step (empty = 1) and the direction on', async () => {
+    const { actions, calls, device } = setup();
+    await actions.get(FLOW_ACTION_INCREASE_SCORE)!({ device, team: 'blue' });
+    await actions.get(FLOW_ACTION_DECREASE_SCORE)!({ device, team: 'red', step: 5 });
+    await actions.get(FLOW_ACTION_INCREASE_SCORE)!({ device, team: 'red', step: 999.2 });
+    expect(calls).toEqual([
+      ['change', 'blue', 1, 1],
+      ['change', 'red', 5, -1],
+      ['change', 'red', 999, 1],
+    ]);
+  });
+
+  it('reset resets both scores', async () => {
+    const { actions, calls, device } = setup();
+    await actions.get(FLOW_ACTION_RESET_SCORE)!({ device });
+    expect(calls).toEqual([['reset']]);
+  });
+
+  it('rejects invalid arguments before the device is called', async () => {
+    const { actions, calls, device } = setup();
+    for (const args of [{ red: NaN }, { blue: 'x' }, { red: Infinity }]) {
+      await expect(
+        Promise.resolve().then(() => actions.get(FLOW_ACTION_SET_SCORE)!({ device, ...args })),
+      ).rejects.toThrow(INVALID);
+    }
+    for (const id of [FLOW_ACTION_INCREASE_SCORE, FLOW_ACTION_DECREASE_SCORE]) {
+      for (const args of [
+        { team: 'green' },
+        { team: undefined },
+        { team: 'red', step: 0 },
+        { team: 'red', step: 1000 },
+      ]) {
+        await expect(Promise.resolve().then(() => actions.get(id)!({ device, ...args }))).rejects.toThrow(INVALID);
+      }
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it('passes the device rejection on', async () => {
+    const { actions } = setup();
+    const device = {
+      resetScores: async () => {
+        throw new Error('not connected text');
+      },
+    };
+    await expect(actions.get(FLOW_ACTION_RESET_SCORE)!({ device })).rejects.toThrow('not connected text');
+  });
+
+  it('localises an invalid team and step in German', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, translator('de'));
+    const device = { changeScore: async () => undefined };
+    await expect(
+      Promise.resolve().then(() => actions.get(FLOW_ACTION_INCREASE_SCORE)!({ device, team: 'green' })),
+    ).rejects.toThrow('Team: "green" ist keine gültige Auswahl. Erlaubt sind: red, blue.');
+    await expect(
+      Promise.resolve().then(() => actions.get(FLOW_ACTION_INCREASE_SCORE)!({ device, team: 'red', step: 0 })),
+    ).rejects.toThrow(/^Schritt: /);
+  });
+});
+
 // Localised validation errors (#108): the translator reads the real German locale like `homey.__` does.
 describe('localised argument errors', () => {
   const de = translator('de');
@@ -814,7 +914,7 @@ describe('localised argument errors', () => {
       'set_channel "cloud"',
       FLOW_ACTION_SET_CHANNEL,
       { channel: 'cloud' },
-      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer.',
+      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer, scoreboard.',
     ],
     [
       'show_notification_icon "nope"',
@@ -864,7 +964,7 @@ describe('localised argument errors', () => {
     const { listeners } = register();
     const run = listeners.get(FLOW_CONDITION_CHANNEL_IS)!;
     await expect(Promise.resolve().then(() => run({ device, channel: 'cloud' }))).rejects.toThrow(
-      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer.',
+      'Modus: "cloud" ist keine gültige Auswahl. Erlaubt sind: clock, lighting, custom, noise_meter, equalizer, scoreboard.',
     );
   });
 

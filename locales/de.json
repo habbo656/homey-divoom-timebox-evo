@@ -72,7 +72,11 @@
       "icon": "Symbol",
       "volume": "Lautstärke",
       "brightness": "Helligkeit",
-      "sound": "Klang"
+      "sound": "Klang",
+      "red": "Rot",
+      "blue": "Blau",
+      "step": "Schritt",
+      "team": "Team"
     }
   }
 }

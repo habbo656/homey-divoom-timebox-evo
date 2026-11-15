@@ -20,6 +20,7 @@ import {
   startCountdown as countdownStartCommand,
   stopCountdown as countdownStopCommand,
   stopNativeText,
+  setScoreboard,
   stopSleepLight as sleepStopCommand,
 } from '../protocol/commands';
 import type { CountdownTime, SleepLight, TemperatureUnit } from '../protocol/commands';
@@ -54,6 +55,8 @@ import { hueSatToRgb, powerOffCommand, rgbToHueSat } from './lighting';
 import { notificationIconCode, notificationIconCommand } from './notification';
 import type { NotificationIconId } from './notification';
 import { parseTextDuration, prepareText } from './scrollText';
+import { applySet, applyStep, parseScoreArg, parseStep, parseTeam, RESET, sameScores } from './scoreboard';
+import type { Scores, TeamId } from './scoreboard';
 import { formatSleepLight, sleepLightCommand } from './sleepLight';
 import { fillPlaceholders } from './text';
 import {
@@ -154,6 +157,10 @@ export interface DeviceSurface {
   saveRestoreVolume(level: number): void | Promise<void>;
   /** The play status changed within a session (not on its first read): fire "Audio started playing" / "Audio stopped playing". */
   onAudioPlayingChanged(playing: boolean): void | Promise<void>;
+  /** Persist the scoreboard scores (device store `scoreboard_scores`, `{red, blue}`, #40). A failure is logged, never propagated. */
+  saveScores(scores: Scores): void | Promise<void>;
+  /** The scores changed (a Flow action changed red or blue): fire the "Score changed" trigger (#40). */
+  onScoreChanged(red: number, blue: number): void | Promise<void>;
   setAvailable(): void | Promise<void>;
   setUnavailable(message: string): void | Promise<void>;
   /** The IANA time zone of the Homey (`homey.clock.getTimezone()`), asked for at every time sync. */
@@ -248,7 +255,14 @@ export interface TimeboxControllerOptions {
   restoreVolume?: number | null;
   /** How long each audio read and the volume read-back wait (default `AUDIO_REQUEST_TIMEOUT_MS`). */
   audioRequestTimeoutMs?: number;
+  /** The stored scoreboard scores (device store `scoreboard_scores`, #40; default 0/0). */
+  scores?: Scores;
 }
+
+/** The modes that `46` d0 does not report (`CodedChannelId` excludes them): the controller tracks them itself. */
+type TrackedChannelId = Extract<ChannelId, 'noise_meter' | 'scoreboard'>;
+/** The name of a tracked mode in the log lines. */
+const TRACKED_LABEL: Record<TrackedChannelId, string> = { noise_meter: 'noise meter', scoreboard: 'scoreboard' };
 
 const rgbIsBlack = (c: Rgb): boolean => c.r === 0 && c.g === 0 && c.b === 0;
 const sameColor = (a: Rgb, b: Rgb): boolean => a.r === b.r && a.g === b.g && a.b === b.b;
@@ -365,14 +379,17 @@ export class TimeboxController {
    * at the device (or a reboot), which ends the tracking and is then handled like any report. Null until the first report.
    */
   private imageShadow: number | null = null;
-  /** The noise meter (`72 02 01`) was sent by this run and is believed to be on the device (#3); a mode change, power off or tile colour ends it. */
-  private noiseActive = false;
   /**
-   * The "noise shadow": the `46` d0 the device reports under the noise meter (unmeasured, so the design works for any
-   * code), like the image shadow. Reports equal to it are ignored while the noise meter is tracked; a different known code
-   * is a mode change made at the device, which ends the tracking. Null until the confirm or the first report.
+   * The mode this run switched to that the device does not report in `46` d0 and that is believed to be on the device: the
+   * noise meter (`72 02 01`, #3) or the scoreboard (`45 06`, #40). A mode change, power off or tile colour ends it.
+   * `shadow` is the "tracked shadow": the `46` d0 the device reports under it (the noise meter's is unmeasured, so the
+   * design works for any code; `45 06` leaves d0 as it was), like the image shadow. Reports equal to it are ignored while
+   * the mode is tracked; a different known code is a mode change made at the device, which ends the tracking. Null until
+   * the confirm or the first report.
    */
-  private noiseShadow: number | null = null;
+  private tracked: { id: TrackedChannelId; shadow: number | null } | null = null;
+  /** The scoreboard scores (#40): owned by the app (no read command is used), persisted through `surface.saveScores`. */
+  private scores: Scores;
   /**
    * The d0 code of a mode the app does not offer (`02` cloud, `04` with a visualization other than the spectrum bars,
    * i.e. visualizer) while the device shows it, else null.
@@ -567,6 +584,7 @@ export class TimeboxController {
     this.power = opts.powerOn ?? true;
     this.unit = opts.temperatureUnit ?? 'celsius';
     this.restoreVolume = opts.restoreVolume ?? null;
+    this.scores = { ...(opts.scores ?? RESET) };
     this.audioTimeoutMs = opts.audioRequestTimeoutMs ?? AUDIO_REQUEST_TIMEOUT_MS;
     // Started from "off": the channel from before off is the stored one, "power on" returns to it without a trigger.
     if (!this.power) this.knownChannel = opts.storedChannel ?? null;
@@ -901,6 +919,59 @@ export class TimeboxController {
     return this.switchTo('custom', this.clockFace(), { customPage: page });
   }
 
+  // --- scoreboard (#40) -------------------------------------------------------------------------------------------
+
+  /** The scoreboard scores as the app knows them (the device is never asked, so a change made in the Divoom app is not seen). */
+  getScores(): Scores {
+    return { ...this.scores };
+  }
+
+  /**
+   * The Flow action "Set score": the given scores (an empty one keeps its value; each rounded and clamped to 0..999),
+   * then the scoreboard is shown with them (`45 06`, `72 01 01 RRRR BBBB`, see `showScoreboard`).
+   * Rejects with an `ArgumentError` for a value that is not a number (nothing changes).
+   */
+  async setScore(update: { red?: unknown; blue?: unknown }): Promise<boolean> {
+    const red = parseScoreArg('red', update.red);
+    const blue = parseScoreArg('blue', update.blue);
+    return this.showScoreboard(applySet(this.scores, red, blue));
+  }
+
+  /**
+   * The Flow actions "Increase score" (`direction` 1) and "Decrease score" (-1): one team changes by `step` (empty = 1,
+   * else 1..999), clamped to 0..999, then the scoreboard is shown (`showScoreboard`). Rejects with an `ArgumentError` for
+   * an invalid team or step (nothing changes).
+   */
+  async changeScore(team: unknown, step: unknown, direction: 1 | -1): Promise<boolean> {
+    const validTeam: TeamId = parseTeam(team);
+    const validStep = parseStep(step);
+    return this.showScoreboard(applyStep(this.scores, validTeam, validStep, direction));
+  }
+
+  /** The Flow action "Reset scores": both scores 0, then the scoreboard is shown (`showScoreboard`). */
+  async resetScores(): Promise<boolean> {
+    return this.showScoreboard({ ...RESET });
+  }
+
+  /**
+   * The shared path of the score actions: store the new scores (computed from the scores of this turn, so two quick
+   * Flows do not lose an update), persist them, fire the "Score changed" trigger if red or blue changed, and show the
+   * scoreboard with them through `switchTo` (power on, sleep-light stop, supersede and the #141 confirm included).
+   * Rejects with `messages.notConnected` and changes nothing if the Timebox is not connected. If the switch fails (the
+   * `46` confirm, #141) the new scores stay. Resolves `false` if a newer change superseded it: the newer change owns the
+   * mode tile.
+   */
+  private async showScoreboard(next: Scores): Promise<boolean> {
+    if (this.stopped || this.link.state !== 'connected') throw new Error(this.messages.notConnected);
+    if (!sameScores(this.scores, next)) {
+      this.scores = next;
+      const saved = { ...next };
+      this.call(() => this.surface.saveScores(saved));
+      this.call(() => this.surface.onScoreChanged(saved.red, saved.blue));
+    }
+    return this.switchTo('scoreboard', this.clockFace());
+  }
+
   /**
    * The shared path of every display change (`setChannel`, `setClockSettings`, `showClock`, power on, `setTileColor` and the Flow
    * actions lighting and custom page): send the switch command, then confirm with `46`. Every display command also powers the panel on (protocol
@@ -922,6 +993,7 @@ export class TimeboxController {
       face,
       override,
     );
+    const scoreCommand = channel === 'scoreboard' ? setScoreboard(this.scores.red, this.scores.blue) : null;
     const lighting = override?.lighting;
     const customPage = channel === 'custom' ? override?.customPage : undefined;
     const pageCommand = customPage === undefined ? null : setCustomPage(customPage);
@@ -945,6 +1017,9 @@ export class TimeboxController {
             this.log('channel custom superseded by a newer change');
             return false;
           }
+        } else if (scoreCommand) {
+          // `45 06` shows the scoreboard, `72 01 01` sets the scores: both are queued in this turn (no await in between).
+          await this.sendAllBounded([command, scoreCommand], this.sendTimeoutMs);
         } else {
           // The animation pages of the clock rotation are a persistent device flag, set right before every clock frame (#106).
           // Both writes are queued in the same turn (no await in between), so a text or countdown of another Flow cannot slip in between.
@@ -958,14 +1033,16 @@ export class TimeboxController {
       }
       this.textEndedByCommand('mode change', textAtSend);
       this.imageEndedByCommand('mode change', imageAtSend);
-      if (channel === 'noise_meter') {
-        this.noiseActive = true;
-        this.noiseShadow = null;
+      if (channel === 'noise_meter' || channel === 'scoreboard') {
+        if (this.tracked?.id !== channel) this.trackedEnded('mode change');
+        this.tracked = { id: channel, shadow: null };
       } else {
-        this.noiseEnded('mode change');
+        this.trackedEnded('mode change');
       }
       if (lighting) this.log(`lighting -> ${formatHexColor(lighting.color)}: ${toHex(command)}`);
       else if (customPage === undefined) this.log(`channel -> ${channel}: ${toHex(command)}`);
+      if (scoreCommand)
+        this.log(`scoreboard -> red ${this.scores.red}, blue ${this.scores.blue}: ${toHex(scoreCommand)}`);
       if (lighting) this.knownColor = rgbIsBlack(lighting.color) ? this.knownColor : lighting.color;
       if (!this.power) {
         this.power = true;
@@ -1001,10 +1078,11 @@ export class TimeboxController {
         const status = decodeStatus(await this.link.request(queryStatus(), 0x46, this.channelConfirmMs));
         const device = channelFromCode(status.channel, status.visualization);
         const shown = device ?? otherModeName(status.channel, status.visualization) ?? `code ${status.channel}`;
-        if (channel === 'noise_meter') {
-          // The code the device reports under the noise meter is unknown: any code confirms and becomes the shadow.
+        if (channel === 'noise_meter' || channel === 'scoreboard') {
+          // These modes have no code of their own in `46` d0: any code confirms and becomes the shadow.
           this.log(`channel confirmed: ${channel} (device reports channel code ${hexByte(status.channel)})`);
-          if (this.noiseActive && generation === this.channelGeneration) this.noiseShadow = status.channel;
+          if (this.tracked?.id === channel && generation === this.channelGeneration)
+            this.tracked.shadow = status.channel;
         } else if (device !== channel) this.log(`channel mismatch: device ${shown}, requested ${channel}`);
         else if (lighting) this.confirmLighting(status, lighting.color);
         else this.log(`channel confirmed: ${channel}`);
@@ -1309,7 +1387,7 @@ export class TimeboxController {
    * an `a2` read (the 10 bytes are compared with the request; a mismatch is only logged). The device lights the full panel
    * in the colour, also a panel that is off, and powers itself off when the minutes have run out (the device is then
    * unavailable until its power button is pressed, owner #6). The sleep light is not a mode: `46` does not show it, the tile
-   * and the known channel stay; a running text, image or noise meter is forgotten (conservatively, as power off does) and a
+   * and the known channel stay; a running text, image, noise meter or scoreboard is forgotten (conservatively, as power off does) and a
    * pending small-clock re-send is cancelled. A new start replaces a running one. Started while the panel is off (and no
    * power change in flight), the held dim is queued before the `40` (a `74` would relight lighting under it) and `onoff`
    * follows the lit panel (`panelLitByDevice`). Every later display change from Homey sends the stop first while the
@@ -1339,7 +1417,7 @@ export class TimeboxController {
     if (this.stopped) return;
     this.textEndedByCommand('sleep light', textAtSend);
     this.imageEndedByCommand('sleep light', imageAtSend);
-    this.noiseEnded('sleep light');
+    this.trackedEnded('sleep light');
     this.log(`sleep light started: ${formatSleepLight(light)}: ${toHex(command)}`);
     if (!this.power) this.panelLitByDevice('sleep light', 'sleep light');
 
@@ -1565,12 +1643,12 @@ export class TimeboxController {
     this.imageShadow = null;
   }
 
-  /** A mode change or power off ended the noise meter on the device: forget it, nothing is sent. */
-  private noiseEnded(reason: string): void {
-    if (!this.noiseActive) return;
-    this.noiseActive = false;
-    this.noiseShadow = null;
-    this.log(`noise meter ended (${reason})`);
+  /** A mode change or power off ended the noise meter or the scoreboard on the device: forget it, nothing is sent. */
+  private trackedEnded(reason: string): void {
+    if (this.tracked === null) return;
+    const label = TRACKED_LABEL[this.tracked.id];
+    this.tracked = null;
+    this.log(`${label} ended (${reason})`);
   }
 
   /**
@@ -1601,15 +1679,15 @@ export class TimeboxController {
 
   /**
    * Queue every frame at once (the link keeps their order and nothing else slips in between), then wait for all of them
-   * with the send time limit of `sendBounded`.
+   * with a send time limit (default the one of the text frames; `sendBounded` has its own).
    */
-  private async sendAllBounded(frames: Uint8Array[]): Promise<void> {
+  private async sendAllBounded(frames: Uint8Array[], timeoutMs: number = this.textSendTimeoutMs): Promise<void> {
     const sendings = frames.map((frame) => this.link.send(frame));
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new NotConnectedError(`send did not complete within ${this.textSendTimeoutMs} ms`)),
-        this.textSendTimeoutMs,
+        () => reject(new NotConnectedError(`send did not complete within ${timeoutMs} ms`)),
+        timeoutMs,
       );
     });
     try {
@@ -1891,7 +1969,7 @@ export class TimeboxController {
       }
       this.textEndedByCommand('power off', textAtSend);
       this.imageEndedByCommand('power off', imageAtSend);
-      this.noiseEnded('power off');
+      this.trackedEnded('power off');
       this.log(`power -> off: ${toHex(command)}`);
       this.power = false;
       this.offShadow = null;
@@ -2027,7 +2105,7 @@ export class TimeboxController {
     if (!this.power) return 'panel off';
     if (this.textActive !== null || this.textSending > 0) return 'text running';
     if (this.imageActive !== null || this.imageSending > 0) return 'image shown';
-    if (this.noiseActive) return 'noise meter shown';
+    if (this.tracked !== null) return `${TRACKED_LABEL[this.tracked.id]} shown`;
     return null;
   }
 
@@ -2503,18 +2581,19 @@ export class TimeboxController {
       this.call(() => this.surface.setOnOff(true));
       this.applyPendingBrightness();
     }
-    if (this.noiseActive && this.power) {
-      // The noise meter is not a `45` mode and the code `46` reports under it is unmeasured: the first report is its shadow,
-      // equal reports and codes that are no mode are ignored, a different known code means the device left the noise meter.
-      if (this.noiseShadow === null) {
-        this.noiseShadow = code;
-        this.log(`noise meter shadow: device reports channel code ${hexByte(code)}`);
+    if (this.tracked !== null && this.power) {
+      // The noise meter and the scoreboard are not modes of `46` d0 (the code under the noise meter is unmeasured, `45 06`
+      // leaves d0 as it was): the first report is the shadow, equal reports and codes that are no mode are ignored, a
+      // different known code means the device left the tracked mode.
+      const label = TRACKED_LABEL[this.tracked.id];
+      if (this.tracked.shadow === null) {
+        this.tracked.shadow = code;
+        this.log(`${label} shadow: device reports channel code ${hexByte(code)}`);
         return false;
       }
-      if (code === this.noiseShadow || (!id && !other)) return false;
-      this.log(`noise meter ended (device mode change): channel code ${hexByte(this.noiseShadow)} -> ${hexByte(code)}`);
-      this.noiseActive = false;
-      this.noiseShadow = null;
+      if (code === this.tracked.shadow || (!id && !other)) return false;
+      this.log(`${label} ended (device mode change): channel code ${hexByte(this.tracked.shadow)} -> ${hexByte(code)}`);
+      this.tracked = null;
     }
     if (other) {
       this.unknownCode = null;

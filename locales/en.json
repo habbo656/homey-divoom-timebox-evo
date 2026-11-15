@@ -72,7 +72,11 @@
       "icon": "Icon",
       "volume": "Volume",
       "brightness": "Brightness",
-      "sound": "Sound"
+      "sound": "Sound",
+      "red": "Red",
+      "blue": "Blue",
+      "step": "Step",
+      "team": "Team"
     }
   }
 }

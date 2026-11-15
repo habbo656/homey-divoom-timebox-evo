@@ -93,6 +93,15 @@ export class FakeSurface implements DeviceSurface {
   onAudioPlayingChanged(playing: boolean) {
     this.playingChanges.push(playing);
   }
+  /** Every `saveScores` call (the persisted scoreboard scores) and `onScoreChanged` call (the "Score changed" trigger). */
+  savedScores: { red: number; blue: number }[] = [];
+  scoreChanges: { red: number; blue: number }[] = [];
+  saveScores(scores: { red: number; blue: number }) {
+    this.savedScores.push({ ...scores });
+  }
+  onScoreChanged(red: number, blue: number) {
+    this.scoreChanges.push({ red, blue });
+  }
   setAvailable() {
     this.calls.push('available');
   }
@@ -126,6 +135,7 @@ export class FakeSurface implements DeviceSurface {
  * `40 …` with on `ff` stores the sleep scene (`sleep`, the 10 argument bytes, recorded in `sleepStarts`) and lights the
  * panel (d8 `01`, d0 unchanged, research #6) without a reply; `40 … 00 …` (the stop) only clears the on/off byte and is
  * answered with `a2 55` + the scene unless `answerSleepStop` is false; `a2` is answered with it unless `answerSleep` is false.
+ * `45 06` (scoreboard) keeps d0 as it was; `72 01 01 RRRR BBBB` is recorded in `scores` and `scoreSets` (no reply).
  */
 export function evo(t: MockTransport, initial = 50) {
   const state = {
@@ -166,6 +176,9 @@ export function evo(t: MockTransport, initial = 50) {
     sleepStops: 0,
     answerSleep: true,
     answerSleepStop: true,
+    /** The scoreboard scores `[red, blue]` set by `72 01 01 RRRR BBBB` (no reply here) and every set received. */
+    scores: [0, 0],
+    scoreSets: [] as number[][],
   };
   const status = () =>
     statusFrame(state.brightness, state.channel, {
@@ -213,8 +226,14 @@ export function evo(t: MockTransport, initial = 50) {
       state.brightness = w[12];
       return [status(), replyFrame(0x31, state.brightness)];
     }
+    if (op === 0x72 && w[12] === 0x01 && w[13] === 0x01) {
+      state.scores = [w[14] | (w[15] << 8), w[16] | (w[17] << 8)];
+      state.scoreSets.push([...state.scores]);
+      return undefined;
+    }
     if (op === 0x45) {
-      state.channel = w[12];
+      // `45 06` shows the scoreboard and leaves d0 as it was (protocol section 5.1); the other modes report their code.
+      if (w[12] !== 0x06) state.channel = w[12];
       if (w[12] === 0x04) state.visualization = w[13];
       state.power = !(w[12] === 0x01 && w[18] === 0x00);
       if (w[12] === 0x01) state.color = [w[13], w[14], w[15]];

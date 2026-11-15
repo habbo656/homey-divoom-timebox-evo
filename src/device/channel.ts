@@ -7,11 +7,14 @@ import type { DeviceStatus, Rgb } from '../protocol/status';
 import type { ClockFace } from './clock';
 
 /** The enum values of the capability (stable ids, never translated). */
-export const CHANNEL_IDS = ['clock', 'lighting', 'custom', 'noise_meter', 'equalizer'] as const;
+export const CHANNEL_IDS = ['clock', 'lighting', 'custom', 'noise_meter', 'equalizer', 'scoreboard'] as const;
 export type ChannelId = (typeof CHANNEL_IDS)[number];
 
-/** A mode with a device code in `46` d0. The noise meter has none: the device reports no known code under it. */
-export type CodedChannelId = Exclude<ChannelId, 'noise_meter'>;
+/**
+ * A mode with a device code in `46` d0. The noise meter and the scoreboard have none: `45 06` does not change d0 and
+ * the device reports no known code under the noise meter, so the app tracks both itself.
+ */
+export type CodedChannelId = Exclude<ChannelId, 'noise_meter' | 'scoreboard'>;
 
 /** Device codes of the modes (`45 NN`, `46` d0). */
 const CODES: Record<CodedChannelId, number> = {
@@ -24,6 +27,9 @@ const CODES: Record<CodedChannelId, number> = {
 /** The visualization index (`46` d9, `45 04 NN`) of the spectrum bars, the one visualization the app offers as Equalizer. */
 const EQUALIZER_VISUALIZATION = 0;
 
+/** The `45 NN` channel of the scoreboard view (VERIFIED, protocol section 5.1). */
+const SCOREBOARD_CHANNEL = 0x06;
+
 export function channelCode(id: CodedChannelId): number {
   return CODES[id];
 }
@@ -31,7 +37,7 @@ export function channelCode(id: CodedChannelId): number {
 /**
  * The mode of a `46` d0 code and d9 (the last visualization index), or null for a code that is not one of the coded
  * modes (cloud, another visualization, text, games, alarms, ...). `04` is the equalizer only with d9 `00` (the spectrum
- * bars). Never the noise meter.
+ * bars). Never the noise meter or the scoreboard.
  */
 export function channelFromCode(code: number, visualization: number): CodedChannelId | null {
   const coded = Object.keys(CODES) as CodedChannelId[];
@@ -101,7 +107,8 @@ export interface ChannelOverride {
  * - clock: the full form `45 00 HH TT 01 WW EE CC RR GG BB` built from `clock` (the clock face; #25);
  * - custom: `45 05` (the custom page is a second command, see `setCustomPage`);
  * - noise_meter: `72 02 01`;
- * - equalizer: `45 04 00` (the spectrum bars).
+ * - equalizer: `45 04 00` (the spectrum bars);
+ * - scoreboard: `45 06` (the scores are a second command, `setScoreboard`).
  */
 export function channelCommand(
   id: ChannelId,
@@ -129,6 +136,8 @@ export function channelCommand(
       return startNoiseMeter();
     case 'equalizer':
       return setVisualization(EQUALIZER_VISUALIZATION);
+    case 'scoreboard':
+      return setChannel(SCOREBOARD_CHANNEL);
     default:
       return setChannel(CODES[id]);
   }

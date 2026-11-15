@@ -22,6 +22,7 @@ import {
   FLOW_TRIGGER_AUDIO_STARTED,
   FLOW_TRIGGER_AUDIO_STOPPED,
   FLOW_TRIGGER_COUNTDOWN_ENDED,
+  FLOW_TRIGGER_SCORE_CHANGED,
   registerTimeboxFlowCards,
 } from './flow';
 import type { FlowLike } from './flow';
@@ -131,6 +132,25 @@ describe('driver manifest (#70)', () => {
     expect(dropdowns).toHaveLength(2);
     for (const value of [...dropdowns, capability.values.find((v) => v.id === 'equalizer')]) {
       expect(value?.label ?? value?.title).toEqual({ en: 'Equalizer', de: 'Equalizer' });
+    }
+  });
+
+  it('offers the scoreboard in the mode picker and both mode dropdowns with English and German labels (#40)', () => {
+    type Value = { id: string; title?: Record<string, string>; label?: Record<string, string> };
+    const capability = JSON.parse(
+      readFileSync(join(__dirname, '..', '.homeycompose', 'capabilities', 'timebox_channel.json'), 'utf8'),
+    ) as { values: Value[] };
+    const flow = readJson<{
+      conditions: { args?: { values?: Value[] }[] }[];
+      actions: { args?: { values?: Value[] }[] }[];
+    }>('driver.flow.compose.json');
+    const dropdowns = [...flow.conditions, ...flow.actions]
+      .flatMap((card) => card.args ?? [])
+      .flatMap((arg) => arg.values ?? [])
+      .filter((value) => value.id === 'scoreboard');
+    expect(dropdowns).toHaveLength(2);
+    for (const value of [...dropdowns, capability.values.find((v) => v.id === 'scoreboard')]) {
+      expect(value?.label ?? value?.title).toEqual({ en: 'Scoreboard', de: 'Scoreboard' });
     }
   });
 
@@ -684,6 +704,110 @@ describe('Start and Stop sleep light cards (#6)', () => {
   });
 });
 
+// The scoreboard cards (#40): the compose files are what the user sees, so they are checked against the code.
+describe('Scoreboard Flow cards (#40)', () => {
+  interface Arg {
+    type: string;
+    name: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    required?: boolean;
+    values?: { id: string; label: Record<string, string> }[];
+  }
+  interface ActionNode {
+    id: string;
+    title: Record<string, string>;
+    titleFormatted?: Record<string, string>;
+    hint?: Record<string, string>;
+    args?: Arg[];
+  }
+  interface TriggerNode {
+    id: string;
+    title: Record<string, string>;
+    hint?: Record<string, string>;
+    tokens?: { name: string; type: string; title: Record<string, string> }[];
+  }
+  const compose = readJson<{ actions: ActionNode[]; triggers: TriggerNode[] }>('driver.flow.compose.json');
+  const action = (id: string) => compose.actions.find((a) => a.id === id)!;
+
+  it('declares Set score with an optional red and blue 0..999', () => {
+    const card = action('timebox_set_score');
+    expect(card.title).toEqual({ en: 'Set score', de: 'Spielstand setzen' });
+    expect(card.titleFormatted).toEqual({
+      en: 'Set score: Red [[red]], Blue [[blue]]',
+      de: 'Spielstand setzen: Rot [[red]], Blau [[blue]]',
+    });
+    expect(card.args!.map((a) => [a.name, a.type, a.min, a.max, a.step, a.required])).toEqual([
+      ['red', 'number', 0, 999, 1, false],
+      ['blue', 'number', 0, 999, 1, false],
+    ]);
+    expect(card.hint!.en).toBeTruthy();
+    expect(card.hint!.de).toBeTruthy();
+  });
+
+  it.each([
+    [
+      'timebox_increase_score',
+      'Increase score',
+      'Punkte erhöhen',
+      'Increase score: [[team]], Step [[step]]',
+      'Punkte erhöhen: [[team]], Schritt [[step]]',
+    ],
+    [
+      'timebox_decrease_score',
+      'Decrease score',
+      'Punkte verringern',
+      'Decrease score: [[team]], Step [[step]]',
+      'Punkte verringern: [[team]], Schritt [[step]]',
+    ],
+  ])('declares %s with a team dropdown and an optional step 1..999', (id, en, de, formattedEn, formattedDe) => {
+    const card = action(id);
+    expect(card.title).toEqual({ en, de });
+    expect(card.titleFormatted).toEqual({ en: formattedEn, de: formattedDe });
+    expect(card.args!.map((a) => [a.name, a.type, a.min, a.max, a.required])).toEqual([
+      ['team', 'dropdown', undefined, undefined, undefined],
+      ['step', 'number', 1, 999, false],
+    ]);
+    expect(card.args![0].values).toEqual([
+      { id: 'red', label: { en: 'Red', de: 'Rot' } },
+      { id: 'blue', label: { en: 'Blue', de: 'Blau' } },
+    ]);
+    expect(card.hint!.en).toBeTruthy();
+    expect(card.hint!.de).toBeTruthy();
+  });
+
+  it('declares Reset scores without arguments', () => {
+    const card = action('timebox_reset_score');
+    expect(card.title).toEqual({ en: 'Reset scores', de: 'Spielstand zurücksetzen' });
+    expect(card.args).toBeUndefined();
+    expect(card.hint!.en).toBeTruthy();
+    expect(card.hint!.de).toBeTruthy();
+  });
+
+  it('declares the trigger Score changed with the number tokens red and blue', () => {
+    const trigger = compose.triggers.find((t) => t.id === FLOW_TRIGGER_SCORE_CHANGED)!;
+    expect(trigger.id).toBe('timebox_score_changed');
+    expect(trigger.title).toEqual({ en: 'Score changed', de: 'Spielstand geändert' });
+    expect(trigger.tokens!.map((t) => [t.name, t.type, t.title])).toEqual([
+      ['red', 'number', { en: 'Red score', de: 'Punkte Rot' }],
+      ['blue', 'number', { en: 'Blue score', de: 'Punkte Blau' }],
+    ]);
+  });
+
+  it('is part of the built manifest', () => {
+    const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8')) as {
+      flow: { actions: ActionNode[]; triggers: TriggerNode[] };
+    };
+    const built = (id: string) => manifest.flow.actions.find((a) => a.id === id)!;
+    expect(built('timebox_set_score').args!.map((a) => a.name)).toEqual(['device', 'red', 'blue']);
+    expect(built('timebox_increase_score').args!.map((a) => a.name)).toEqual(['device', 'team', 'step']);
+    expect(built('timebox_decrease_score').args!.map((a) => a.name)).toEqual(['device', 'team', 'step']);
+    expect(built('timebox_reset_score').args!.map((a) => a.name)).toEqual(['device']);
+    expect(manifest.flow.triggers.map((t) => t.id)).toContain('timebox_score_changed');
+  });
+});
+
 // Settings and Flow cards removed in #70 must not survive in any text the user can see (hints, titles, locales, manifest).
 describe('user-visible text (#78)', () => {
   const root = join(__dirname, '..');
@@ -801,6 +925,12 @@ describe('locales and argument errors (#108)', () => {
     'timebox_start_sleep_light.minutes': 'minutes',
     'timebox_start_sleep_light.sound': 'sound',
     'timebox_start_sleep_light.volume': 'volume',
+    'timebox_set_score.red': 'red',
+    'timebox_set_score.blue': 'blue',
+    'timebox_increase_score.team': 'team',
+    'timebox_increase_score.step': 'step',
+    'timebox_decrease_score.team': 'team',
+    'timebox_decrease_score.step': 'step',
   };
 
   it('labels every field like the card argument title (en, de)', () => {

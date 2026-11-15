@@ -29,6 +29,7 @@ import {
   startSleepLight,
   stopSleepLight,
   startNoiseMeter,
+  setScoreboard,
   staticImage,
   startCountdown,
   stopCountdown,
@@ -107,6 +108,24 @@ describe('setVisualization', () => {
 describe('startNoiseMeter', () => {
   it('is 72 02 01', () => {
     expect(toHex(startNoiseMeter())).toBe('72 02 01');
+  });
+});
+
+describe('setScoreboard', () => {
+  it('encodes red and blue as LE16 after 72 01 01', () => {
+    expect(toHex(setScoreboard(3, 2))).toBe('72 01 01 03 00 02 00');
+    expect(toHex(setScoreboard(999, 0))).toBe('72 01 01 e7 03 00 00');
+    expect(toHex(setScoreboard(0, 999))).toBe('72 01 01 00 00 e7 03');
+    expect(toHex(setScoreboard(256, 12))).toBe('72 01 01 00 01 0c 00');
+  });
+
+  it('rejects scores that are out of range or not integers', () => {
+    expect(() => setScoreboard(1000, 0)).toThrow(RangeError);
+    expect(() => setScoreboard(0, 1000)).toThrow(RangeError);
+    expect(() => setScoreboard(-1, 0)).toThrow(RangeError);
+    expect(() => setScoreboard(0, -1)).toThrow(RangeError);
+    expect(() => setScoreboard(1.5, 0)).toThrow(RangeError);
+    expect(() => setScoreboard(0, Number.NaN)).toThrow(RangeError);
   });
 });
 

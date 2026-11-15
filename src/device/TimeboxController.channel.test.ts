@@ -122,7 +122,7 @@ describe('setChannel', () => {
   it('rejects an invalid id before anything is written', async () => {
     const r = await online();
     r.t.writes.length = 0;
-    for (const bad of ['game', '', 'cloud', 'visualizer', 'scoreboard', 3, null, undefined]) {
+    for (const bad of ['game', '', 'cloud', 'visualizer', 'score', 3, null, undefined]) {
       await expect(r.c.setChannel(bad as unknown as ChannelId)).rejects.toThrow(RangeError);
     }
     expect(r.t.writes).toHaveLength(0);
@@ -374,7 +374,7 @@ describe('modes that are not offered (cloud 02, visualizer 04)', () => {
   it('rejects the removed modes as ids and sends nothing', async () => {
     const r = await online(0);
     r.t.writes.length = 0;
-    for (const id of ['cloud', 'visualizer', 'scoreboard']) {
+    for (const id of ['cloud', 'visualizer', 'game']) {
       await expect(r.c.setChannel(id as unknown as ChannelId)).rejects.toThrow(RangeError);
     }
     expect(r.t.writes).toHaveLength(0);
