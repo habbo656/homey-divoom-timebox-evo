@@ -150,6 +150,13 @@
                 "en": "Equalizer",
                 "de": "Equalizer"
               }
+            },
+            {
+              "id": "scoreboard",
+              "label": {
+                "en": "Scoreboard",
+                "de": "Scoreboard"
+              }
             }
           ]
         }
@@ -224,6 +231,13 @@
               "label": {
                 "en": "Equalizer",
                 "de": "Equalizer"
+              }
+            },
+            {
+              "id": "scoreboard",
+              "label": {
+                "en": "Scoreboard",
+                "de": "Scoreboard"
               }
             }
           ]

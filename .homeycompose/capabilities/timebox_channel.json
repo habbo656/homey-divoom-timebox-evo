@@ -13,6 +13,7 @@
     { "id": "lighting", "title": { "en": "Lighting", "de": "Beleuchtung" } },
     { "id": "custom", "title": { "en": "Custom", "de": "Benutzerdefiniert" } },
     { "id": "noise_meter", "title": { "en": "Noise meter", "de": "Lärmmesser" } },
-    { "id": "equalizer", "title": { "en": "Equalizer", "de": "Equalizer" } }
+    { "id": "equalizer", "title": { "en": "Equalizer", "de": "Equalizer" } },
+    { "id": "scoreboard", "title": { "en": "Scoreboard", "de": "Scoreboard" } }
   ]
 }

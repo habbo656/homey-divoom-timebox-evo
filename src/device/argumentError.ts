@@ -40,6 +40,10 @@ export const ARGUMENT_FIELDS = [
   'volume',
   'brightness',
   'sound',
+  'red',
+  'blue',
+  'step',
+  'team',
 ] as const;
 export type ArgumentField = (typeof ARGUMENT_FIELDS)[number];
 
