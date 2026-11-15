@@ -147,6 +147,8 @@ sips -s format png -z 1000 1000 .hwtest/issue-92/driver-image.png --out drivers/
   `locales/*.json` and the store readmes. Names of devices that were paired earlier are not changed.
 - Store readme rules (Homey App Store): `README.txt` per locale (`README.de.txt` for German), plain text, at most two paragraphs, no URLs, no
   markdown, not just the slogan. Only shipped features are mentioned. The German text uses the informal "du" and real umlauts.
+  They end with a privacy note (the optional automatic weather sends the approximate Homey location to Open-Meteo; Show
+  image from URL downloads from the entered address) and say that the app is unofficial and not affiliated with Divoom.
 - The repository `README.md` (GitHub) is separate: it describes the app for users and keeps the developer status under "Development".
 
 ## Manifest links and brand colour

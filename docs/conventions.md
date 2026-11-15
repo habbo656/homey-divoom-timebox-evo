@@ -13,6 +13,9 @@
 - **Local scratch output:** `.hwtest/` is local hardware-test scratch output (gitignored) and is excluded from ESLint
   (`eslint.config.mjs`) and Prettier (`.prettierignore`), so scratch scripts there never affect `scripts/gate.sh`. The
   installed protocol KB skill `.claude/skills/divoom-evo/` (gitignored) is excluded from ESLint for the same reason.
+- **macOS AppleDouble files:** on non-APFS volumes macOS writes `._<name>` next to every file. ESLint
+  (`eslint.config.mjs`) and Vitest (`vitest.config.mjs`) ignore `**/._*`, and tests that list directories skip names
+  starting with `._`; the Homey CLI leaves them out of the bundle (dot-files). `dot_clean .` removes them.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `test:`, `style:`), reference `#<n>`.
 - **PRs:** one issue per PR, body contains `Closes #<n>`, summary, test evidence, doc changes.
 - **Tests:** unit tests for protocol encoding/decoding without hardware; hardware-dependent

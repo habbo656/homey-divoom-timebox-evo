@@ -9,6 +9,8 @@ export default tseslint.config(
       'app.json',
       '.hwtest/**',
       '.claude/skills/divoom-evo/**',
+      // macOS AppleDouble files on non-APFS volumes (binary, not source).
+      '**/._*',
     ],
   },
   ...tseslint.configs.recommended,
