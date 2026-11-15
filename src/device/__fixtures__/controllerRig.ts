@@ -123,6 +123,9 @@ export class FakeSurface implements DeviceSurface {
  * `50 TT` (notification icon) is recorded in `icons` and answered with `50 55` unless `answerIcon` is false.
  * `08 VV` sets the volume (clamped to 15, recorded in `volumeSets`, no reply) and lights the panel (d8 `01`, research #4);
  * `09` is answered with `09 55 VV` unless `answerVolume` is false and `0b` with `0b 55 PP` (`playing`) unless `answerPlay` is false.
+ * `40 …` with on `ff` stores the sleep scene (`sleep`, the 10 argument bytes, recorded in `sleepStarts`) and lights the
+ * panel (d8 `01`, d0 unchanged, research #6) without a reply; `40 … 00 …` (the stop) only clears the on/off byte and is
+ * answered with `a2 55` + the scene unless `answerSleepStop` is false; `a2` is answered with it unless `answerSleep` is false.
  */
 export function evo(t: MockTransport, initial = 50) {
   const state = {
@@ -154,6 +157,15 @@ export function evo(t: MockTransport, initial = 50) {
     /** The play status byte of `0b 55 PP` (`00` idle, `01` playing). */
     playing: 0,
     answerPlay: true,
+    /** The sleep scene `MI MO OO FL FH VV RR GG BB BR` (`a2 55` + these bytes); OO `ff` while a sleep light runs. */
+    sleep: [0x02, 0x00, 0x00, 0x00, 0x00, 0x32, 0xff, 0x00, 0x00, 0x32],
+    /** The `40` command is split into two BLE chunks: its blue and brightness bytes arrive in the next write. */
+    sleepPending: null as 'store' | 'ignore' | null,
+    /** Every sleep-light start (the 10 argument bytes) and the number of stops received. */
+    sleepStarts: [] as number[][],
+    sleepStops: 0,
+    answerSleep: true,
+    answerSleepStop: true,
   };
   const status = () =>
     statusFrame(state.brightness, state.channel, {
@@ -175,6 +187,28 @@ export function evo(t: MockTransport, initial = 50) {
       state.clockColor[2] = w[1];
       return undefined;
     }
+    if (state.sleepPending && op === -1) {
+      if (state.sleepPending === 'store') {
+        state.sleep[8] = w[0];
+        state.sleep[9] = w[1];
+        state.sleepStarts.push([...state.sleep]);
+      }
+      state.sleepPending = null;
+      return undefined;
+    }
+    if (op === 0x40) {
+      if (w[14] !== 0x00) {
+        state.sleep = [...Array.from(w.subarray(12, 20)), state.sleep[8], state.sleep[9]];
+        state.sleepPending = 'store';
+        state.power = true;
+        return undefined;
+      }
+      state.sleepStops++;
+      state.sleep[2] = 0x00;
+      state.sleepPending = 'ignore';
+      return state.answerSleepStop ? [replyFrame(0xa2, ...state.sleep)] : undefined;
+    }
+    if (op === 0xa2) return state.answerSleep ? [replyFrame(0xa2, ...state.sleep)] : undefined;
     if (op === 0x74) {
       state.brightness = w[12];
       return [status(), replyFrame(0x31, state.brightness)];

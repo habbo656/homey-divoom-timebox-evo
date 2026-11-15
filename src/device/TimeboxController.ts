@@ -8,6 +8,7 @@ import {
   nativeText,
   queryCustomPage,
   queryPlayStatus,
+  querySleepScene,
   queryStatus,
   queryVolume,
   setBrightness,
@@ -19,20 +20,24 @@ import {
   startCountdown as countdownStartCommand,
   stopCountdown as countdownStopCommand,
   stopNativeText,
+  stopSleepLight as sleepStopCommand,
 } from '../protocol/commands';
-import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
+import type { CountdownTime, SleepLight, TemperatureUnit } from '../protocol/commands';
 import { toHex } from '../protocol/hex';
 import type { Reply } from '../protocol/replies';
 import {
   COUNTDOWN_REPORT_OPCODE,
   PLAY_STATUS_OPCODE,
+  SLEEP_SCENE_OPCODE,
   VOLUME_OPCODE,
   decodeCustomPage,
   decodePlayStatus,
+  decodeSleepScene,
   decodeStatus,
   decodeVolume,
   isCountdownEnd,
   isCustomPageReply,
+  isSleepStopReply,
 } from '../protocol/status';
 import type { DeviceStatus, Rgb } from '../protocol/status';
 import type { ConnectFailure, ConnectionManager } from '../transport/ConnectionManager';
@@ -49,6 +54,7 @@ import { hueSatToRgb, powerOffCommand, rgbToHueSat } from './lighting';
 import { notificationIconCode, notificationIconCommand } from './notification';
 import type { NotificationIconId } from './notification';
 import { parseTextDuration, prepareText } from './scrollText';
+import { formatSleepLight, sleepLightCommand } from './sleepLight';
 import { fillPlaceholders } from './text';
 import {
   autoSyncReason,
@@ -454,6 +460,16 @@ export class TimeboxController {
   private unitSending = false;
   /** Number of native text sends in progress (frames queued, `textActive` not set yet): the weather waits like for a running text. */
   private textSending = 0;
+
+  /**
+   * When the timer of the newest sleep light started from Homey runs out (`now()` ms, #6); null when none was started, it
+   * was stopped, or a display change sent the stop. While it lies in the future the sleep light "may run": every display
+   * change from Homey sends the stop first (`sendSleepStopAhead`). Memory only: a sleep light from before an app restart
+   * or from the Divoom app is not tracked (the "Stop sleep light" card reads `a2` and ends it anyway).
+   */
+  private sleepUntil: number | null = null;
+  /** Incremented by every sleep-light start and stop (also the stop ahead of a display change); only the newest one confirms. */
+  private sleepGeneration = 0;
 
   /** The device volume 0..15 as last reported, sent or confirmed (#4); null until known. The only truth: mute = (volume 0). */
   private knownVolume: number | null = null;
@@ -888,7 +904,8 @@ export class TimeboxController {
   /**
    * The shared path of every display change (`setChannel`, `setClockSettings`, `showClock`, power on, `setTileColor` and the Flow
    * actions lighting and custom page): send the switch command, then confirm with `46`. Every display command also powers the panel on (protocol
-   * section 3), so `onoff` is set if the app thought it was off. Resolves `false` if a newer change superseded it, else `true`.
+   * section 3), so `onoff` is set if the app thought it was off. A sleep light started from Homey that may still run is
+   * stopped first (`sendSleepStopAhead`, #6). Resolves `false` if a newer change superseded it, else `true`.
    * If the confirm fails (#141) the optimistic state and the trigger stay (the device probably took the command), the mode
    * tile (and, for `keepTile` changes, the colour tile) is written to match, and it rejects with `messages.notConfirmed`
    * (no `46` reply, or for a custom page no `bd 17 ff` reply, in time) or `messages.notConnected` (link lost during the
@@ -917,6 +934,8 @@ export class TimeboxController {
     const textAtSend = this.textSeq;
     const imageAtSend = this.imageSeq;
     this.cancelClockResend();
+    // Queued in this turn, right before the first frame of the change (no await in between).
+    this.sendSleepStopAhead(lighting ? 'lighting' : `mode ${channel}`);
     this.channelInFlight++;
     try {
       try {
@@ -1065,6 +1084,7 @@ export class TimeboxController {
     const imageAtSend = this.imageSeq;
     this.clearText();
     this.textStopPending = false;
+    this.sendSleepStopAhead('text');
     this.textSending++;
     try {
       await this.sendAllBounded(resend === null ? frames : [resend, ...frames]);
@@ -1197,6 +1217,7 @@ export class TimeboxController {
     const textAtSend = this.textSeq++;
     this.displaySeq++;
     const imageAtSend = this.imageSeq;
+    this.sendSleepStopAhead('countdown');
     try {
       await this.sendAllBounded(resend === null ? [frame] : [resend, frame]);
     } catch (e) {
@@ -1281,6 +1302,128 @@ export class TimeboxController {
     this.log(`notification icon shown: ${id} (code ${code})`);
   }
 
+  // --- sleep light (#6) -------------------------------------------------------------------------------------------
+
+  /**
+   * The Flow action "Start sleep light": send `40 MI MO ff 00 00 VV RR GG BB BR` (protocol section 5.4), then confirm with
+   * an `a2` read (the 10 bytes are compared with the request; a mismatch is only logged). The device lights the full panel
+   * in the colour, also a panel that is off, and powers itself off when the minutes have run out (the device is then
+   * unavailable until its power button is pressed, owner #6). The sleep light is not a mode: `46` does not show it, the tile
+   * and the known channel stay; a running text, image or noise meter is forgotten (conservatively, as power off does) and a
+   * pending small-clock re-send is cancelled. A new start replaces a running one. Started while the panel is off (and no
+   * power change in flight), the held dim is queued before the `40` (a `74` would relight lighting under it) and `onoff`
+   * follows the lit panel (`panelLitByDevice`). Every later display change from Homey sends the stop first while the
+   * minutes have not run out; power off does not (owner #6). Rejects with a `RangeError` for invalid values (nothing is
+   * sent), with the readable `notConnected` error if the Timebox is not connected or the link is lost during the confirm,
+   * and with `notConfirmed` if the `a2` reply does not come in time (#141). A start superseded by a newer start or stop
+   * resolves.
+   */
+  async startSleepLight(light: SleepLight): Promise<void> {
+    const command = sleepLightCommand(light); // validates first: a RangeError sends nothing
+    if (this.stopped || this.link.state !== 'connected') throw new Error(this.messages.notConnected);
+    this.cancelClockResend();
+    const generation = ++this.sleepGeneration;
+    // A text still being sent is superseded (as by a countdown), and the clock re-send of a switch in flight is skipped.
+    const textAtSend = this.textSeq++;
+    const imageAtSend = this.imageSeq;
+    if (!this.power && this.channelInFlight === 0) this.applyPendingBrightness();
+    // Tracked from the moment it is queued: a display change queued behind it sends the stop behind it.
+    this.sleepUntil = this.now() + light.minutes * 60_000;
+    try {
+      await this.sendBounded(command);
+    } catch (e) {
+      if (generation === this.sleepGeneration) this.sleepUntil = null;
+      if (e instanceof NotConnectedError || e instanceof LinkLostError) throw new Error(this.messages.notConnected);
+      throw e;
+    }
+    if (this.stopped) return;
+    this.textEndedByCommand('sleep light', textAtSend);
+    this.imageEndedByCommand('sleep light', imageAtSend);
+    this.noiseEnded('sleep light');
+    this.log(`sleep light started: ${formatSleepLight(light)}: ${toHex(command)}`);
+    if (!this.power) this.panelLitByDevice('sleep light', 'sleep light');
+
+    let failure: 'unconfirmed' | 'lost' | null = null;
+    try {
+      const reply = await this.link.request(querySleepScene(), SLEEP_SCENE_OPCODE, this.channelConfirmMs);
+      decodeSleepScene(reply); // a short or failed frame is a failed confirm
+      if (generation === this.sleepGeneration) {
+        const device = toHex(reply.data.subarray(0, command.length - 1));
+        const requested = toHex(command.subarray(1));
+        if (device === requested) this.log('sleep light confirmed');
+        else this.log(`sleep light mismatch: device ${device}, requested ${requested}`);
+      }
+    } catch (e) {
+      if (e instanceof RequestTimeoutError) this.log('sleep light confirm timeout');
+      else this.log(`sleep light confirm failed: ${errorText(e)}`);
+      failure = this.confirmFailure(e);
+    }
+    if (generation !== this.sleepGeneration) {
+      this.log('sleep light superseded by a newer change');
+      return;
+    }
+    if (failure !== null) throw new Error(failure === 'lost' ? this.messages.notConnected : this.messages.notConfirmed);
+  }
+
+  /**
+   * The Flow action "Stop sleep light": read the sleep scene (`a2`) first. With on/off `00` nothing runs: it logs and
+   * resolves without sending anything (the effect of a stop when nothing runs is unmeasured). Otherwise it sends the stop
+   * `40 05 00 …` and waits for the `a2` frame the device answers it with (on/off `00`). So it also ends a sleep light
+   * started in the Divoom app or before an app restart. The panel returns to the view under the sleep light (research #6);
+   * the power state is not changed (a panel turned off during the sleep light stays dark). Rejects with the readable
+   * `notConnected` error if the Timebox is not connected or the link is lost during a wait, and with `notConfirmed` if the
+   * read or the stop is not answered in time (#141).
+   */
+  async stopSleepLight(): Promise<void> {
+    if (this.stopped || this.link.state !== 'connected') throw new Error(this.messages.notConnected);
+    // Forget the tracking before the read, so a display change meanwhile does not send a second stop.
+    const until = this.sleepUntil;
+    this.sleepUntil = null;
+    const generation = ++this.sleepGeneration;
+    let running: boolean;
+    try {
+      running = decodeSleepScene(
+        await this.link.request(querySleepScene(), SLEEP_SCENE_OPCODE, this.channelConfirmMs),
+      ).on;
+    } catch (e) {
+      if (e instanceof RequestTimeoutError) this.log('sleep light read timeout');
+      else this.log(`sleep light read failed: ${errorText(e)}`);
+      // Nothing was sent: keep tracking the sleep light, unless a newer start or stop took over.
+      if (generation === this.sleepGeneration) this.sleepUntil = until;
+      throw new Error(this.confirmFailure(e) === 'lost' ? this.messages.notConnected : this.messages.notConfirmed);
+    }
+    if (!running) {
+      this.log('sleep light: none running');
+      return;
+    }
+    try {
+      await this.link.request(sleepStopCommand(), SLEEP_SCENE_OPCODE, this.channelConfirmMs, isSleepStopReply);
+    } catch (e) {
+      if (e instanceof RequestTimeoutError) this.log('sleep light stop confirm timeout');
+      else this.log(`sleep light stop failed: ${errorText(e)}`);
+      throw new Error(this.confirmFailure(e) === 'lost' ? this.messages.notConnected : this.messages.notConfirmed);
+    }
+    this.log('sleep light stopped');
+  }
+
+  /**
+   * Before a display change from Homey (mode, lighting, clock, custom page, power on, tile colour, clock settings, text,
+   * image, countdown): if a sleep light started from Homey may still run (its minutes have not run out), queue the stop
+   * now, in the same turn as the first frame of the change, so it goes out right before it (owner #6: the change replaces
+   * the sleep light on the panel, but only the stop ends its timer and the power-off at its end). The tracking is cleared
+   * at once, so only one stop is sent. A failed stop is logged; the change goes on. `what` only words the log.
+   */
+  private sendSleepStopAhead(what: string): void {
+    const until = this.sleepUntil;
+    if (until === null) return;
+    this.sleepUntil = null;
+    if (this.now() >= until) return; // the minutes have run out: the device has powered itself off since
+    this.sleepGeneration++;
+    const stop = sleepStopCommand();
+    this.log(`sleep light stop before ${what}: ${toHex(stop)}`);
+    this.sendBounded(stop).catch((e: unknown) => this.log(`sleep light stop before ${what} failed: ${errorText(e)}`));
+  }
+
   // --- static image (#31) -----------------------------------------------------------------------------------------
 
   /**
@@ -1310,6 +1453,7 @@ export class TimeboxController {
     const textAtSend = this.textSeq++;
     const displayAtSend = ++this.displaySeq;
     this.clearImage();
+    this.sendSleepStopAhead('image');
     this.imageSending++;
     try {
       await this.sendAllBounded(resend === null ? [request.payload] : [resend, request.payload]);
@@ -1611,13 +1755,13 @@ export class TimeboxController {
    * An unsolicited `71` frame: `71 55 03 01 01 00` is the end of a countdown (protocol section 5.6) and fires the trigger
    * once per frame, whatever the app thinks it shows (the countdown may be hidden, or started outside Homey). The mode
    * and the tiles do not change, with one exception: with the panel off the end display lights it, so `onoff` follows
-   * (`panelLitByCountdownEnd`) before the trigger fires. Every other `71` frame is only logged.
+   * (`panelLitByDevice`) before the trigger fires. Every other `71` frame is only logged.
    */
   private countdownReport(reply: Reply): void {
     if (this.stopped) return;
     if (isCountdownEnd(reply)) {
       this.log('countdown ended (device)');
-      if (!this.power) this.panelLitByCountdownEnd();
+      if (!this.power) this.panelLitByDevice('countdown end', 'countdown end display');
       this.call(() => this.surface.onCountdownEnded());
     } else {
       this.log(`countdown: unknown 71 frame ${['71', reply.ok ? '55' : 'xx', toHex(reply.data)].join(' ').trim()}`);
@@ -1625,31 +1769,32 @@ export class TimeboxController {
   }
 
   /**
-   * The end of a countdown while the app thinks the panel is off: the end display (`00:00`) lights the panel and it
-   * stays lit (protocol/countdown.md P6, P7, P11), so `onoff` becomes true and the off shadow is dropped. A `46` query
-   * then lets the normal status path align the mode tile, the colour tile and the "mode changed" trigger with d0. A
-   * power change in flight (`channelInFlight`) decides the power itself and is left alone.
+   * The device lit a panel the app thinks is off: the end display of a countdown (`00:00`, protocol/countdown.md P6, P7,
+   * P11) or a sleep light started from Homey (research #6: `46` d8 flips to `01`). The panel stays lit, so `onoff` becomes
+   * true and the off shadow is dropped (the self-wake check then sends no off). A `46` query then lets the normal status
+   * path align the mode tile, the colour tile and the "mode changed" trigger with d0. A power change in flight
+   * (`channelInFlight`) decides the power itself and is left alone. `reason` and `display` only word the log.
    */
-  private panelLitByCountdownEnd(): void {
+  private panelLitByDevice(reason: string, display: string): void {
     if (this.channelInFlight > 0) {
-      this.log('countdown end: panel lit, power left to the change in flight');
+      this.log(`${reason}: panel lit, power left to the change in flight`);
       return;
     }
     this.power = true;
     this.offShadow = null;
-    this.log('power <- device: on (countdown end display)');
+    this.log(`power <- device: on (${display})`);
     this.call(() => this.surface.setOnOff(true));
     this.applyPendingBrightness();
-    void this.syncAfterCountdownEnd();
+    void this.syncAfterPanelLit(reason);
   }
 
-  /** Query the status once after a countdown end lit the panel; its reply is handled by `onStatus` (a failure is only logged). */
-  private async syncAfterCountdownEnd(): Promise<void> {
+  /** Query the status once after the device lit the panel; its reply is handled by `onStatus` (a failure is only logged). */
+  private async syncAfterPanelLit(reason: string): Promise<void> {
     try {
       await this.link.request(queryStatus(), 0x46, this.channelConfirmMs);
     } catch (e) {
-      if (e instanceof RequestTimeoutError) this.log('countdown end: status sync timeout');
-      else this.log(`countdown end: status sync failed: ${errorText(e)}`);
+      if (e instanceof RequestTimeoutError) this.log(`${reason}: status sync timeout`);
+      else this.log(`${reason}: status sync failed: ${errorText(e)}`);
     }
   }
 
