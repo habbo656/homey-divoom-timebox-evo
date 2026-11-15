@@ -51,7 +51,7 @@ A [Homey](https://homey.app) app that integrates the **Divoom TimeBox Evo** pixe
 > voice commands for lights include it too, because the TimeBox is a light device (it can also be added to moods). Turning it on returns to the last mode
 > (clock, lighting or custom). Changing the brightness (`dim`) of a switched-off TimeBox does not
 > light the panel: the app holds the value and sends it when the panel is switched on again (#62).
-> Current version: 1.1.0 (milestone Bugfix after Release 1.0, accepted 2026-10-18). Changelog: `.homeychangelog.json`.
+> Current version: 1.2.0 (milestone Additional features, accepted 2026-11-15). Changelog: `.homeychangelog.json`.
 
 ## How this app is built (agent pipeline)
 
