@@ -366,6 +366,19 @@ export function startNoiseMeter(): Uint8Array {
   return Uint8Array.of(0x72, 0x02, 0x01);
 }
 
+/** Highest score of the scoreboard (`72 01 01`, VERIFIED, protocol section 5.1). */
+export const MAX_SCORE = 999;
+
+/**
+ * `72 01 01 RRRR BBBB`: set the scoreboard scores, red (shown at the bottom) and blue (shown at the top), each LE16
+ * 0..999 (VERIFIED, reply `72 55 01`). It does not show the scoreboard: send `45 06` (`setChannel(0x06)`) first.
+ */
+export function setScoreboard(red: number, blue: number): Uint8Array {
+  const [rl, rh] = le16('red', intInRange('red', red, 0, MAX_SCORE));
+  const [bl, bh] = le16('blue', intInRange('blue', blue, 0, MAX_SCORE));
+  return Uint8Array.of(0x72, 0x01, 0x01, rl, rh, bl, bh);
+}
+
 /**
  * `72 03 01 MM SS`: start the countdown overlay (VERIFIED, protocol section 5.6). It is not a channel and replaces a
  * running one or a native text. 0:00 is rejected: the device would end it at once. The device accepts any bytes, so
