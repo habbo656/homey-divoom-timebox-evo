@@ -19,7 +19,7 @@
   },
   "author": { "name": "habbo656" },
   "source": "https://github.com/habbo656/homey-divoom-timebox-evo",
-  "support": "https://github.com/habbo656/homey-divoom-timebox-evo/issues",
-  "bugs": { "url": "https://github.com/habbo656/homey-divoom-timebox-evo/issues" },
+  "support": "https://github.com/habbo656/homey-divoom-timebox-evo/discussions",
+  "bugs": { "url": "https://github.com/habbo656/homey-divoom-timebox-evo/discussions" },
   "icon": "/assets/icon.svg"
 }
