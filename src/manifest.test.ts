@@ -818,7 +818,7 @@ describe('user-visible text (#78)', () => {
     'drivers/timebox/driver.flow.compose.json',
     '.homeycompose/app.json',
     ...readdirSync(capabilityDir)
-      .filter((f) => f.endsWith('.json'))
+      .filter((f) => f.endsWith('.json') && !f.startsWith('._'))
       .sort()
       .map((f) => `.homeycompose/capabilities/${f}`),
     'locales/en.json',
@@ -1169,7 +1169,7 @@ describe('store i18n (#37)', () => {
 
   it('gives every custom capability and enum value a title', () => {
     const dir = join(root, '.homeycompose', 'capabilities');
-    const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.startsWith('._'));
     expect(files.length).toBeGreaterThan(0);
     const problems: string[] = [];
     for (const file of files) {
@@ -1201,7 +1201,7 @@ describe('store i18n (#37)', () => {
   it('has every pairing view string in locales/en.json and locales/de.json', () => {
     const pairDir = join(root, 'drivers', 'timebox', 'pair');
     const keys = new Set<string>();
-    for (const file of readdirSync(pairDir).filter((f) => f.endsWith('.html'))) {
+    for (const file of readdirSync(pairDir).filter((f) => f.endsWith('.html') && !f.startsWith('._'))) {
       const html = readFileSync(join(pairDir, file), 'utf8');
       for (const m of html.matchAll(/data-i18n="([^"]+)"/g)) keys.add(m[1]);
       // scan.html resolves t('<key>') to pair.scan.<key>
@@ -1253,7 +1253,9 @@ describe('TimeBox spelling (#133)', () => {
       'drivers/timebox/driver.flow.compose.json',
       'drivers/timebox/driver.settings.compose.json',
       '.homeycompose/app.json',
-      ...readdirSync(join(root, '.homeycompose', 'capabilities')).map((f) => `.homeycompose/capabilities/${f}`),
+      ...readdirSync(join(root, '.homeycompose', 'capabilities'))
+        .filter((f) => !f.startsWith('._'))
+        .map((f) => `.homeycompose/capabilities/${f}`),
       'app.json',
     ];
     expect(files.length).toBeGreaterThan(5);
