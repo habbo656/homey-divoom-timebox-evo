@@ -65,7 +65,7 @@ git switch main
 ```
 
 ## Active
-None.
+- [v1.2.0.md](v1.2.0.md) (pending, round 1, UAT issue #42)
 
 ## Archive
 Accepted UAT docs are kept in `docs/uat/archive/` (moved there after acceptance, #120):
