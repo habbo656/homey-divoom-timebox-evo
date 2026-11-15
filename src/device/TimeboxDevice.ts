@@ -26,7 +26,7 @@ import {
   resolveStoredShownStyle,
 } from './clock';
 import type { ClockSettings } from './clock';
-import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
+import type { CountdownTime, SleepLight, TemperatureUnit } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 import { localiseError } from './argumentError';
 import { onoffSetOnDimDisabled } from './lighting';
@@ -472,6 +472,21 @@ export class TimeboxDevice extends Homey.Device {
   async showNotificationIcon(id: NotificationIconId): Promise<void> {
     if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
     await this.controller.showNotificationIcon(id);
+  }
+
+  /**
+   * Used by the Flow action "Start sleep light" (#6): the panel shows the colour and the sound plays for the minutes; a
+   * turned-off Timebox is lit. When the minutes have run out the Timebox powers itself off (unavailable until its button).
+   */
+  async startSleepLight(light: SleepLight): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.controller.startSleepLight(light);
+  }
+
+  /** Used by the Flow action "Stop sleep light" (#6): ends a running sleep light; nothing happens when none runs. */
+  async stopSleepLight(): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.controller.stopSleepLight();
   }
 
   /**

@@ -5,6 +5,7 @@ import { ARGUMENT_ERROR_KINDS, ARGUMENT_FIELDS } from './device/argumentError';
 import { IMAGE_FIT_IDS } from './device/image';
 import { IMAGE_ERROR_KINDS } from './device/imageError';
 import { NOTIFICATION_ICON_IDS } from './device/notification';
+import { SLEEP_SOUND_IDS } from './device/sleepLight';
 import type { ArgumentField } from './device/argumentError';
 import { TEXT_SPEED_IDS } from './device/scrollText';
 import { COUNTDOWN_MAX_MINUTES } from './protocol/commands';
@@ -604,6 +605,85 @@ describe('Show notification icon card (#5)', () => {
   });
 });
 
+describe('Start and Stop sleep light cards (#6)', () => {
+  interface Value {
+    id: string;
+    label: Record<string, string>;
+  }
+  interface Arg {
+    type: string;
+    name: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    values?: Value[];
+  }
+  interface ActionNode {
+    id: string;
+    title: Record<string, string>;
+    titleFormatted?: Record<string, string>;
+    hint?: Record<string, string>;
+    args?: Arg[];
+  }
+  const actions = readJson<{ actions: ActionNode[] }>('driver.flow.compose.json').actions;
+  const start = actions.find((a) => a.id === 'timebox_start_sleep_light');
+  const stop = actions.find((a) => a.id === 'timebox_stop_sleep_light');
+
+  it('declares Start sleep light with colour, brightness 1..100, minutes 1..240, sound and volume 1..100', () => {
+    expect(start).toBeDefined();
+    expect(start!.args!.map((a) => [a.name, a.type, a.min, a.max])).toEqual([
+      ['color', 'color', undefined, undefined],
+      ['brightness', 'number', 1, 100],
+      ['minutes', 'number', 1, 240],
+      ['sound', 'dropdown', undefined, undefined],
+      ['volume', 'number', 1, 100],
+    ]);
+  });
+
+  it('offers Phone audio and Sound 1..23 in code order, labelled in English and German', () => {
+    const values = start!.args!.find((a) => a.name === 'sound')!.values!;
+    expect(values.map((v) => v.id)).toEqual(SLEEP_SOUND_IDS);
+    expect(values[0].label).toEqual({ en: 'Phone audio', de: 'Handy-Audio' });
+    expect(values[23].label).toEqual({ en: 'Sound 23', de: 'Klang 23' });
+  });
+
+  it('declares Stop sleep light without arguments', () => {
+    expect(stop).toBeDefined();
+    expect(stop!.args).toBeUndefined();
+  });
+
+  it('has the owner titles, a formatted title with every argument and hints in English and German', () => {
+    expect(start!.title).toEqual({ en: 'Start sleep light', de: 'Starte Schlaflicht' });
+    expect(stop!.title).toEqual({ en: 'Stop sleep light', de: 'Stoppe Schlaflicht' });
+    for (const lang of ['en', 'de']) {
+      for (const arg of ['color', 'brightness', 'minutes', 'sound', 'volume']) {
+        expect(start!.titleFormatted![lang]).toContain(`[[${arg}]]`);
+      }
+      expect(start!.hint![lang]).toBeTruthy();
+      expect(stop!.hint![lang]).toBeTruthy();
+    }
+    expect(start!.hint!.en).toContain('switches itself off');
+    expect(start!.hint!.en).toContain('only darkens it');
+    expect(start!.hint!.de).toContain('schaltet sich die TimeBox selbst aus');
+  });
+
+  it('is part of the built manifest', () => {
+    const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'app.json'), 'utf8')) as {
+      flow: { actions: ActionNode[] };
+    };
+    const built = (id: string) => manifest.flow.actions.find((a) => a.id === id)!;
+    expect(built('timebox_start_sleep_light').args!.map((a) => a.name)).toEqual([
+      'device',
+      'color',
+      'brightness',
+      'minutes',
+      'sound',
+      'volume',
+    ]);
+    expect(built('timebox_stop_sleep_light').args!.map((a) => a.name)).toEqual(['device']);
+  });
+});
+
 // Settings and Flow cards removed in #70 must not survive in any text the user can see (hints, titles, locales, manifest).
 describe('user-visible text (#78)', () => {
   const root = join(__dirname, '..');
@@ -716,6 +796,11 @@ describe('locales and argument errors (#108)', () => {
     'timebox_set_temperature.unit': 'unit',
     'timebox_set_weather.condition': 'condition',
     'timebox_show_notification_icon.icon': 'icon',
+    'timebox_start_sleep_light.color': 'color',
+    'timebox_start_sleep_light.brightness': 'brightness',
+    'timebox_start_sleep_light.minutes': 'minutes',
+    'timebox_start_sleep_light.sound': 'sound',
+    'timebox_start_sleep_light.volume': 'volume',
   };
 
   it('labels every field like the card argument title (en, de)', () => {

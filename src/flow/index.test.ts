@@ -14,7 +14,9 @@ import {
   FLOW_ACTION_SHOW_NOTIFICATION_ICON,
   FLOW_ACTION_SHOW_TEXT,
   FLOW_ACTION_START_COUNTDOWN,
+  FLOW_ACTION_START_SLEEP_LIGHT,
   FLOW_ACTION_STOP_COUNTDOWN,
+  FLOW_ACTION_STOP_SLEEP_LIGHT,
   FLOW_ACTION_STOP_TEXT,
   FLOW_CONDITION_AUDIO_IS_PLAYING,
   FLOW_CONDITION_CHANNEL_IS,
@@ -87,6 +89,8 @@ describe('registerTimeboxFlowCards', () => {
       FLOW_ACTION_SET_WEATHER,
       FLOW_ACTION_SET_TEMPERATURE,
       FLOW_ACTION_SHOW_NOTIFICATION_ICON,
+      FLOW_ACTION_START_SLEEP_LIGHT,
+      FLOW_ACTION_STOP_SLEEP_LIGHT,
     ]);
   });
 
@@ -602,6 +606,71 @@ describe('Show notification icon (#5)', () => {
   });
 });
 
+describe('Start and Stop sleep light (#6)', () => {
+  const good = { color: '#ff0000', brightness: 50, minutes: 30, sound: 'sound_3', volume: 20 };
+
+  it('registers the start action, which passes the validated sleep light on and passes the device rejection on', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const run = actions.get(FLOW_ACTION_START_SLEEP_LIGHT)!;
+    const seen: unknown[] = [];
+    const device = { startSleepLight: async (light: unknown) => void seen.push(light) };
+    await run({ device, ...good });
+    await run({ device, ...good, sound: 'phone', minutes: 240.4 });
+    expect(seen).toEqual([
+      { color: { r: 255, g: 0, b: 0 }, brightness: 50, minutes: 30, sound: 3, volume: 20 },
+      { color: { r: 255, g: 0, b: 0 }, brightness: 50, minutes: 240, sound: 0, volume: 20 },
+    ]);
+    await expect(
+      run({
+        device: {
+          startSleepLight: async () => {
+            throw new Error('not confirmed text');
+          },
+        },
+        ...good,
+      }),
+    ).rejects.toThrow('not confirmed text');
+  });
+
+  it('rejects invalid arguments before the device is called', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    let calls = 0;
+    const device = { startSleepLight: async () => void calls++ };
+    const run = actions.get(FLOW_ACTION_START_SLEEP_LIGHT)!;
+    for (const change of [
+      { minutes: 0 },
+      { minutes: 241 },
+      { brightness: 0 },
+      { volume: 101 },
+      { sound: 'sound_24' },
+      { color: 'red' },
+    ]) {
+      await expect(Promise.resolve().then(() => run({ device, ...good, ...change }))).rejects.toThrow(INVALID);
+    }
+    expect(calls).toBe(0);
+  });
+
+  it('registers the stop action, which stops it and passes the device rejection on', async () => {
+    const { flow, actions } = fakeFlow();
+    registerTimeboxFlowCards(flow, (key) => key);
+    const run = actions.get(FLOW_ACTION_STOP_SLEEP_LIGHT)!;
+    let calls = 0;
+    await run({ device: { stopSleepLight: async () => void calls++ } });
+    expect(calls).toBe(1);
+    await expect(
+      run({
+        device: {
+          stopSleepLight: async () => {
+            throw new Error('not connected text');
+          },
+        },
+      }),
+    ).rejects.toThrow('not connected text');
+  });
+});
+
 // Localised validation errors (#108): the translator reads the real German locale like `homey.__` does.
 describe('localised argument errors', () => {
   const de = translator('de');
@@ -626,6 +695,7 @@ describe('localised argument errors', () => {
     showCustomPage: spy('showCustomPage'),
     switchChannel: spy('switchChannel'),
     showNotificationIcon: spy('showNotificationIcon'),
+    startSleepLight: spy('startSleepLight'),
     getChannel: () => 'clock',
   };
   const goodText = { text: 'a', color: '#ffffff', background: '#000000', speed: 'normal', duration: 5 };
@@ -753,6 +823,30 @@ describe('localised argument errors', () => {
       expect.stringMatching(
         /^Symbol: "nope" ist keine gültige Auswahl\. Erlaubt sind: kakaotalk, instagram, .*, tamtam\.$/,
       ),
+    ],
+    [
+      'start_sleep_light minutes 241',
+      FLOW_ACTION_START_SLEEP_LIGHT,
+      { color: '#ff0000', brightness: 50, minutes: 241, sound: 'phone', volume: 20 },
+      'Minuten: 241 liegt außerhalb des erlaubten Bereichs von 1 bis 240.',
+    ],
+    [
+      'start_sleep_light brightness 0',
+      FLOW_ACTION_START_SLEEP_LIGHT,
+      { color: '#ff0000', brightness: 0, minutes: 30, sound: 'phone', volume: 20 },
+      'Helligkeit: 0 liegt außerhalb des erlaubten Bereichs von 1 bis 100.',
+    ],
+    [
+      'start_sleep_light sound "sound_24"',
+      FLOW_ACTION_START_SLEEP_LIGHT,
+      { color: '#ff0000', brightness: 50, minutes: 30, sound: 'sound_24', volume: 20 },
+      'Klang: "sound_24" ist keine gültige Auswahl. Erlaubt sind: phone, sound_1 … sound_23.',
+    ],
+    [
+      'start_sleep_light volume 0',
+      FLOW_ACTION_START_SLEEP_LIGHT,
+      { color: '#ff0000', brightness: 50, minutes: 30, sound: 'phone', volume: 0 },
+      'Lautstärke: 0 liegt außerhalb des erlaubten Bereichs von 1 bis 100.',
     ],
   ];
 
