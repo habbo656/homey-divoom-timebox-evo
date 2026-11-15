@@ -12,6 +12,8 @@ import { parseImageUrl } from '../device/imageSource';
 import { parseNotificationIconId } from '../device/notification';
 import type { NotificationIconId } from '../device/notification';
 import { parseTextDurationArg, parseTextSpeedId } from '../device/scrollText';
+import { parseScoreArg, parseStep, parseTeam } from '../device/scoreboard';
+import type { TeamId } from '../device/scoreboard';
 import { parseSleepLightArgs } from '../device/sleepLight';
 import type { SleepLightArgs } from '../device/sleepLight';
 import type { TextRequest } from '../device/TimeboxController';
@@ -45,6 +47,10 @@ export const FLOW_ACTION_SET_TEMPERATURE = 'timebox_set_temperature';
 export const FLOW_ACTION_SHOW_NOTIFICATION_ICON = 'timebox_show_notification_icon';
 export const FLOW_ACTION_START_SLEEP_LIGHT = 'timebox_start_sleep_light';
 export const FLOW_ACTION_STOP_SLEEP_LIGHT = 'timebox_stop_sleep_light';
+export const FLOW_ACTION_SET_SCORE = 'timebox_set_score';
+export const FLOW_ACTION_INCREASE_SCORE = 'timebox_increase_score';
+export const FLOW_ACTION_DECREASE_SCORE = 'timebox_decrease_score';
+export const FLOW_ACTION_RESET_SCORE = 'timebox_reset_score';
 
 /** What the condition needs from the device argument. */
 export interface ConnectableDevice {
@@ -212,6 +218,31 @@ export interface SleepLightStoppableDevice {
   stopSleepLight(): Promise<void>;
 }
 
+/**
+ * What the scoreboard actions need from the device argument (#40). Each shows the scoreboard with the new scores (and
+ * the mode tile `scoreboard`); each rejects with a readable error if that is not possible.
+ */
+export interface ScoreboardDevice {
+  /** Sets red and/or blue (null keeps the value). */
+  setScore(update: { red: number | null; blue: number | null }): Promise<void>;
+  /** Changes one team by `step` in `direction` (1 increase, -1 decrease). */
+  changeScore(team: TeamId, step: number, direction: 1 | -1): Promise<void>;
+  /** Sets both scores to 0. */
+  resetScores(): Promise<void>;
+}
+
+/** The arguments of the action "Set score": both optional numbers, validated before use. */
+export interface SetScoreArgs {
+  red?: unknown;
+  blue?: unknown;
+}
+
+/** The arguments of the actions "Increase score" and "Decrease score": the team dropdown id and the optional step, validated before use. */
+export interface ChangeScoreArgs {
+  team: unknown;
+  step?: unknown;
+}
+
 /** The argument of the channel cards: a dropdown value (its id), validated before use. */
 export interface ChannelArg {
   channel: unknown;
@@ -368,4 +399,22 @@ export function registerTimeboxFlowCards(rawFlow: FlowLike, translate: (key: str
     .registerRunListener(async ({ device }: { device: SleepLightStoppableDevice }) => {
       await device.stopSleepLight();
     });
+  flow
+    .getActionCard(FLOW_ACTION_SET_SCORE)
+    .registerRunListener(async ({ device, red, blue }: { device: ScoreboardDevice } & SetScoreArgs) => {
+      await device.setScore({ red: parseScoreArg('red', red), blue: parseScoreArg('blue', blue) });
+    });
+  flow
+    .getActionCard(FLOW_ACTION_INCREASE_SCORE)
+    .registerRunListener(async ({ device, team, step }: { device: ScoreboardDevice } & ChangeScoreArgs) => {
+      await device.changeScore(parseTeam(team), parseStep(step), 1);
+    });
+  flow
+    .getActionCard(FLOW_ACTION_DECREASE_SCORE)
+    .registerRunListener(async ({ device, team, step }: { device: ScoreboardDevice } & ChangeScoreArgs) => {
+      await device.changeScore(parseTeam(team), parseStep(step), -1);
+    });
+  flow.getActionCard(FLOW_ACTION_RESET_SCORE).registerRunListener(async ({ device }: { device: ScoreboardDevice }) => {
+    await device.resetScores();
+  });
 }

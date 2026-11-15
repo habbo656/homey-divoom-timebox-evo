@@ -79,6 +79,43 @@
         "en": "Triggers when the TimeBox reports that audio stopped playing on its speaker. The TimeBox is checked every 60 seconds, so it can trigger up to a minute late.",
         "de": "Wird ausgelöst, wenn die TimeBox meldet, dass über ihren Lautsprecher kein Audio mehr abgespielt wird. Die TimeBox wird alle 60 Sekunden abgefragt, daher kann es bis zu einer Minute später ausgelöst werden."
       }
+    },
+    {
+      "id": "timebox_score_changed",
+      "title": {
+        "en": "Score changed",
+        "de": "Spielstand geändert"
+      },
+      "hint": {
+        "en": "Triggers when a Flow action changes the red or the blue score. A change made in the Divoom app is not seen.",
+        "de": "Wird ausgelöst, wenn eine Flow-Aktion den roten oder den blauen Spielstand ändert. Eine Änderung in der Divoom-App wird nicht erkannt."
+      },
+      "tokens": [
+        {
+          "name": "red",
+          "type": "number",
+          "title": {
+            "en": "Red score",
+            "de": "Punkte Rot"
+          },
+          "example": {
+            "en": "12",
+            "de": "12"
+          }
+        },
+        {
+          "name": "blue",
+          "type": "number",
+          "title": {
+            "en": "Blue score",
+            "de": "Punkte Blau"
+          },
+          "example": {
+            "en": "34",
+            "de": "34"
+          }
+        }
+      ]
     }
   ],
   "conditions": [
@@ -1275,6 +1312,180 @@
       "hint": {
         "en": "Ends a running sleep light, also one started in the Divoom app; the TimeBox shows its previous view again. Does nothing if no sleep light runs.",
         "de": "Beendet ein laufendes Schlaflicht, auch eines aus der Divoom-App; die TimeBox zeigt wieder ihre vorherige Anzeige. Tut nichts, wenn kein Schlaflicht läuft."
+      }
+    },
+    {
+      "id": "timebox_set_score",
+      "title": {
+        "en": "Set score",
+        "de": "Spielstand setzen"
+      },
+      "titleFormatted": {
+        "en": "Set score: Red [[red]], Blue [[blue]]",
+        "de": "Spielstand setzen: Rot [[red]], Blau [[blue]]"
+      },
+      "hint": {
+        "en": "Sets the red and the blue score (0 to 999) and shows the scoreboard. A field left empty keeps its score. Red is shown at the bottom, blue at the top.",
+        "de": "Setzt den roten und den blauen Spielstand (0 bis 999) und zeigt das Scoreboard. Ein leeres Feld behält seinen Spielstand. Rot steht unten, Blau oben."
+      },
+      "args": [
+        {
+          "type": "number",
+          "name": "red",
+          "title": {
+            "en": "Red",
+            "de": "Rot"
+          },
+          "min": 0,
+          "max": 999,
+          "step": 1,
+          "placeholder": {
+            "en": "0",
+            "de": "0"
+          },
+          "required": false
+        },
+        {
+          "type": "number",
+          "name": "blue",
+          "title": {
+            "en": "Blue",
+            "de": "Blau"
+          },
+          "min": 0,
+          "max": 999,
+          "step": 1,
+          "placeholder": {
+            "en": "0",
+            "de": "0"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_increase_score",
+      "title": {
+        "en": "Increase score",
+        "de": "Punkte erhöhen"
+      },
+      "titleFormatted": {
+        "en": "Increase score: [[team]], Step [[step]]",
+        "de": "Punkte erhöhen: [[team]], Schritt [[step]]"
+      },
+      "hint": {
+        "en": "Raises the score of the chosen team by the step (1 if left empty, at most 999 in total) and shows the scoreboard.",
+        "de": "Erhöht den Spielstand des gewählten Teams um den Schritt (1, wenn leer; höchstens 999 insgesamt) und zeigt das Scoreboard."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "team",
+          "title": {
+            "en": "Team",
+            "de": "Team"
+          },
+          "values": [
+            {
+              "id": "red",
+              "label": {
+                "en": "Red",
+                "de": "Rot"
+              }
+            },
+            {
+              "id": "blue",
+              "label": {
+                "en": "Blue",
+                "de": "Blau"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "step",
+          "title": {
+            "en": "Step",
+            "de": "Schritt"
+          },
+          "min": 1,
+          "max": 999,
+          "step": 1,
+          "placeholder": {
+            "en": "1",
+            "de": "1"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_decrease_score",
+      "title": {
+        "en": "Decrease score",
+        "de": "Punkte verringern"
+      },
+      "titleFormatted": {
+        "en": "Decrease score: [[team]], Step [[step]]",
+        "de": "Punkte verringern: [[team]], Schritt [[step]]"
+      },
+      "hint": {
+        "en": "Lowers the score of the chosen team by the step (1 if left empty, at least 0) and shows the scoreboard.",
+        "de": "Verringert den Spielstand des gewählten Teams um den Schritt (1, wenn leer; mindestens 0) und zeigt das Scoreboard."
+      },
+      "args": [
+        {
+          "type": "dropdown",
+          "name": "team",
+          "title": {
+            "en": "Team",
+            "de": "Team"
+          },
+          "values": [
+            {
+              "id": "red",
+              "label": {
+                "en": "Red",
+                "de": "Rot"
+              }
+            },
+            {
+              "id": "blue",
+              "label": {
+                "en": "Blue",
+                "de": "Blau"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "step",
+          "title": {
+            "en": "Step",
+            "de": "Schritt"
+          },
+          "min": 1,
+          "max": 999,
+          "step": 1,
+          "placeholder": {
+            "en": "1",
+            "de": "1"
+          },
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timebox_reset_score",
+      "title": {
+        "en": "Reset scores",
+        "de": "Spielstand zurücksetzen"
+      },
+      "hint": {
+        "en": "Sets both scores to 0 and shows the scoreboard.",
+        "de": "Setzt beide Spielstände auf 0 und zeigt das Scoreboard."
       }
     }
   ]
