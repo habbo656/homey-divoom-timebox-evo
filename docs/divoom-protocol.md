@@ -198,7 +198,7 @@ Payload = opcode + args (wrap per transport). Names from the decompiled Divoom a
 | `44 …` | static image | `44 55 ZZ` | VERIFIED (section 4) |
 | `49 …` | device-side animation | `49 55` | VERIFIED (section 4) |
 | `72 00 SS` | stopwatch: `01` start, `00` stop | `72 55 00` | VERIFIED |
-| `72 01 01 RRRR BBBB` | scoreboard red/blue (LE16, ≤ 999) | `72 55 01` | VERIFIED (shows red bottom, blue top) |
+| `72 01 01 RRRR BBBB` | scoreboard red/blue (LE16, ≤ 999) | `72 55 01` | VERIFIED (shows red bottom, blue top). Used by the app since #40 (`setScoreboard`, 0..999 each), always sent in the same turn after `45 06` (see [modes.md](architecture/modes.md)) |
 | `72 02 01` | noise meter (dB) | `72 55 02` | VERIFIED; used since #3 (mode picker `noise_meter`, [status.md](protocol/status.md)) |
 | `72 03 OO MM SS` | countdown: OO `01` start / `00` stop, MM minutes (0..99), SS seconds (0..59) | `72 55 03`; unsolicited `71 55 03 01 01 00` when it ends | VERIFIED (Mac probe 2026-10-07, #33, section 5.6) — notes: [countdown.md](protocol/countdown.md#opcode-table-notes) |
 | `18 YL YH MO DD hh mm ss WD` | set date/time (year = YH*100+YL, WD 0=Sun) | `18 55` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes); does not wake an off panel ([status.md](protocol/status.md#spontaneous-power-on-after-off-29)) |

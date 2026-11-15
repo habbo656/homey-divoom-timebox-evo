@@ -4,8 +4,8 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
 
   - Mode picker (#24, reduced in #68; `src/device/channel.ts` pure, `TimeboxController` logic): capability `timebox_channel`
     (title "Mode" / "Modus"; the id and all code identifiers keep the word "channel"; `.homeycompose/capabilities/timebox_channel.json`: enum + `picker`, en/de, driver capabilities `["onoff", "dim", "light_hue", "light_saturation", "timebox_channel"]`).
-    Five stable ids (`CHANNEL_IDS`, never translated); `clock` 00, `lighting` 01, `custom` 05, `equalizer` (#2) 04 have `46` d0 codes, `noise_meter` (#3, `72 02 01`) has none. Cloud (`02`),
-    the other eleven visualizations (`04` with d9 other than `00`) and scoreboard (`06`) are not offered since #68; `45 03` is never built. `setChannel(id)` (capability listener and Flow action share it)
+    Six stable ids (`CHANNEL_IDS`, never translated); `clock` 00, `lighting` 01, `custom` 05, `equalizer` (#2) 04 have `46` d0 codes, `noise_meter` (#3, `72 02 01`) and `scoreboard` (#40, `45 06` + `72 01 01`) have none. Cloud (`02`)
+    and the other eleven visualizations (`04` with d9 other than `00`) are not offered since #68 (the scoreboard came back in #40); `45 03` is never built. `setChannel(id)` (capability listener and Flow action share it)
     validates the id (`parseChannelId`, `ArgumentError`, a `RangeError`),
     validates and builds the command with `channelCommand(id, lastStatus, knownBrightness, clockFace, override?)` (`override` is a `ChannelOverride` = `{lighting?: {color}}`; the shared private `switchTo(id, face, override?)` (`override` there also carries `customPage?` and `keepTile?`, handled by the controller, not by `channelCommand`), which `setClockSettings`, `showClock`, power on, the tile colour path (`setTileColor`) and the custom page action also use) BEFORE the not-connected check and before it supersedes anything (an invalid request throws `RangeError` and leaves a pending switch alone); then throws `device.error.not_connected` without a live link (nothing queued), sends it bounded (`sendBounded`, 10 s) and
     confirms with `request(46, 0x46, CHANNEL_CONFIRM_TIMEOUT_MS = 5 s)`: `[device] channel confirmed: <id>`,
@@ -66,11 +66,9 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
       reaction to audio needs an A2DP stream (owner UAT); if the noise meter's d0 shadow is `04`, a device-side switch to the
       equalizer is not detected (existing shadow limit). Protocol: [status.md](../protocol/status.md).
     - Removed values: `TimeboxDevice.onInit` clears a stored `timebox_channel` value that is no longer one of the offered ids
-      (`cloud`, `visualizer`, `scoreboard` from 0.2.x) to `null` (`[device] mode tile: removed mode <id> cleared`; a failure is logged and never stops the setup).
+      (`cloud`, `visualizer` from 0.2.x) to `null` (`[device] mode tile: removed mode <id> cleared`; a failure is logged and never stops the setup).
       Flows that use a removed value in the condition or action fail (breaking change, `docs/roadmap.md`).
-    - Scoreboard limitation: the app no longer offers the scoreboard (`45 06`), and the scoreboard never changes `46` d0
-      (protocol section 5.1), so a scoreboard shown on the device (for example via the Divoom app) is invisible to the app: the tile keeps the previous mode.
-      The former scoreboard shadow logic was removed.
+    - Scoreboard (#40): see "Scoreboard" below. A `scoreboard` value stored by 0.2.x is valid again and stays on the tile.
 
   - Noise meter (#3; `startNoiseMeter()` = `72 02 01`, reply `72 55 02`): the id `noise_meter` ("Noise meter" / "Lärmmesser") is in the
     capability enum and in the dropdowns of the mode condition and action. It is not a `45` mode and has no `46` d0 code
@@ -93,3 +91,29 @@ _Part of [architecture](../architecture.md); moved from "Mode picker" (#120)._
       countdown" re-sends `72 02 01`. Which d0 the device reports under the noise meter is recorded by the #3 hardware test
       ([status.md](../protocol/status.md)); `5f`, `26` and native text over it are still open
       ([open-questions](../protocol/open-questions.md)).
+
+  - Scoreboard (#40; `src/device/scoreboard.ts` pure, `TimeboxController` logic): the id `scoreboard` ("Scoreboard" / "Scoreboard") is in
+    the capability enum and in the dropdowns of the mode condition and action. Like the noise meter it has no `46` d0 code
+    (`45 06` leaves d0 as it was, [status.md](../protocol/status.md)), so the controller tracks it itself.
+    - Scores: red and blue, integers 0..999, owned by the app (no read command is used, so a score changed in the Divoom app is
+      not seen). Red is shown at the bottom, blue at the top. They are kept in the device store `scoreboard_scores`
+      (`{red, blue}`, `resolveStoredScores`; anything that is not a valid pair starts at 0/0) and survive restarts.
+    - Show: `switchTo('scoreboard')` queues `45 06` (`setChannel(0x06)`) and `72 01 01 RRRR BBBB` (`setScoreboard(red, blue)`, LE16)
+      in one turn (`sendAllBounded`, no await in between; `72 01 01` alone does not show the scoreboard), then confirms with `46` like the
+      noise meter (any d0 confirms and becomes the tracked shadow). Log `scoreboard -> red R, blue B: <hex>`. Switching to the mode
+      from the tile or from "Switch mode" shows the stored scores.
+    - Flow actions (all through `showScoreboard`, which stores the scores, persists them, fires the trigger and then shows the scoreboard):
+      "Set score" (`red`, `blue`; an empty field keeps its score), "Increase score" / "Decrease score" (dropdown `team` `red`/`blue`,
+      `step`, empty = 1, else 1..999; the result is clamped to 0..999), "Reset scores" (both 0). Numbers are rounded and clamped to
+      0..999 (Set score); a value that is not a number, an unknown team or a step outside 1..999 rejects with an `ArgumentError`
+      (fields `red`, `blue`, `step`, `team`; nothing changes). Not connected rejects with `not_connected` and changes nothing. The new scores are
+      computed from the scores of that turn, so two quick Flows do not lose an update; if the `46` confirm fails (#141) the new
+      scores stay. A change superseded by a newer one resolves `false` and leaves the tile to the newer change.
+    - Trigger `timebox_score_changed` (tokens `red`, `blue`, numbers): fires when a Flow action changes at least one score (not when
+      the same scores are shown again). A change made in the Divoom app is not seen.
+    - Tracking rules are those of the noise meter, in one shared `tracked` state (`{id, shadow}`): any other mode change, power off,
+      a tile colour change and a sleep light start end it (`scoreboard ended (<reason>)`, nothing is sent); power on sends the
+      scoreboard again with the stored scores; reports equal to the shadow are ignored, a different known code is a mode change
+      at the device (`scoreboard ended (device mode change): ...`). Weather is held while tracked (`weather held (scoreboard shown)`).
+    - Limits: the tracking is in memory only (an app restart forgets it, the tile then follows d0); if the shadow equals a mode
+      code, a switch back to that mode at the device is not detected; a scoreboard started on the device is invisible to the app.

@@ -9,7 +9,7 @@ start a pizza countdown in the kitchen, or put a snapshot of your doorbell camer
 
 ## What you can do
 
-- Pick a mode on the device tile: clock, lighting, your own custom pages, the noise meter or the equalizer (spectrum bars that react to music streamed over Bluetooth).
+- Pick a mode on the device tile: clock, lighting, your own custom pages, the noise meter, a scoreboard or the equalizer (spectrum bars that react to music streamed over Bluetooth).
 - Show the clock in several styles and colours, with optional weather, temperature and calendar pages.
 - Switch the display on and off, set its brightness and its colour on the device tile; use it as mood lighting in any colour.
 - Show a scrolling text from a Flow (and stop it again).
@@ -18,6 +18,7 @@ start a pizza countdown in the kitchen, or put a snapshot of your doorbell camer
 - Show an image from an image tag (for example a camera snapshot) or from a URL, scaled to 16x16.
 - Show an app notification icon (for example Telegram, WhatsApp or a missed call) for about 2 seconds as a short signal from a Flow.
 - Start a sleep light from a Flow: the display glows in a colour and plays a sound for up to 240 minutes, then the TimeBox switches itself off (press its power button to bring it back); "Stop sleep light" ends it early.
+- Keep score: Flow actions set, raise, lower and reset the red and blue score (0 to 999) on the scoreboard, and "Score changed" starts a Flow.
 - Set and mute the speaker volume, see whether audio plays on the speaker (checked every 60 seconds), and start a Flow when audio starts or stops playing.
 - React to the display being connected or disconnected (triggers and a condition).
 - Automatic time sync with the time of your Homey.
@@ -43,7 +44,7 @@ A [Homey](https://homey.app) app that integrates the **Divoom TimeBox Evo** pixe
 > "Set temperature" and "Set weather" (plus optional automatic weather from Open-Meteo in the device settings) and "Start countdown" / "Stop countdown".
 > Implemented for 0.3.0 (Display & modes, accepted 2026-10-07): a mode picker (clock, lighting, custom) with Flow cards, the clock face (style, weather, temperature
 > and calendar pages in the device settings, Flow action "Show clock"; the clock colour follows the tile colour picker) and power and mood lighting (on/off on the
-> tile, one colour picker for the active mode, Flow action "Set lighting" with a colour), plus the Flow action "Show custom page" (1-3). Cloud, visualizations and the scoreboard are not offered; if the device shows cloud or a visualizer, the mode tile is empty.
+> tile, one colour picker for the active mode, Flow action "Set lighting" with a colour), plus the Flow action "Show custom page" (1-3). Cloud and visualizations are not offered; if the device shows cloud or a visualizer, the mode tile is empty.
 >
 > **Turn everything off:** the TimeBox has an `onoff` capability, so any Homey action that sets it is expected to turn the
 > panel off: the tile, the Flow card "Turn off", and zone-wide or voice actions that address `onoff`. "All lights off" and
