@@ -26,6 +26,7 @@ export const FLOW_TRIGGER_CHANNEL_CHANGED = 'timebox_channel_changed';
 export const FLOW_TRIGGER_COUNTDOWN_ENDED = 'timebox_countdown_ended';
 export const FLOW_TRIGGER_AUDIO_STARTED = 'timebox_audio_started';
 export const FLOW_TRIGGER_AUDIO_STOPPED = 'timebox_audio_stopped';
+export const FLOW_TRIGGER_SCORE_CHANGED = 'timebox_score_changed';
 export const FLOW_CONDITION_IS_CONNECTED = 'timebox_is_connected';
 export const FLOW_CONDITION_CHANNEL_IS = 'timebox_channel_is';
 export const FLOW_CONDITION_AUDIO_IS_PLAYING = 'timebox_audio_is_playing';

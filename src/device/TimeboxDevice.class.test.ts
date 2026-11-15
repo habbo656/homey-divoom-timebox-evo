@@ -110,3 +110,71 @@ describe('temperature unit initialisation (#7)', () => {
     expect(store.temperature_unit_initialised).toBeUndefined();
   });
 });
+
+/** The device with only what the score actions and the "Score changed" trigger touch (#40). */
+function fakeScoreDevice(completed: boolean) {
+  const calls: string[] = [];
+  const logs: string[] = [];
+  const triggered: { tokens: unknown }[] = [];
+  const controller = {
+    setScore: async () => (calls.push('setScore'), completed),
+    changeScore: async (team: string, step: number, direction: number) => (
+      calls.push(`changeScore ${team} ${step} ${direction}`),
+      completed
+    ),
+    resetScores: async () => (calls.push('resetScores'), completed),
+  };
+  const device = Object.create(TimeboxDevice.prototype) as Record<string, unknown>;
+  Object.assign(device, {
+    controller,
+    homey: {
+      __: (key: string) => key,
+      flow: {
+        getDeviceTriggerCard: (id: string) => ({
+          trigger: async (_: unknown, tokens: unknown) => (calls.push(`trigger ${id}`), triggered.push({ tokens })),
+        }),
+      },
+    },
+    setCapabilityValue: async (capability: string, value: unknown) =>
+      void calls.push(`tile ${capability}=${String(value)}`),
+    log: (m: string) => void logs.push(m),
+  });
+  return { device: device as unknown as TimeboxDevice, calls, logs, triggered, raw: device };
+}
+
+describe('score actions of the device (#40)', () => {
+  it('write the scoreboard tile when the change completed', async () => {
+    const { device, calls } = fakeScoreDevice(true);
+    await device.setScore({ red: 1 });
+    await device.changeScore('red', 2, -1);
+    await device.resetScores();
+    expect(calls).toEqual([
+      'setScore',
+      'tile timebox_channel=scoreboard',
+      'changeScore red 2 -1',
+      'tile timebox_channel=scoreboard',
+      'resetScores',
+      'tile timebox_channel=scoreboard',
+    ]);
+  });
+
+  it('leave the tile to a newer change when superseded', async () => {
+    const { device, calls } = fakeScoreDevice(false);
+    await device.resetScores();
+    expect(calls).toEqual(['resetScores']);
+  });
+
+  it('reject with the readable error before the controller exists', async () => {
+    const { device, raw } = fakeScoreDevice(true);
+    raw.controller = null;
+    await expect(device.setScore({})).rejects.toThrow('device.error.not_connected');
+  });
+
+  it('fires the "Score changed" trigger with the red and blue tokens', async () => {
+    const { raw, calls, logs, triggered } = fakeScoreDevice(true);
+    await (raw as unknown as { fireScoreTrigger(r: number, b: number): Promise<void> }).fireScoreTrigger(12, 34);
+    expect(calls).toEqual(['trigger timebox_score_changed']);
+    expect(triggered).toEqual([{ tokens: { red: 12, blue: 34 } }]);
+    expect(logs).toEqual(['[device] flow trigger timebox_score_changed: 12/34']);
+  });
+});

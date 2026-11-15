@@ -6,6 +6,7 @@ import {
   FLOW_TRIGGER_CONNECTED,
   FLOW_TRIGGER_COUNTDOWN_ENDED,
   FLOW_TRIGGER_DISCONNECTED,
+  FLOW_TRIGGER_SCORE_CHANGED,
 } from '../flow';
 import { attachDevLink, detachDevLink } from '../dev/devHarness';
 import type { DevLink } from '../dev/devHarness';
@@ -30,6 +31,8 @@ import type { CountdownTime, SleepLight, TemperatureUnit } from '../protocol/com
 import type { Rgb } from '../protocol/status';
 import { localiseError } from './argumentError';
 import { onoffSetOnDimDisabled } from './lighting';
+import { resolveStoredScores } from './scoreboard';
+import type { TeamId } from './scoreboard';
 import { resolveTimeSyncSetting } from './timeSync';
 import { WeatherUpdater } from './openMeteo';
 import type { FetchLike } from './openMeteo';
@@ -69,6 +72,8 @@ const CLOCK_SHOWN_STYLE_STORE = 'clock_shown_style';
 const TEMPERATURE_UNIT_INITIALISED_STORE = 'temperature_unit_initialised';
 /** Store key of the volume unmute restores (a device level 1..15, #4): the last non-zero volume seen or sent. */
 const VOLUME_RESTORE_STORE = 'volume_restore';
+/** Store key of the scoreboard scores (`{red, blue}`, #40): the app owns them, they survive restarts. */
+const SCORES_STORE = 'scoreboard_scores';
 
 /**
  * Homey glue around `TimeboxController` (docs/architecture.md, "Device layer"): builds the BLE link of this device,
@@ -101,7 +106,7 @@ export class TimeboxDevice extends Homey.Device {
         this.error(`[device] could not add capability ${capability}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    // A mode that was removed (cloud, visualizer, scoreboard) may still be stored: clear the tile instead of showing it.
+    // A mode that was removed (cloud, visualizer) may still be stored: clear the tile instead of showing it. A stored `scoreboard` from 0.2.x is valid again (#40) and stays.
     try {
       const stored: unknown = this.hasCapability(CHANNEL_CAPABILITY)
         ? this.getCapabilityValue(CHANNEL_CAPABILITY)
@@ -286,6 +291,8 @@ export class TimeboxDevice extends Homey.Device {
       setAudioPlaying: (playing) => this.setCapabilityValue(AUDIO_PLAYING_CAPABILITY, playing),
       saveRestoreVolume: (level) => this.setStoreValue(VOLUME_RESTORE_STORE, level),
       onAudioPlayingChanged: (playing) => this.fireAudioTrigger(playing),
+      saveScores: (scores) => this.setStoreValue(SCORES_STORE, scores),
+      onScoreChanged: (red, blue) => this.fireScoreTrigger(red, blue),
       setAvailable: () => this.setAvailable(),
       setUnavailable: (message) => this.setUnavailable(message),
       timeZone: () => this.homey.clock.getTimezone(),
@@ -315,6 +322,7 @@ export class TimeboxDevice extends Homey.Device {
         storedChannel: this.getChannelCapability(),
         temperatureUnit: this.getTemperatureUnitChecked(),
         restoreVolume: this.getStoredRestoreVolume(),
+        scores: resolveStoredScores(this.getStoreValue(SCORES_STORE)),
       },
     );
     this.controller = controller;
@@ -416,6 +424,32 @@ export class TimeboxDevice extends Homey.Device {
   }
 
   /**
+   * Used by the Flow action "Set score" (#40): sets red and/or blue (an empty one keeps its value) and shows the
+   * scoreboard, then the tile shows `scoreboard` (written directly, so the capability listener does not send a second
+   * command). A change that a newer one superseded leaves the tile to the newer change.
+   */
+  async setScore(update: { red?: unknown; blue?: unknown }): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.writeScoreboardTile(await this.controller.setScore(update));
+  }
+
+  /** Used by the Flow actions "Increase score" (`direction` 1) and "Decrease score" (-1) (#40), see `setScore`. */
+  async changeScore(team: TeamId, step: number, direction: 1 | -1): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.writeScoreboardTile(await this.controller.changeScore(team, step, direction));
+  }
+
+  /** Used by the Flow action "Reset scores" (#40): both scores 0, see `setScore`. */
+  async resetScores(): Promise<void> {
+    if (!this.controller) throw new Error(this.homey.__('device.error.not_connected'));
+    await this.writeScoreboardTile(await this.controller.resetScores());
+  }
+
+  private async writeScoreboardTile(completed: boolean): Promise<void> {
+    if (completed) await this.setCapabilityValue(CHANNEL_CAPABILITY, 'scoreboard');
+  }
+
+  /**
    * Used by the Flow action "Show text": the native scrolling text with these colours, device speed and duration (0 =
    * until stopped). The text is not a mode: the tile and the triggers are not touched.
    */
@@ -502,6 +536,11 @@ export class TimeboxDevice extends Homey.Device {
   private async fireChannelTrigger(id: ChannelId): Promise<void> {
     this.log(`[device] flow trigger ${FLOW_TRIGGER_CHANNEL_CHANGED}: ${id}`);
     await this.homey.flow.getDeviceTriggerCard(FLOW_TRIGGER_CHANNEL_CHANGED).trigger(this, { channel: id });
+  }
+
+  private async fireScoreTrigger(red: number, blue: number): Promise<void> {
+    this.log(`[device] flow trigger ${FLOW_TRIGGER_SCORE_CHANGED}: ${red}/${blue}`);
+    await this.homey.flow.getDeviceTriggerCard(FLOW_TRIGGER_SCORE_CHANGED).trigger(this, { red, blue });
   }
 
   private async fireCountdownEndedTrigger(): Promise<void> {
