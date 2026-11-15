@@ -125,6 +125,60 @@ export function isCountdownEnd(reply: Reply): boolean {
   );
 }
 
+/** Opcode of `a2` (get sleep scene): the answer, and the frame the device sends after a sleep-light stop, is `a2 55` + 10 bytes. */
+export const SLEEP_SCENE_OPCODE = 0xa2;
+/** Data bytes of the sleep scene: the 10 argument bytes of `40` (protocol section 5.4). */
+const SLEEP_SCENE_DATA = 10;
+
+export interface SleepScene {
+  /** MI: minutes of the last start (a stop keeps them). */
+  minutes: number;
+  /** MO: sound, 0 = phone audio, 1..23 built-in. */
+  sound: number;
+  /** OO: `ff` while a sleep light runs, `00` after a stop (and after the timer powered the unit off). */
+  on: boolean;
+  /** VV: volume byte. */
+  volume: number;
+  /** RR GG BB. */
+  color: Rgb;
+  /** BR: brightness byte. */
+  brightness: number;
+}
+
+/**
+ * Decode `a2 55 MI MO OO FL FH VV RR GG BB BR` (the answer of `a2`, also sent by the device after a stop) to the sleep
+ * scene. `on` is true for any OO other than `00` (the device writes `ff`). Throws `ProtocolError` if the reply is not a
+ * successful `a2` and `FrameError` (a `ProtocolError`) if it has fewer than 10 data bytes.
+ */
+export function decodeSleepScene(reply: Reply): SleepScene {
+  if (reply.cmd !== SLEEP_SCENE_OPCODE) {
+    throw new ProtocolError(`not a sleep scene reply: opcode ${reply.cmd.toString(16)}`);
+  }
+  if (!reply.ok) throw new ProtocolError('sleep scene reply does not carry status byte 55');
+  const d = reply.data;
+  if (d.length < SLEEP_SCENE_DATA) {
+    throw new FrameError(`sleep scene reply has ${d.length} data bytes, need ${SLEEP_SCENE_DATA}`, d);
+  }
+  return {
+    minutes: d[0],
+    sound: d[1],
+    on: d[2] !== 0x00,
+    volume: d[5],
+    color: { r: d[6], g: d[7], b: d[8] },
+    brightness: d[9],
+  };
+}
+
+/**
+ * True if `reply` is the `a2` frame that answers a sleep-light stop: a successful `a2` with at least 10 data bytes and
+ * on/off `00` (research #6). Frames with on/off `ff` (a read while a sleep light runs) do not answer the stop.
+ */
+export function isSleepStopReply(reply: Reply): boolean {
+  return (
+    reply.cmd === SLEEP_SCENE_OPCODE && reply.ok && reply.data.length >= SLEEP_SCENE_DATA && reply.data[2] === 0x00
+  );
+}
+
 /**
  * True if `reply` can be the answer of `bd 17 ff`: opcode `bd` with sub-opcode `17`. The device also sends unsolicited
  * `bd 55 13 …` frames after a countdown ends (section 5.6, measurement P11); those must not answer the query.

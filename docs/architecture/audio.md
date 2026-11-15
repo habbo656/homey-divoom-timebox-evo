@@ -46,7 +46,9 @@ Devices paired earlier get the three capabilities in `onInit` (`MIGRATED_CAPABIL
   `audio read failed: <volume|play status>: <msg>` and never counts as a missed poll; a lost link skips the second read.
 - **Reports**: every `09 55 VV` and `0b 55 PP` frame (poll read, unsolicited push) goes through `onReply`. A volume
   report is ignored while a set is in flight (no echo loop). The research saw no push after `08`, so there is no echo
-  filter. Tiles are written only when the value changed.
+  filter. Tiles are written only when the value changed. A sleep-light start (#6) is followed by an unsolicited
+  `09 55 VV` (the research saw `09 55 00`: the start once set the speaker volume to `00`); it is handled like any report,
+  so the tiles follow it; there is no extra read ([sleep-light.md](sleep-light.md)).
   - Invalid values: a `09` above 15 or without a data byte logs `volume report ignored: <msg>`; a `0b` byte other than
     `00`/`01` logs `play status XX is not known, tile unchanged`. The tile stays unchanged. As the poll repeats every 60 s,
     a device that keeps reporting such a value repeats the log line each poll.

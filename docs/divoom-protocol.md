@@ -18,6 +18,8 @@ Key rules (details in the evidence files):
 - `74 BB` (brightness): `00` turns the panel off; any send while the panel is off lights it again (the app holds `dim` while off since #62) ([display.md](protocol/display.md#opcode-table-notes)).
 - `18`, `5f` and `46` do not wake a panel that is off (measured, #29). The firmware can light an off panel by itself (`46` d8 `00` to `01`, about 14 to 35 min after the off); the app then sends the off again ([status.md](protocol/status.md#spontaneous-power-on-after-off-29)).
 - The hot flag `26 0X` controls the clock's animation pages; it persists on the device ([clock.md](protocol/clock.md)).
+- The sleep light `40` is invisible in `46`; only its stop ends the timer (power off and `45` do not), and when the timer
+  runs out the unit powers itself off and drops off BLE until its power button is pressed ([settings.md](protocol/settings.md#sleep-light-40-research-6)).
 
 - [protocol/transports.md](protocol/transports.md): sections 1.1 to 1.4, 2 and 10 (GATT, envelope, RFCOMM, SPP frame, replies, diagnostics)
 - [protocol/status.md](protocol/status.md): section 3 (status `46`, power-off probe)
@@ -28,6 +30,7 @@ Key rules (details in the evidence files):
 - [protocol/countdown.md](protocol/countdown.md): section 5.1 countdown row and section 5.6 measurements
 - [protocol/notifications.md](protocol/notifications.md): section 5.5 notification icon row, the icon code table (`50 TT`, #5)
 - [protocol/audio.md](protocol/audio.md): sections 5.3 and 6 (audio, A2DP)
+- [protocol/settings.md](protocol/settings.md): section 5.4 persistent settings: sleep light `40`/`a2` (#6), startup mode `8a` and auto power-off `ab`/`ac` (#36)
 - [protocol/homey-implications.md](protocol/homey-implications.md): section 9
 - [protocol/open-questions.md](protocol/open-questions.md): section 11
 
@@ -142,7 +145,7 @@ Unsolicited frames:
 | d1 | temperature unit `00` °C / `01` °F | set with `2b UU`; measured 2026-11-07 (#7), see [clock.md](protocol/clock.md#temperature-unit-2b-evidence-7) |
 | d3..d5 | lighting colour R G B | `ff 00 ff` after magenta, `00 ff 00` after green |
 | d6, d10 | brightness 0..100 | change with `74` |
-| d8 | power byte of the last `45` | `00` after `45 01 … 00`, `01` after any other `45`; `74` does not change it. **Flips to `01` when the firmware lights an off panel by itself** while d0 stays `01` (#29, measured 2026-11-05); the app decodes it as `powerByte` |
+| d8 | power byte of the last `45` | `00` after `45 01 … 00`, `01` after any other `45`; `74` does not change it. **Flips to `01` when the firmware lights an off panel by itself** while d0 stays `01` (#29, measured 2026-11-05), **and when a sleep light `40` starts while the panel is off** (#6, measured 2026-11-15); the app decodes it as `powerByte` |
 | d12..d14 | clock colour R G B | `00 ff ff` after a cyan clock (the app owns the clock colour since #69 and only compares d12..d14 in a log line) |
 | d9 | last visualization index (`45 04 NN`) | `0e` after `45 04 0e` |
 | d15 | clock style TT | `09` after `45 00 01 09 …` (the app compares d12..d15 with the requested clock face after a clock switch, #25) |
@@ -226,7 +229,7 @@ Evidence: [clock.md](protocol/clock.md#51-small-clock-quirk-evidence).
 | `57` | get time-manage ctrl | `57 55 00` |
 | `59` | get device temperature info | `59 55 00 00 00` |
 | `73` | get net temp display info | `73 55 01 00 26 00 00 00 00` |
-| `a2` | get sleep scene (same layout as `40` args) | `a2 55 01 00 00 00 00 05 ff 00 00 32` after `40 01 00 00 00 00 05 ff0000 32` |
+| `a2` | get sleep scene (same layout as `40` args) | `a2 55 01 00 00 00 00 05 ff 00 00 32` after `40 01 00 00 00 00 05 ff0000 32`; on/off (3rd byte) `ff` while a sleep light runs, `00` after a stop (#6). Also sent by the device as the answer to a stop |
 | `a8` | get sound ctrl | `a8 55 00` |
 | `aa` | get play-voice status | `aa 55 00` |
 | `ac` | get auto power off | `ac 55 1e 00` (30, LE16 minutes) |
@@ -264,9 +267,9 @@ auto-off 30, current time).
 |---|---|---|---|
 | `43 II OO hh mm WD MM TT FL FH VV` | alarm slot II (0..9): on, time, weekdays bitmask (bit0=Sun, `7f` = every day), mode, trigger, FM, volume | `43 55`; `42` returns the 10-byte record unchanged | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
 | `54 SS OO MO DD hh mm 01 + 32 B title` | memorial slot SS (0..9): on, date/time, title as 16 UTF-16BE chars (zero-padded) | `54 55`; `53` returns the record including the title | VERIFIED (read-back) — notes: [display.md](protocol/display.md#opcode-table-notes) |
-| `40 MI MO OO FL FH VV RR GG BB BR` | sleep: minutes, mode, on/off, FM, volume, colour, brightness | none; `a2` returns the same 11 bytes | VERIFIED: on → full panel in the given colour; off → previous view |
-| `8a 01 CC` | startup channel (persistent): 0 clock, 1 lighting, 2 cloud, 3 signal, 4–6 custom | none; `8a 00` → `8a 55 CC` | VERIFIED: after a power cycle the Evo booted into lighting |
-| `ab LL HH` | auto power off in minutes (LE16) | none; `ac` → `ac 55 LL HH` | VERIFIED (read-back; survived a power cycle). Actual power-off not waited for |
+| `40 MI MO OO FL FH VV RR GG BB BR` | sleep light: minutes, sound (0 phone audio, 1..23 built-in), on `ff`/off `00`, FM, volume, colour, brightness | start: no direct reply (unsolicited `bd 55 13 01 32 00` and `09 55 VV` follow); stop: answered with `a2 55` + the scene with on/off `00`; `a2` reads the 10 bytes back | VERIFIED (#36, research #6, 2026-11-15): on → full panel in the colour, also from off (`46` d8 flips to `01`). **`46` does not show it** (d0, colour bytes unchanged). **When the timer runs out the unit powers itself off** (about 50 s for 1 min), drops off BLE and stops advertising until the power button is pressed. **Power off (`45 01 … 00`) and `45` mode commands do not end the timer** (`a2` on/off stays `ff`), only the stop `40 05 00 00 00 00 00 00 00 00 00` does; it only clears on/off (the other bytes are ignored and kept). After a stop the panel shows the view under the sleep light (the clock, a later `45` view, dark after an off; started from off and not turned off: the lit lighting colour). The VV scale is inferred 0..100, not measured; a start set the speaker volume `09` to `00` once (unexplained) — notes: [settings.md](protocol/settings.md#sleep-light-40-research-6) |
+| `8a 01 CC` | startup mode (persistent): 0 clock, 1 lighting, 2 cloud, 3 VJ effects, **5–7 custom pages 1–3**; 4 is stored but boots into the clock | none; `8a 00` → `8a 55 CC` | VERIFIED (#36, 2026-11-15): every value read back as written and booted as listed after a power cycle; the boot shows the setting, not the last view. Not used by the app (owner, 2026-11-15) — notes: [settings.md](protocol/settings.md#startup-mode-8a-36) |
+| `ab LL HH` | auto power off in minutes (LE16) | none; `ac` → `ac 55 LL HH` | VERIFIED (read-back; survived a power cycle). **The 1-minute value never powered the unit off** (#36: 3 to 27 min watched, panel on or off, link or not); in #29 `ab 05 00` with the panel off did, after 14 to 38 min. Not used by the app (owner, 2026-11-15) — notes: [settings.md](protocol/settings.md#auto-power-off-ab-36) |
 | `bd 17 PP` / `bd 17 ff` | select custom page 0..2 (after `45 05`) / read it | read → `bd 55 17 PP` | VERIFIED — notes: [display.md](protocol/display.md#opcode-table-notes) |
 | `17 KK` + `21 KK` | game key down/up: 1 left, 2 right, 3 up, 4 down, 5 ok | none | inconclusive: no visible effect in game 0 |
 | `8b …` | newer animation upload (orionparrott) | – | not tested; `49` is sufficient |

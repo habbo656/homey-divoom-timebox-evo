@@ -34,11 +34,17 @@ _Evidence for [divoom-protocol.md](../divoom-protocol.md) section 11; opcode row
 - Does the link stay up for hours on Homey's BLE stack? (The Mac held 30 min without keep-alives, see 1.1.)
 - Static image `44` (#31): persistence (> 75 s), `46` d0 unchanged after `44`, the end of a native text by `44` and the end of the image by a text, a mode command, power off and a mode change made at the device are measured (hardware test #31). Still open: the effect of `5f`, `26 0X`, `74 32` and `18` on a shown image, `44` over a countdown or with the panel off (M3, M5, M6 in [images.md](images.md#static-image-behaviour-31)); branch B2 stays the conservative assumption.
 - Milestone 1.2.0 (planned 2026-10-18, answered by the issues' hardware probes): noise meter `72 02 01` (#3; open until the #3 hardware test: d0 under the noise meter, see [status.md](status.md); also open: the effect of `5f`, `26` and native text on it); unsolicited `09`
-  frames on a volume change at the phone (#4; the research of 2026-11-07 found none after `08` from Homey, section 6.3 in [audio.md](audio.md); the phone/Mac case needs an A2DP stream and stays open, the app polls `09` every 60 s meanwhile, [architecture/audio.md](../architecture/audio.md)); the full `50 TT` icon list beyond TT 1 and 3 (#5; code table with status in [notifications.md](notifications.md), photographed in the #5 hardware test); whether the Evo stays reachable over BLE after
-  the auto power-off `ab` fires (owner-attended test), what `46` reports then and during a sleep light `40`, and what a sleep-light stop returns to; whether the sleep light's mode, FM and volume bytes (MO, FL FH, VV) change the speaker
-  volume or play sound (interacts with #4); whether startup channel values 4–6 of `8a 01 CC` are custom pages 0–2 (#6).
+  frames on a volume change at the phone (#4; the research of 2026-11-07 found none after `08` from Homey, section 6.3 in [audio.md](audio.md); the phone/Mac case needs an A2DP stream and stays open, the app polls `09` every 60 s meanwhile, [architecture/audio.md](../architecture/audio.md)); the full `50 TT` icon list beyond TT 1 and 3 (#5; code table with status in [notifications.md](notifications.md), photographed in the #5 hardware test); answered by #36 and the
+  research of #6 (2026-11-15, [settings.md](settings.md)): `46` does not show a sleep light `40`, a stop returns to the
+  view under it, the end of its timer powers the unit off BLE, and the startup values of `8a 01 CC` are known (custom pages
+  are 5–7).
 - Self-wake while off (#29, [status.md](status.md#spontaneous-power-on-after-off-29)): the firmware lights an off panel by
   itself (`46` d8 `00` to `01`, d0 stays `01`). Cause unknown: is it hour-aligned (both measured wakes contain a full hour) or
   related to the auto power off? Untested: a longer series that shows the exact wake minute, what the device power button does
   to d8, and whether `ab 05 00` makes the panel wake (never probe it without the owner at the device: the unit powered off and
   stayed unreachable).
+- Sleep light and settings (#6, [settings.md](settings.md)): the scale of the sleep volume byte VV (inferred 0..100,
+  owner UAT) and whether built-in sounds 2..23 play; why a sleep start once set the speaker volume `09` to `00` and why
+  unsolicited `09` frames stepped down afterwards; what a stop does when no sleep light runs (the app never sends one
+  then); whether `79` (power off vs. low-energy screen at the end of the timer, SOURCE) works on the Evo; when the auto
+  power-off `ab` fires (1 min never did, `ab 05 00` did in #29) and whether the unit is reachable afterwards.

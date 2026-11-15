@@ -12,10 +12,12 @@ import { parseImageUrl } from '../device/imageSource';
 import { parseNotificationIconId } from '../device/notification';
 import type { NotificationIconId } from '../device/notification';
 import { parseTextDurationArg, parseTextSpeedId } from '../device/scrollText';
+import { parseSleepLightArgs } from '../device/sleepLight';
+import type { SleepLightArgs } from '../device/sleepLight';
 import type { TextRequest } from '../device/TimeboxController';
 import { parseTemperatureArg, parseTemperatureUnitArg, parseWeatherConditionId } from '../device/weather';
 import type { WeatherUpdate } from '../device/weather';
-import type { CountdownTime, TemperatureUnit } from '../protocol/commands';
+import type { CountdownTime, SleepLight, TemperatureUnit } from '../protocol/commands';
 import type { Rgb } from '../protocol/status';
 
 export const FLOW_TRIGGER_CONNECTED = 'timebox_connected';
@@ -40,6 +42,8 @@ export const FLOW_ACTION_SHOW_IMAGE_URL = 'timebox_show_image_url';
 export const FLOW_ACTION_SET_WEATHER = 'timebox_set_weather';
 export const FLOW_ACTION_SET_TEMPERATURE = 'timebox_set_temperature';
 export const FLOW_ACTION_SHOW_NOTIFICATION_ICON = 'timebox_show_notification_icon';
+export const FLOW_ACTION_START_SLEEP_LIGHT = 'timebox_start_sleep_light';
+export const FLOW_ACTION_STOP_SLEEP_LIGHT = 'timebox_stop_sleep_light';
 
 /** What the condition needs from the device argument. */
 export interface ConnectableDevice {
@@ -195,6 +199,18 @@ export interface ShowNotificationIconArgs {
   icon: unknown;
 }
 
+/** What the action "Start sleep light" needs from the device argument (#6). */
+export interface SleepLightStartableDevice {
+  /** Starts the sleep light (colour, brightness, minutes, sound, volume); rejects with a readable error if that is not possible. */
+  startSleepLight(light: SleepLight): Promise<void>;
+}
+
+/** What the action "Stop sleep light" needs from the device argument (#6). */
+export interface SleepLightStoppableDevice {
+  /** Ends a running sleep light (succeeds when none runs); rejects with a readable error if the Timebox is not connected. */
+  stopSleepLight(): Promise<void>;
+}
+
 /** The argument of the channel cards: a dropdown value (its id), validated before use. */
 export interface ChannelArg {
   channel: unknown;
@@ -341,4 +357,14 @@ export function registerTimeboxFlowCards(rawFlow: FlowLike, translate: (key: str
         await device.showNotificationIcon(parseNotificationIconId(icon));
       },
     );
+  flow
+    .getActionCard(FLOW_ACTION_START_SLEEP_LIGHT)
+    .registerRunListener(async ({ device, ...args }: { device: SleepLightStartableDevice } & SleepLightArgs) => {
+      await device.startSleepLight(parseSleepLightArgs(args));
+    });
+  flow
+    .getActionCard(FLOW_ACTION_STOP_SLEEP_LIGHT)
+    .registerRunListener(async ({ device }: { device: SleepLightStoppableDevice }) => {
+      await device.stopSleepLight();
+    });
 }

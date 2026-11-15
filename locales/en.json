@@ -70,7 +70,9 @@
       "fit": "Fit",
       "url": "URL",
       "icon": "Icon",
-      "volume": "Volume"
+      "volume": "Volume",
+      "brightness": "Brightness",
+      "sound": "Sound"
     }
   }
 }

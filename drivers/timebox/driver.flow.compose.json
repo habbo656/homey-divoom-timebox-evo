@@ -1003,6 +1003,265 @@
           ]
         }
       ]
+    },
+    {
+      "id": "timebox_start_sleep_light",
+      "title": {
+        "en": "Start sleep light",
+        "de": "Starte Schlaflicht"
+      },
+      "titleFormatted": {
+        "en": "Start sleep light [[color]] at [[brightness]] % for [[minutes]] min with [[sound]] at volume [[volume]] %",
+        "de": "Starte Schlaflicht [[color]] mit [[brightness]] % für [[minutes]] Min. mit [[sound]] bei Lautstärke [[volume]] %"
+      },
+      "hint": {
+        "en": "Lights the whole TimeBox display in this colour and plays the sound for the given minutes; a turned-off TimeBox is lit. A display change from Homey ends the sleep light; turning the TimeBox off only darkens it. When the time is up, the TimeBox switches itself off and stays unavailable until its power button is pressed. Up to 240 minutes.",
+        "de": "Lässt das ganze Display der TimeBox in dieser Farbe leuchten und spielt den Klang für die angegebenen Minuten; eine ausgeschaltete TimeBox leuchtet dabei. Eine Änderung der Anzeige aus Homey beendet das Schlaflicht; das Ausschalten der TimeBox verdunkelt es nur. Ist die Zeit um, schaltet sich die TimeBox selbst aus und bleibt nicht erreichbar, bis ihre Ein-/Aus-Taste gedrückt wird. Bis zu 240 Minuten."
+      },
+      "args": [
+        {
+          "type": "color",
+          "name": "color",
+          "title": {
+            "en": "Colour",
+            "de": "Farbe"
+          }
+        },
+        {
+          "type": "number",
+          "name": "brightness",
+          "title": {
+            "en": "Brightness",
+            "de": "Helligkeit"
+          },
+          "min": 1,
+          "max": 100,
+          "step": 1,
+          "placeholder": {
+            "en": "50",
+            "de": "50"
+          }
+        },
+        {
+          "type": "number",
+          "name": "minutes",
+          "title": {
+            "en": "Minutes",
+            "de": "Minuten"
+          },
+          "min": 1,
+          "max": 240,
+          "step": 1,
+          "placeholder": {
+            "en": "30",
+            "de": "30"
+          }
+        },
+        {
+          "type": "dropdown",
+          "name": "sound",
+          "title": {
+            "en": "Sound",
+            "de": "Klang"
+          },
+          "values": [
+            {
+              "id": "phone",
+              "label": {
+                "en": "Phone audio",
+                "de": "Handy-Audio"
+              }
+            },
+            {
+              "id": "sound_1",
+              "label": {
+                "en": "Sound 1",
+                "de": "Klang 1"
+              }
+            },
+            {
+              "id": "sound_2",
+              "label": {
+                "en": "Sound 2",
+                "de": "Klang 2"
+              }
+            },
+            {
+              "id": "sound_3",
+              "label": {
+                "en": "Sound 3",
+                "de": "Klang 3"
+              }
+            },
+            {
+              "id": "sound_4",
+              "label": {
+                "en": "Sound 4",
+                "de": "Klang 4"
+              }
+            },
+            {
+              "id": "sound_5",
+              "label": {
+                "en": "Sound 5",
+                "de": "Klang 5"
+              }
+            },
+            {
+              "id": "sound_6",
+              "label": {
+                "en": "Sound 6",
+                "de": "Klang 6"
+              }
+            },
+            {
+              "id": "sound_7",
+              "label": {
+                "en": "Sound 7",
+                "de": "Klang 7"
+              }
+            },
+            {
+              "id": "sound_8",
+              "label": {
+                "en": "Sound 8",
+                "de": "Klang 8"
+              }
+            },
+            {
+              "id": "sound_9",
+              "label": {
+                "en": "Sound 9",
+                "de": "Klang 9"
+              }
+            },
+            {
+              "id": "sound_10",
+              "label": {
+                "en": "Sound 10",
+                "de": "Klang 10"
+              }
+            },
+            {
+              "id": "sound_11",
+              "label": {
+                "en": "Sound 11",
+                "de": "Klang 11"
+              }
+            },
+            {
+              "id": "sound_12",
+              "label": {
+                "en": "Sound 12",
+                "de": "Klang 12"
+              }
+            },
+            {
+              "id": "sound_13",
+              "label": {
+                "en": "Sound 13",
+                "de": "Klang 13"
+              }
+            },
+            {
+              "id": "sound_14",
+              "label": {
+                "en": "Sound 14",
+                "de": "Klang 14"
+              }
+            },
+            {
+              "id": "sound_15",
+              "label": {
+                "en": "Sound 15",
+                "de": "Klang 15"
+              }
+            },
+            {
+              "id": "sound_16",
+              "label": {
+                "en": "Sound 16",
+                "de": "Klang 16"
+              }
+            },
+            {
+              "id": "sound_17",
+              "label": {
+                "en": "Sound 17",
+                "de": "Klang 17"
+              }
+            },
+            {
+              "id": "sound_18",
+              "label": {
+                "en": "Sound 18",
+                "de": "Klang 18"
+              }
+            },
+            {
+              "id": "sound_19",
+              "label": {
+                "en": "Sound 19",
+                "de": "Klang 19"
+              }
+            },
+            {
+              "id": "sound_20",
+              "label": {
+                "en": "Sound 20",
+                "de": "Klang 20"
+              }
+            },
+            {
+              "id": "sound_21",
+              "label": {
+                "en": "Sound 21",
+                "de": "Klang 21"
+              }
+            },
+            {
+              "id": "sound_22",
+              "label": {
+                "en": "Sound 22",
+                "de": "Klang 22"
+              }
+            },
+            {
+              "id": "sound_23",
+              "label": {
+                "en": "Sound 23",
+                "de": "Klang 23"
+              }
+            }
+          ]
+        },
+        {
+          "type": "number",
+          "name": "volume",
+          "title": {
+            "en": "Volume",
+            "de": "Lautstärke"
+          },
+          "min": 1,
+          "max": 100,
+          "step": 1,
+          "placeholder": {
+            "en": "20",
+            "de": "20"
+          }
+        }
+      ]
+    },
+    {
+      "id": "timebox_stop_sleep_light",
+      "title": {
+        "en": "Stop sleep light",
+        "de": "Stoppe Schlaflicht"
+      },
+      "hint": {
+        "en": "Ends a running sleep light, also one started in the Divoom app; the TimeBox shows its previous view again. Does nothing if no sleep light runs.",
+        "de": "Beendet ein laufendes Schlaflicht, auch eines aus der Divoom-App; die TimeBox zeigt wieder ihre vorherige Anzeige. Tut nichts, wenn kein Schlaflicht läuft."
+      }
     }
   ]
 }

@@ -45,8 +45,8 @@ _Part of [architecture](../architecture.md); moved from "Countdown (#33)" (#120)
       P6b, P8b) and one that was started outside Homey. The app does not track the countdown, so it cannot tell these apart and
       the end changes no state (channel, tile, text or image tracking are untouched, nothing is written), with one exception:
       **while the app thinks the panel is off** the end display lights it and it stays lit (P6, P7, P11 E), so `onoff` follows
-      (#125, `panelLitByCountdownEnd`): power on, off shadow dropped, log `power <- device: on (countdown end display)`,
-      `setOnOff(true)`, then one `46` query (`syncAfterCountdownEnd`; a timeout or failure is only logged as
+      (#125, `panelLitByDevice`, shared with the sleep light since #6): power on, off shadow dropped, log `power <- device: on (countdown end display)`,
+      `setOnOff(true)`, then one `46` query (`syncAfterPanelLit`; a timeout or failure is only logged as
       `countdown end: status sync timeout` / `failed: <reason>`) whose reply the normal status path uses to align the mode tile,
       the colour tile and the "mode changed" trigger with d0 (a Flow on `onoff` turned on / mode changed fires, intended). The trigger
       `timebox_countdown_ended` fires after this correction, so a Flow "ended, turn off" really turns the panel off. With a

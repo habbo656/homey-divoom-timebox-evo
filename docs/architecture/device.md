@@ -43,7 +43,7 @@ _Part of [architecture](../architecture.md); moved from "Device layer" (#120)._
       stopped controller still rejects with `not_connected`. `applyPendingBrightness` sends it as `74 P` right after every
       off to on flip, queued so it follows the command that lit the panel and precedes the `46` confirm of that command:
       a display command (`switchTo`: power on, mode pick, Show lighting/clock/custom page, tile colour), a switch on at
-      the device (`power <- device: on`), the countdown end display (`panelLitByCountdownEnd`) and an off that failed
+      the device (`power <- device: on`), the countdown end display and a sleep light started while off (`panelLitByDevice`, #6; for the sleep light the held value is queued before the `40`) and an off that failed
       before it was sent. A lighting command built while a value is held carries the held brightness. Logs:
       `[device] dim sent at power on: P`, or `[device] dim not sent at power on: <msg>` (the `dim` tile is then written
       back to the brightness the device is known to have). A held `0` is sent as `74 00` like any dim 0 (existing

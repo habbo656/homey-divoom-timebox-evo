@@ -383,6 +383,51 @@ export function stopCountdown(): Uint8Array {
   return Uint8Array.of(0x72, 0x03, 0x00, 0x00, 0x00);
 }
 
+/** Longest sleep light in minutes the app sends (owner, #6: 4 h); the `40` field is one byte. */
+export const SLEEP_MAX_MINUTES = 240;
+/** Highest sleep sound `MO` of `40`: 0 = audio from the phone over Bluetooth, 1..23 = built-in sleep sounds (protocol section 5.4). */
+export const MAX_SLEEP_SOUND = 23;
+
+export interface SleepLight {
+  /** 1..`SLEEP_MAX_MINUTES`; when they have run out the device powers itself off (protocol section 5.4). */
+  minutes: number;
+  /** Sound `MO` 0..`MAX_SLEEP_SOUND` (0 = phone audio). */
+  sound: number;
+  /** Volume byte `VV` 0..100 (scale inferred, protocol section 5.4). */
+  volume: number;
+  color: Rgb;
+  /** Brightness byte `BR` 0..100. */
+  brightness: number;
+}
+
+/**
+ * `40 MI MO ff 00 00 VV RR GG BB BR`: start the sleep light (VERIFIED, protocol section 5.4) with minutes, sound, on
+ * (`ff`), FM `00 00`, volume, colour and brightness. The device lights the full panel in the colour (also an off panel),
+ * sends no direct reply and powers itself off when the minutes have run out. A new start replaces a running one.
+ */
+export function startSleepLight(o: SleepLight): Uint8Array {
+  const minutes = intInRange('minutes', o.minutes, 1, SLEEP_MAX_MINUTES);
+  const sound = intInRange('sound', o.sound, 0, MAX_SLEEP_SOUND);
+  const volume = intInRange('volume', o.volume, 0, 100);
+  const [r, g, b] = rgb('color', o.color.r, o.color.g, o.color.b);
+  const brightness = intInRange('brightness', o.brightness, 0, 100);
+  return Uint8Array.of(0x40, minutes, sound, 0xff, 0x00, 0x00, volume, r, g, b, brightness);
+}
+
+/**
+ * `40 05 00 00 00 00 00 00 00 00 00`: stop the sleep light (VERIFIED, research #6). The device only clears the on/off
+ * byte of the stored scene (the other bytes are ignored) and answers with an `a2` frame showing on/off `00`. The panel
+ * returns to the view under the sleep light (a lit lighting colour if it was started while the panel was off).
+ */
+export function stopSleepLight(): Uint8Array {
+  return Uint8Array.of(0x40, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+}
+
+/** `a2`: read the sleep scene (VERIFIED), answered with `a2 55` + the 10 bytes of `40` (see `decodeSleepScene`). */
+export function querySleepScene(): Uint8Array {
+  return Uint8Array.of(0xa2);
+}
+
 /**
  * Highest notification icon code `TT` of `50 TT` (protocol section 5.5): the firmware icon table has 24 entries, 0..23.
  * The firmware does not check the range, so a code of 24 or more reads past the table and is never built.

@@ -38,6 +38,8 @@ export const ARGUMENT_FIELDS = [
   'url',
   'icon',
   'volume',
+  'brightness',
+  'sound',
 ] as const;
 export type ArgumentField = (typeof ARGUMENT_FIELDS)[number];
 
